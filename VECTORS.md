@@ -817,7 +817,7 @@ criticality signaling, and size limits.
 ```json
 {
     "extensions": {
-        "semp.org/priority": {
+        "semp.dev/priority": {
             "required": false,
             "data": {
                 "level": "urgent"
@@ -836,7 +836,7 @@ processing continues normally.
 ```json
 {
     "extensions": {
-        "semp.org/message-expiry": {
+        "semp.dev/message-expiry": {
             "required": true,
             "data": {
                 "delete_after": "2025-07-01T00:00:00Z"
@@ -846,12 +846,12 @@ processing continues normally.
 }
 ```
 
-**Expected behavior (implementation supports `semp.org/message-expiry`):**
+**Expected behavior (implementation supports `semp.dev/message-expiry`):**
 Extension is parsed and processed. Envelope processing continues.
 
-**Expected behavior (implementation does NOT support `semp.org/message-expiry`):**
+**Expected behavior (implementation does NOT support `semp.dev/message-expiry`):**
 Envelope is rejected with reason code `extension_unsupported`. The rejection
-MUST include the key `"semp.org/message-expiry"` so the sender can identify
+MUST include the key `"semp.dev/message-expiry"` so the sender can identify
 which extension caused the failure.
 
 ### 13.3 Vector: Required Extension — Unknown
@@ -894,7 +894,7 @@ to prevent resource exhaustion.
 ```json
 {
     "extensions": {
-        "semp.org/priority": {
+        "semp.dev/priority": {
             "required": false,
             "data": { "level": "low" }
         },
@@ -906,7 +906,7 @@ to prevent resource exhaustion.
 }
 ```
 
-**Expected behavior:** Even though `semp.org/priority` is valid and optional,
+**Expected behavior:** Even though `semp.dev/priority` is valid and optional,
 the presence of an unknown required extension
 (`vendor.example.com/unknown-feature`) causes rejection with
 `extension_unsupported`. The optional extension does not rescue the envelope.

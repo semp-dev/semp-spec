@@ -49,13 +49,13 @@ contains a structured value with a `required` flag:
 ```json
 {
     "extensions": {
-        "semp.org/priority": {
+        "semp.dev/priority": {
             "required": false,
             "data": {
                 "level": "urgent"
             }
         },
-        "semp.org/expiry": {
+        "semp.dev/expiry": {
             "required": true,
             "data": {
                 "delete_after": "2025-07-01T00:00:00Z"
@@ -79,7 +79,7 @@ defined:
 
 | Namespace Pattern                    | Usage                                                       |
 |--------------------------------------|-------------------------------------------------------------|
-| `semp.org/<name>`                    | Core extensions governed by the SEMP specification process.  |
+| `semp.dev/<name>`                    | Core extensions governed by the SEMP specification process.  |
 | `vendor.example.com/<name>`          | Vendor-specific extensions. The domain MUST be controlled by the defining party. |
 | `x-<name>`                           | Experimental extensions. No stability guarantees. MUST NOT be used in production deployments. |
 
@@ -189,7 +189,7 @@ within the overall size limit but still be rejected if an individual
 ### 5.1 Purpose
 
 The extension registry is the authoritative list of all defined SEMP
-extensions. It prevents namespace collisions for `semp.org/` extensions,
+extensions. It prevents namespace collisions for `semp.dev/` extensions,
 provides a single reference for implementers, and tracks the lifecycle status
 of each extension.
 
@@ -199,7 +199,7 @@ Each registry entry contains:
 
 | Field              | Description                                                            |
 |--------------------|------------------------------------------------------------------------|
-| Identifier         | Namespaced key (e.g., `semp.org/message-expiry`).                      |
+| Identifier         | Namespaced key (e.g., `semp.dev/message-expiry`).                      |
 | Status             | Current lifecycle status (section 6).                                  |
 | Layer(s)           | Which extension points the extension occupies.                         |
 | Required-capable   | Whether the extension may be marked `required: true`.                  |
@@ -212,11 +212,11 @@ Each registry entry contains:
 
 Vendor-specific extensions (`vendor.example.com/<name>`) do not require
 registry approval. The defining party is responsible for ensuring their
-extensions do not conflict with `semp.org/` extensions. Vendor extensions
-MUST NOT use the `semp.org/` namespace.
+extensions do not conflict with `semp.dev/` extensions. Vendor extensions
+MUST NOT use the `semp.dev/` namespace.
 
 Vendor extensions that achieve broad adoption MAY be submitted to the registry
-for consideration as core extensions under a `semp.org/` identifier.
+for consideration as core extensions under a `semp.dev/` identifier.
 
 ---
 
@@ -275,7 +275,7 @@ are a staging ground, not a permanent home.
 
 ### 7.1 One Solution Per Problem
 
-The registry MUST NOT accept a new `semp.org/` extension that addresses the
+The registry MUST NOT accept a new `semp.dev/` extension that addresses the
 same problem as an existing `standard` or `core` extension unless the existing
 extension is formally deprecated as part of the same proposal. Competing
 solutions to the same problem cause ecosystem fragmentation and
@@ -288,7 +288,7 @@ support it.
 
 Vendor extensions are exempt from this rule. Vendors may experiment freely in
 their own namespace. However, if a vendor extension is submitted for registry
-inclusion as a `semp.org/` extension, the one-solution-per-problem rule
+inclusion as a `semp.dev/` extension, the one-solution-per-problem rule
 applies at that point.
 
 ### 7.2 Implementation Requirement
