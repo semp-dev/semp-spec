@@ -1,0 +1,1040 @@
+# SEMP Handshake Specification
+
+**Sealed Envelope Messaging Protocol**  
+Status: Internet-Draft  
+Version: 0.1.0  
+Related: `DESIGN.md`, `KEY.md`, `DISCOVERY.md`, `ENVELOPE.md`
+
+---
+
+## Abstract
+
+The SEMP handshake establishes a secure, authenticated session between two
+parties before any envelopes are exchanged. It provides mutual authentication,
+capability negotiation, and a shared session context. This document defines the
+client-to-server handshake and the server-to-server federation handshake.
+
+All handshake packets share a single message type (`SEMP_HANDSHAKE`) with
+the discriminating details carried in the `step` and `party` fields. The schema
+for any given packet is fully determined by the combination of those three
+fields.
+
+---
+
+## 1. Overview
+
+The handshake occurs after the TLS connection is established and before any
+envelope exchange. A successful handshake results in mutual authentication,
+agreed cryptographic parameters, and a session context that both parties
+reference for the duration of the exchange.
+
+Handshakes in SEMP are **transaction-level**, not connection-level. They are
+performed per logical messaging transaction or batch of related messages. This
+enables per-transaction access control and blocking without requiring persistent
+connections.
+
+### 1.1 Privacy Constraint
+
+A core requirement of the SEMP handshake is that client identity MUST NOT
+appear in plaintext on the wire at any point. The init message is intentionally
+anonymous: it carries only an ephemeral key and capabilities. Client identity
+is revealed only after a shared secret is established, encrypted under that
+secret, and therefore invisible to passive observers.
+
+A passive observer sees that a connection was made to a server, but cannot
+determine who made it or who they intend to reach.
+
+### 1.2 Connection Model
+
+SEMP enforces a strict connection topology:
+
+```
+Sender Client → Sender's Server → Recipient's Server → Recipient Client
+```
+
+Clients MUST only connect to their own home server. A client never connects
+directly to a remote domain's server. Cross-domain message delivery is always
+server-to-server. A server that receives a client handshake from an address
+outside its own domain SHOULD treat this as suspicious and MAY reject it.
+
+How the server signals to a client that messages are waiting (polling,
+WebSocket, or platform notification services) is outside the scope of this
+specification. See section 4.6.
+
+### 1.3 Handshake Variants
+
+SEMP defines two handshake variants:
+
+- **Client handshake**:  a user's client connecting to their home server.
+- **Federation handshake**:  two servers establishing a cross-domain session.
+
+When both parties identify as `server`, the session is a federation session.
+No additional field is needed to discriminate; the combination of `party`
+values determines the context.
+
+### 1.4 Packet Discrimination
+
+SEMP defines two message types at the session layer: `SEMP_HANDSHAKE` for
+session establishment, and `SEMP_REKEY` for in-session key rotation.
+
+#### SEMP_HANDSHAKE
+
+Every handshake packet has:
+
+```json
+{
+    "type": "SEMP_HANDSHAKE",
+    "step": "<step>",
+    "party": "<party>",
+    ...
+}
+```
+
+The full discriminator matrix:
+
+| `step`         | `party`  | Sent by  | Meaning                                         |
+|----------------|----------|----------|-------------------------------------------------|
+| `init`         | `client` | Client   | Client opens handshake with home server         |
+| `init`         | `server` | Server A | Server A opens federation with Server B         |
+| `response`     | `server` | Server   | Server responds to either init type             |
+| `pow_required` | `server` | Server   | Server requires proof of work before proceeding |
+| `pow_solution` | `client` | Client   | Client submits PoW solution                     |
+| `pow_solution` | `server` | Server A | Server A submits PoW solution (federation)      |
+| `confirm`      | `client` | Client   | Client confirms after key exchange              |
+| `confirm`      | `server` | Server A | Server A confirms federation after key exchange |
+| `accepted`     | `server` | Server   | Server accepts the session                      |
+| `rejected`     | `server` | Server   | Server rejects the session explicitly           |
+
+`response`, `accepted`, and `rejected` always come from the server, since the party
+being connected to always controls the final outcome.
+
+#### SEMP_REKEY
+
+Once a session is established, either party may initiate a rekeying exchange
+to rotate session keys without a full re-authentication. Rekey packets use a
+separate message type to distinguish them unambiguously from handshake traffic:
+
+```json
+{
+    "type": "SEMP_REKEY",
+    "step": "<step>",
+    ...
+}
+```
+
+| `step`     | Sent by    | Meaning                                               |
+|------------|------------|-------------------------------------------------------|
+| `init`     | Either     | Initiates a rekeying exchange on an active session    |
+| `accepted` | Responder  | Accepts the rekey; carries responder ephemeral key    |
+| `rejected` | Responder  | Declines the rekey; session continues under old keys  |
+
+`SEMP_REKEY` packets are encrypted and MACed under the current session keys.
+Receipt of a valid `SEMP_REKEY` message therefore implies the sender holds the
+active session keys, so no separate identity proof is required.
+
+The full rekeying protocol, new key derivation procedure, key transition rules,
+and rate limits are defined in `SESSION.md` section 3.
+
+---
+
+## 2. Client Handshake
+
+### 2.1 Sequence
+
+```
+Client                                          Home Server
+  |                                               |
+  |--- 1. type=SEMP_HANDSHAKE                 --> |
+  |        step=init, party=client                |
+  |   (ephemeral key, capabilities only)          |
+  |   (no identity, no client ID)                 |
+  |                                               |
+  |          (server checks reputation,           |
+  |           domain age, rate limits)            |
+  |                                               |
+  |   [if PoW required]                           |
+  | <-- 1b. type=SEMP_HANDSHAKE               --- |
+  |          step=pow_required, party=server      |
+  |   (challenge, difficulty, expiry)             |
+  |                                               |
+  |--- 1c. type=SEMP_HANDSHAKE                --> |
+  |         step=pow_solution, party=client       |
+  |   (nonce, hash)                               |
+  |                                               |
+  |   [PoW verified, continue]                   |
+  |                                               |
+  |                (verify capabilities,          |
+  |                 generate ephemeral key)        |
+  |                                               |
+  | <-- 2. type=SEMP_HANDSHAKE                --- |
+  |         step=response, party=server           |
+  |   (server ephemeral key, negotiated params)   |
+  |                                               |
+  |   (both sides derive shared secret)           |
+  |                                               |
+  |--- 3. type=SEMP_HANDSHAKE                 --> |
+  |        step=confirm, party=client             |
+  |   (identity + auth, encrypted under secret)   |
+  |                                               |
+  |          (server verifies identity + auth)    |
+  |                                               |
+  | <-- 4. type=SEMP_HANDSHAKE                --- |
+  |         step=accepted, party=server           |
+  |      OR step=rejected, party=server           |
+  |                                               |
+  |         SESSION ESTABLISHED                   |
+  |                                               |
+  |--- Begin envelope exchange ---------------→   |
+```
+
+The PoW round trip (steps 1b and 1c) is conditional. It occurs only when the
+server determines a challenge is required per `REPUTATION.md` section 8.3.
+When PoW is not required, the handshake proceeds directly from step 1 to
+step 2. The four-message structure is preserved in both cases; PoW is an
+optional interstitial, not a replacement for any existing step.
+
+### 2.2 Message 1: init / client
+
+The init message is anonymous. It carries the client's ephemeral public key and
+capabilities. Nothing in this message identifies the client.
+
+```json
+{
+    "type": "SEMP_HANDSHAKE",
+    "step": "init",
+    "party": "client",
+    "version": "1.0.0",
+    "nonce": "base64-random-32-bytes",
+    "transport": "websocket",
+    "client_ephemeral_key": {
+        "algorithm": "pq-kyber768-x25519",
+        "key": "base64-encoded-ephemeral-public-key",
+        "key_id": "ephemeral-key-fingerprint"
+    },
+    "capabilities": {
+        "encryption_algorithms": [
+            "pq-kyber768-x25519",
+            "x25519-chacha20-poly1305"
+        ],
+        "compression": ["zstd", "gzip", "none"],
+        "features": [
+            "groups",
+            "threads",
+            "reactions",
+            "edit",
+            "expiry",
+            "horizon"
+        ]
+    },
+    "extensions": {}
+}
+```
+
+#### 2.2.1 Init Fields
+
+| Field                  | Type     | Required | Description                                                    |
+|------------------------|----------|----------|----------------------------------------------------------------|
+| `type`                 | `string` | Yes      | MUST be `"SEMP_HANDSHAKE"`                                |
+| `version`              | `string` | Yes      | SEMP protocol version (semver)                                 |
+| `nonce`                | `string` | Yes      | Cryptographically random value, base64-encoded, min 32 bytes. Used for replay prevention and key derivation. |
+| `transport`            | `string` | Yes      | Transport in use. One of: `websocket`, `http2`, `quic`         |
+| `client_ephemeral_key` | `object` | Yes      | Ephemeral public key for this session only. MUST NOT be reused.|
+| `capabilities`         | `object` | Yes      | Supported algorithms, compression, and features.               |
+| `extensions`           | `object` | No       | Handshake-layer extensions.                                    |
+
+The init message is NOT signed. Signing would require a key identifier, which
+would link this message to a client identity. Integrity of the init is
+established through the confirmation hash in message 3.
+
+### 2.2a Message 1b: pow_required / server (conditional)
+
+When the server determines a proof-of-work challenge is required (based on
+domain reputation, registration age, or operator policy per `REPUTATION.md`
+section 8.3), it MUST respond with a `pow_required` message instead of
+proceeding directly to the `response` step. No session resources are allocated
+and no ephemeral key material is generated until PoW is verified.
+
+```json
+{
+    "type": "SEMP_HANDSHAKE",
+    "step": "pow_required",
+    "party": "server",
+    "version": "1.0.0",
+    "challenge_id": "challenge-ulid",
+    "algorithm": "sha256",
+    "prefix": "base64-random-bytes-min-16",
+    "difficulty": 20,
+    "expires": "2025-06-10T20:35:00Z",
+    "server_signature": "signature-over-entire-message"
+}
+```
+
+| Field              | Type      | Required | Description                                                         |
+|--------------------|-----------|----------|---------------------------------------------------------------------|
+| `challenge_id`     | `string`  | Yes      | Unique challenge identifier. ULID RECOMMENDED.                      |
+| `algorithm`        | `string`  | Yes      | Hash algorithm. MUST be `sha256`.                                   |
+| `prefix`           | `string`  | Yes      | Base64-encoded random bytes. Minimum 16 bytes of entropy.           |
+| `difficulty`       | `integer` | Yes      | Leading zero bits required in the solution hash. See `REPUTATION.md` section 8.3.2. |
+| `expires`          | `string`  | Yes      | ISO 8601 UTC timestamp. Solution MUST be submitted before expiry.   |
+| `server_signature` | `string`  | Yes      | Signature over the entire message using the server's domain key.    |
+
+The client MUST verify `server_signature` before computing a solution. A
+`pow_required` message with an invalid signature MUST be treated as a rejection
+and the handshake MUST be aborted.
+
+### 2.2b Message 1c: pow_solution / client (conditional)
+
+The client solves the challenge by finding a nonce such that:
+
+```
+SHA-256(prefix || ":" || challenge_id || ":" || nonce)
+```
+
+produces a hash with at least `difficulty` leading zero bits. The nonce is an
+arbitrary byte string chosen by the client. The client submits the solution as:
+
+```json
+{
+    "type": "SEMP_HANDSHAKE",
+    "step": "pow_solution",
+    "party": "client",
+    "version": "1.0.0",
+    "challenge_id": "echoed-challenge-ulid",
+    "nonce": "base64-encoded-nonce",
+    "hash": "hex-encoded-sha256-hash"
+}
+```
+
+| Field          | Type     | Required | Description                                              |
+|----------------|----------|----------|----------------------------------------------------------|
+| `challenge_id` | `string` | Yes      | Echo of `challenge_id` from the `pow_required` message.  |
+| `nonce`        | `string` | Yes      | Base64-encoded nonce that satisfies the difficulty.      |
+| `hash`         | `string` | Yes      | Hex-encoded SHA-256 hash of the full preimage.           |
+
+The server MUST verify the solution before proceeding:
+
+1. Confirm `challenge_id` matches an issued, unexpired challenge.
+2. Recompute `SHA-256(prefix || ":" || challenge_id || ":" || nonce)`.
+3. Confirm the result matches the submitted `hash`.
+4. Confirm the hash has at least `difficulty` leading zero bits.
+
+If verification passes, the handshake continues to step 2 (`response`). If
+verification fails or the challenge has expired, the server MUST respond with
+`step=rejected` and `reason_code: "pow_failed"`. Each challenge MUST be
+single-use: the server MUST reject a duplicate `challenge_id` submission even
+if the solution is valid.
+
+A valid PoW solution permits the handshake to proceed. It does not grant trust
+or bypass any subsequent identity verification steps.
+
+### 2.3 Message 2: response / server
+
+The server responds with its own ephemeral key and the negotiated session
+parameters. After this message, both parties have enough material to derive
+the shared session secret.
+
+```json
+{
+    "type": "SEMP_HANDSHAKE",
+    "step": "response",
+    "party": "server",
+    "version": "1.0.0",
+    "session_id": "server-generated-ulid",
+    "client_nonce": "echoed-client-nonce",
+    "server_nonce": "base64-random-32-bytes",
+    "server_ephemeral_key": {
+        "algorithm": "pq-kyber768-x25519",
+        "key": "base64-encoded-ephemeral-public-key",
+        "key_id": "ephemeral-key-fingerprint"
+    },
+    "server_identity_proof": {
+        "domain": "example.com",
+        "key_id": "server-long-term-key-fingerprint",
+        "signature": "signature-over-server-ephemeral-key-and-nonces"
+    },
+    "negotiated": {
+        "encryption_algorithm": "pq-kyber768-x25519",
+        "compression": "zstd",
+        "features": ["groups", "threads", "reactions"]
+    },
+    "server_signature": "signature-over-entire-message",
+    "extensions": {}
+}
+```
+
+#### 2.3.1 Response Fields
+
+| Field                  | Type     | Required | Description                                                       |
+|------------------------|----------|----------|-------------------------------------------------------------------|
+| `type`                 | `string` | Yes      | MUST be `"SEMP_HANDSHAKE"`                               |
+| `version`              | `string` | Yes      | SEMP protocol version (semver)                                    |
+| `session_id`           | `string` | Yes      | Server-generated session identifier. ULID RECOMMENDED.            |
+| `client_nonce`         | `string` | Yes      | Echo of the client's nonce from message 1.                        |
+| `server_nonce`         | `string` | Yes      | Server-generated random nonce, min 32 bytes.                      |
+| `server_ephemeral_key` | `object` | Yes      | Server's ephemeral public key for this session.                   |
+| `server_identity_proof`| `object` | Yes      | Proof that the server controls the domain's long-term key.        |
+| `negotiated`           | `object` | Yes      | Agreed session parameters selected from client capabilities.      |
+| `server_signature`     | `string` | Yes      | Signature over the entire message using the server's domain key.  |
+| `extensions`           | `object` | No       | Handshake-layer extensions.                                       |
+
+The server MUST sign message 2 with its long-term domain key. The client
+verifies this signature using the server's published domain key before
+proceeding to message 3. If verification fails, the client MUST abort.
+
+### 2.4 Shared Secret Derivation
+
+After message 2, both parties derive the shared session secret using HKDF
+(RFC 5869):
+
+- **Input keying material**: shared secret from ephemeral key agreement
+  (Kyber768 + X25519 for pq-hybrid)
+- **Salt**: `client_nonce || server_nonce` (concatenation)
+- **Info context**: `"SEMP-v1-session"`
+
+Five keys are derived from this material:
+
+| Key | Purpose |
+|-----|---------|
+| `K_enc_c2s` | Encryption: client → server handshake messages |
+| `K_enc_s2c` | Encryption: server → client handshake messages |
+| `K_mac_c2s` | MAC: client → server handshake messages |
+| `K_mac_s2c` | MAC: server → client handshake messages |
+| `K_env_mac` | MAC: envelope session authentication. Used in `seal.session_mac`. |
+
+Separate directional keys prevent cross-channel attacks where a message sent
+in one direction could be replayed in the other. `K_env_mac` is distinct from
+the handshake MAC keys and is used exclusively for authenticating envelopes
+sent within this session, as defined in `ENVELOPE.md` section 4.3.
+
+### 2.5 Message 3: confirm / client
+
+The confirmation message carries the client's identity and authentication,
+encrypted under the shared session secret derived in section 2.4. A passive
+observer sees only an opaque encrypted blob alongside the confirmation hash.
+
+```json
+{
+    "type": "SEMP_HANDSHAKE",
+    "step": "confirm",
+    "party": "client",
+    "version": "1.0.0",
+    "session_id": "echoed-session-id",
+    "confirmation_hash": "hash-of-messages-1-and-2",
+    "identity_proof": "<base64-encrypted-identity-block>",
+    "extensions": {}
+}
+```
+
+The `identity_proof` field is an encrypted JSON object containing:
+
+```json
+{
+    "client_id": "client-ulid",
+    "client_identity": "user@example.com",
+    "client_long_term_key_id": "long-term-key-fingerprint",
+    "identity_signature": "signature-over-session-id-and-confirmation-hash",
+    "auth": {
+        "method": "identity_key",
+        "params": {}
+    }
+}
+```
+
+This block is encrypted under `K_enc_c2s` and is opaque to any party that does
+not hold the session secret.
+
+#### 2.5.1 Confirm Fields
+
+| Field               | Type     | Required | Description                                                          |
+|---------------------|----------|----------|----------------------------------------------------------------------|
+| `type`              | `string` | Yes      | MUST be `"SEMP_HANDSHAKE"`                                   |
+| `version`           | `string` | Yes      | SEMP protocol version (semver)                                       |
+| `session_id`        | `string` | Yes      | Echo of `session_id` from message 2.                                 |
+| `confirmation_hash` | `string` | Yes      | Hash of the canonical serializations of messages 1 and 2.           |
+| `identity_proof`    | `string` | Yes      | Encrypted identity block. See section 2.5.2.                         |
+| `extensions`        | `object` | No       | Handshake-layer extensions.                                          |
+
+#### 2.5.2 Identity Proof Block (Decrypted)
+
+| Field                    | Type     | Required | Description                                                    |
+|--------------------------|----------|----------|----------------------------------------------------------------|
+| `client_id`              | `string` | Yes      | Client's unique identifier. ULID RECOMMENDED.                  |
+| `client_identity`        | `string` | Yes      | Client's full address: `user@domain`.                          |
+| `client_long_term_key_id`| `string` | Yes      | Fingerprint of the client's long-term identity key.            |
+| `identity_signature`     | `string` | Yes      | Signature over `session_id || confirmation_hash` using the client's long-term key. |
+| `auth`                   | `object` | Yes      | Authentication method and parameters. See section 2.6.         |
+
+#### 2.5.3 Confirmation Hash
+
+The `confirmation_hash` is computed as:
+
+```
+SHA-256(canonical(message_1) || canonical(message_2))
+```
+
+Where `canonical()` is the same canonicalization used for envelope seal
+signatures: lexicographically sorted keys, no insignificant whitespace. This
+binds the confirmation to the specific exchange that preceded it, preventing
+message substitution attacks.
+
+### 2.6 Authentication Methods
+
+SEMP treats all authentication methods as equally first-class. The `auth`
+object in the identity proof block specifies the method and carries its
+parameters. Servers declare which methods they accept during discovery.
+
+Defined methods:
+
+#### Identity Key
+
+```json
+"auth": {
+    "method": "identity_key",
+    "params": {}
+}
+```
+
+Authentication is provided entirely by `identity_signature` in the identity
+proof block. No additional parameters required.
+
+#### Token
+
+```json
+"auth": {
+    "method": "token",
+    "params": {
+        "token": "jwt-or-opaque-token"
+    }
+}
+```
+
+A JWT or opaque token issued by the server or a trusted identity provider.
+Token validation semantics are server-defined.
+
+#### Password
+
+```json
+"auth": {
+    "method": "password",
+    "params": {
+        "response": "base64-challenge-response"
+    }
+}
+```
+
+Challenge-response password authentication. The server MAY issue a challenge
+in message 2 via `extensions` when password auth is expected. The response is
+computed over the challenge using the agreed password hash scheme.
+
+#### Multi-Factor
+
+```json
+"auth": {
+    "method": "mfa",
+    "params": {
+        "primary": {
+            "method": "identity_key",
+            "params": {}
+        },
+        "factor": {
+            "type": "totp",
+            "code": "123456"
+        }
+    }
+}
+```
+
+Combines a primary method with an additional factor. Factor types are
+extensible. Servers declare supported factor types during discovery.
+
+Additional authentication methods MAY be defined in extensions using the
+standard namespacing convention: `"vendor.example.com/method-name"`.
+
+### 2.7 Message 4: accepted / server  or  rejected / server
+
+The server's final message confirms the session is open, or rejects it
+explicitly with a reason.
+
+```json
+{
+    "type": "SEMP_HANDSHAKE",
+    "step": "accepted",
+    "party": "server",
+    "version": "1.0.0",
+    "session_id": "echoed-session-id",
+    "session_ttl": 300,
+    "permissions": ["send", "receive", "create_group"],
+    "server_signature": "signature-over-entire-message",
+    "extensions": {}
+}
+```
+
+On rejection:
+
+```json
+{
+    "type": "SEMP_HANDSHAKE",
+    "step": "rejected",
+    "party": "server",
+    "version": "1.0.0",
+    "session_id": "echoed-session-id",
+    "reason_code": "AUTH_FAILED",
+    "reason": "Identity signature could not be verified.",
+    "server_signature": "signature-over-entire-message",
+    "extensions": {}
+}
+```
+
+#### 2.7.1 Accepted Fields
+
+| Field             | Type      | Required | Description                                                          |
+|-------------------|-----------|----------|----------------------------------------------------------------------|
+| `type`            | `string`  | Yes      | MUST be `"SEMP_HANDSHAKE"`                                           |
+| `version`         | `string`  | Yes      | SEMP protocol version (semver)                                       |
+| `session_id`      | `string`  | Yes      | Echo of session identifier.                                          |
+| `session_ttl`     | `integer` | Yes      | Session lifetime in seconds from `established_at`. The client uses this to compute `expires_at` and to schedule proactive rekeying per `SESSION.md` section 2.6. A client that receives an `accepted` message without this field MUST assume 300 seconds and SHOULD log a warning. |
+| `permissions`     | `array`   | No       | Granted permissions. Present in `accepted` step only.                |
+| `reason_code`     | `string`  | No       | Machine-readable reason. Present in `rejected` step only. See section 4.1. |
+| `reason`          | `string`  | No       | Human-readable description. Present in `rejected` step only.         |
+| `server_signature`| `string`  | Yes      | Signature over the entire message.                                   |
+| `extensions`      | `object`  | No       | Handshake-layer extensions.                                          |
+
+If the server cannot complete the handshake for any reason, it MUST send a
+`rejected` response rather than closing the connection without explanation.
+
+---
+
+## 3. Session Lifetime and Caching
+
+### 3.1 TTL via DNS
+
+Domains publish their preferred handshake TTL in DNS:
+
+```
+_semp.example.com.  IN  TXT  "v=semp1;handshake-ttl=300;min-ttl=30;max-ttl=3600"
+```
+
+| Parameter       | Description                              | Default |
+|-----------------|------------------------------------------|---------|
+| `handshake-ttl` | Default session validity in seconds      | 300     |
+| `min-ttl`       | Minimum TTL this domain will accept      | 30      |
+| `max-ttl`       | Maximum TTL this domain will honor       | 3600    |
+
+Implementations MUST respect published TTL values. When DNS records are
+unavailable, implementations SHOULD use the default values above.
+
+### 3.2 Caching Rules
+
+Servers MAY cache established sessions up to the TTL. Cached sessions are
+keyed by `session_id`. Session IDs MUST be unique per session even for
+the same client.
+
+Clients SHOULD NOT reuse sessions beyond their TTL. Messages sent on an
+expired session MUST be rejected by the server with an explicit reason code.
+
+Servers MAY extend a session's lifetime with each valid message exchange,
+up to the original TTL duration.
+
+---
+
+## 4. Session Invalidation and Blocking
+
+Session invalidation in SEMP is a local server concern. There is no published
+invalidation message, no gossip, and no network-level invalidation protocol.
+When a server invalidates a session, whether due to a block, a security event,
+or expiry, it simply updates its local state and enforces the consequence on
+subsequent interactions.
+
+### 4.1 Reason Codes
+
+All rejections MUST carry a machine-readable reason code. The following reason
+codes are defined for session and envelope rejection:
+
+| Reason code          | Meaning                                                                 |
+|----------------------|-------------------------------------------------------------------------|
+| `blocked`            | The sender or their domain is blocked. No session will be accepted.     |
+| `handshake_invalid`  | The session referenced by the envelope has been invalidated.            |
+| `handshake_expired`  | The session TTL has elapsed. A new handshake is required.               |
+| `no_session`         | The envelope does not reference a valid session identifier.             |
+| `auth_failed`        | Identity or authentication verification failed during handshake.        |
+| `policy_violation`   | The request violates a server or federation policy.                     |
+| `rate_limited`       | The sender has exceeded the server's rate limits.                       |
+| `pow_failed`         | The submitted PoW solution was invalid or the challenge expired. The sender MAY request a new challenge by restarting the handshake. |
+| `server_at_capacity` | The server has reached its concurrent session limit per `SESSION.md` section 2.5.3. The sender SHOULD retry after a delay. |
+
+Additional reason codes MAY be defined in extensions using the standard
+namespacing convention.
+
+### 4.2 Blocking Behavior
+
+Servers MUST check block lists before processing a handshake `init` message.
+This check occurs before any session resources are allocated.
+
+- A blocked sender's `init` MUST be rejected immediately with `step=rejected`
+  and `reason_code: "blocked"`.
+- A blocked sender's envelope, if somehow received on an existing session, MUST
+  be rejected with `reason_code: "blocked"`.
+- Blocked senders MUST NOT be silently dropped or left waiting.
+
+When a block is applied after a session is already established, the server
+invalidates the session locally. No message is sent to the blocked party. All
+subsequent envelopes referencing that session are rejected with
+`reason_code: "blocked"`. All subsequent handshake attempts are rejected with
+`reason_code: "blocked"`.
+
+### 4.3 Non-Block Invalidation
+
+When a session is invalidated for a reason other than a block (for example,
+a key revocation event or a security policy change), subsequent envelopes
+referencing that session MUST be rejected with `reason_code: "handshake_invalid"`.
+The sender server MUST treat this as a signal to establish a new session and
+resend the envelope.
+
+### 4.4 Envelope-Session Binding
+
+Every envelope MUST reference a valid session via `postmark.session_id`. An
+envelope without a `session_id` MUST be rejected with `reason_code: "no_session"`.
+
+The receiving server verifies that the `session_id` in the postmark corresponds
+to an active, non-expired, non-invalidated session before processing the
+envelope further. This check occurs after seal verification and expiry checks,
+and before any content is processed.
+
+### 4.5 Sender Server Retry Responsibility
+
+The sender server is responsible for retry logic. Envelope rejections that
+indicate a recoverable session state MUST trigger automatic retry:
+
+| Received reason code  | Sender server action                                      |
+|-----------------------|-----------------------------------------------------------|
+| `handshake_expired`   | Establish a new session, resend the envelope.             |
+| `handshake_invalid`   | Establish a new session, resend the envelope.             |
+| `no_session`          | Establish a session, resend the envelope.                 |
+| `blocked`             | Do not retry. Surface the failure to the sending user.    |
+| `rate_limited`        | Retry after exponential backoff.                          |
+| `pow_failed`          | Restart the handshake from step 1 to obtain a fresh challenge. Do not surface to the sending user unless retries are exhausted. |
+| `server_at_capacity`  | Retry after exponential backoff. Do not surface to the sending user unless retries are exhausted. |
+| `auth_failed`         | Do not retry automatically. Surface to the sending user.  |
+
+The sender server MUST NOT retry indefinitely. A maximum retry count and
+backoff ceiling SHOULD be configured per operator policy.
+
+### 4.6 Client Delivery Transport
+
+How a server notifies a client that incoming messages are waiting is outside
+the scope of this specification. SEMP is an application-layer protocol and is
+not opinionated about transport wakeup mechanisms. Implementations MAY use
+persistent WebSocket connections, long polling, or platform notification
+services such as APNs or FCM, consistent with the approach used by similar
+applications. The client always initiates the handshake with its home server
+regardless of what wakeup mechanism triggered the connection.
+
+---
+
+## 5. Federation Handshake
+
+The server-to-server handshake follows the same four-message structure as the
+client-to-server handshake. The key differences are:
+
+- Both parties authenticate as domains, not as individual users
+- Domain ownership is proved cryptographically via multiple methods
+- Federation policies are negotiated during the handshake
+- Sessions are typically longer-lived
+
+### 5.1 Sequence
+
+```
+Server A                                        Server B
+  |                                               |
+  |--- 1. type=SEMP_HANDSHAKE                 --> |
+  |        step=init, party=server                |
+  |   (ephemeral key, capabilities, domain proof) |
+  |                                               |
+  | <-- 2. type=SEMP_HANDSHAKE                --- |
+  |         step=response, party=server           |
+  |   (ephemeral key, negotiated params,          |
+  |    domain verification result)               |
+  |                                               |
+  |   (both derive shared secret)                 |
+  |                                               |
+  |--- 3. type=SEMP_HANDSHAKE                 --> |
+  |        step=confirm, party=server             |
+  |   (confirmation hash, federation acceptance)  |
+  |                                               |
+  | <-- 4. type=SEMP_HANDSHAKE                --- |
+  |         step=accepted, party=server           |
+  |      OR step=rejected, party=server           |
+  |                                               |
+  |         FEDERATION SESSION ESTABLISHED        |
+```
+
+### 5.2 Message 1: init / server
+
+Unlike the client init, the server init includes domain identity in plaintext.
+Server-to-server connections are domain-to-domain by nature, so the initiating
+domain is not a secret in a federated protocol. The privacy constraint that
+applies to user identity does not apply here.
+
+```json
+{
+    "type": "SEMP_HANDSHAKE",
+    "step": "init",
+    "party": "server",
+    "version": "1.0.0",
+    "nonce": "base64-random-32-bytes",
+    "server_id": "originating-server-ulid",
+    "server_domain": "example.com",
+    "federation_type": "full",
+    "server_ephemeral_key": {
+        "algorithm": "pq-kyber768-x25519",
+        "key": "base64-encoded-ephemeral-public-key",
+        "key_id": "ephemeral-key-fingerprint"
+    },
+    "server_identity_proof": {
+        "key_id": "server-long-term-key-fingerprint",
+        "signature": "signature-over-ephemeral-key-and-nonce"
+    },
+    "domain_proof": {
+        "method": "dns-txt",
+        "data": "verification-data-per-method"
+    },
+    "capabilities": {
+        "encryption_algorithms": [
+            "pq-kyber768-x25519",
+            "x25519-chacha20-poly1305"
+        ],
+        "compression": ["zstd", "gzip", "none"],
+        "features": [
+            "groups", "threads", "reactions", "edit", "expiry", "horizon"
+        ],
+        "max_message_size": 52428800,
+        "max_batch_size": 1000
+    },
+    "server_signature": "signature-over-entire-message",
+    "extensions": {}
+}
+```
+
+#### 5.2.1 Federation Types
+
+| Value     | Meaning                                                              |
+|-----------|----------------------------------------------------------------------|
+| `full`    | Full federation: relay, delivery, and user discovery permitted       |
+| `relay`   | Relay only: message forwarding permitted, no user discovery          |
+| `limited` | Operator-defined restrictions negotiated via federation policy       |
+
+### 5.3 Domain Verification Methods
+
+Server-to-server handshakes require domain ownership verification. SEMP
+supports multiple methods, ordered by operator preference consistent with the
+extensibility principle:
+
+#### DNS TXT Record
+
+```
+_semp-verify.example.com.  IN  TXT  "v=semp1;id=<server_id>;s=<signature>"
+```
+
+#### Certificate Verification
+
+Domain ownership established via the TLS certificate presented during the
+underlying mTLS connection. The certificate common name or SAN MUST match
+`server_domain`.
+
+#### Well-Known URI
+
+```
+https://example.com/.well-known/semp/verify/<verification-token>
+```
+
+The verification token is derived from the server's identity proof signature.
+The responding server fetches this URI to confirm domain control.
+
+Servers MAY support multiple verification methods. The method used is declared
+in `domain_proof.method` and MUST be verifiable by the receiving server before
+message 2 is sent.
+
+### 5.4 Message 2: response / server
+
+```json
+{
+    "type": "SEMP_HANDSHAKE",
+    "step": "response",
+    "party": "server",
+    "version": "1.0.0",
+    "session_id": "server-b-generated-ulid",
+    "client_nonce": "echoed-server-a-nonce",
+    "server_nonce": "base64-random-32-bytes",
+    "server_id": "responding-server-ulid",
+    "server_domain": "otherdomain.com",
+    "server_ephemeral_key": {
+        "algorithm": "pq-kyber768-x25519",
+        "key": "base64-encoded-ephemeral-public-key",
+        "key_id": "ephemeral-key-fingerprint"
+    },
+    "server_identity_proof": {
+        "key_id": "server-long-term-key-fingerprint",
+        "signature": "signature-over-ephemeral-key-and-nonces"
+    },
+    "domain_verification_result": {
+        "status": "verified",
+        "method": "dns-txt"
+    },
+    "negotiated": {
+        "encryption_algorithm": "pq-kyber768-x25519",
+        "compression": "zstd",
+        "features": ["groups", "threads", "reactions"],
+        "max_message_size": 26214400,
+        "max_batch_size": 500
+    },
+    "federation_policy": {
+        "message_retention": "7d",
+        "user_discovery": "allowed",
+        "relay_allowed": true
+    },
+    "server_signature": "signature-over-entire-message",
+    "extensions": {}
+}
+```
+
+### 5.5 Message 3: confirm / server
+
+```json
+{
+    "type": "SEMP_HANDSHAKE",
+    "step": "confirm",
+    "party": "server",
+    "version": "1.0.0",
+    "session_id": "echoed-session-id",
+    "confirmation_hash": "hash-of-messages-1-and-2",
+    "federation_acceptance": {
+        "accepted": true,
+        "policy_acknowledged": true
+    },
+    "server_signature": "signature-over-entire-message",
+    "extensions": {}
+}
+```
+
+The `federation_acceptance.policy_acknowledged` field MUST be `true` if the
+initiating server accepts the federation policy terms returned in message 2.
+If the policy is unacceptable, the initiating server MUST send
+`accepted: false` with a reason rather than silently closing the connection.
+
+### 5.6 Message 4: accepted / server  or  rejected / server
+
+```json
+{
+    "type": "SEMP_HANDSHAKE",
+    "step": "accepted",
+    "party": "server",
+    "version": "1.0.0",
+    "session_id": "echoed-session-id",
+    "status": "accepted",
+    "server_signature": "signature-over-entire-message",
+    "extensions": {}
+}
+```
+
+On rejection, `step` is `"rejected"` and the message carries `reason_code` and `reason` fields, consistent with the client handshake `rejected` structure.
+
+---
+
+## 6. Security Considerations
+
+### 6.1 Identity Confidentiality
+
+Client identity is never transmitted in plaintext. The init message carries
+no identifying information. The identity proof is encrypted under the session
+secret established by ephemeral key exchange. Passive observers cannot
+determine who initiated a session.
+
+The residual leak is that a connection to a specific server was made. This is
+documented in `DESIGN.md` section 2.6 as an irreducible minimum for federated
+messaging. Operators with stronger requirements MAY proxy connections through
+intermediaries.
+
+### 6.2 Replay Prevention
+
+Each handshake uses a fresh client nonce and server nonce. The confirmation
+hash in message 3 binds the identity proof to the specific exchange that
+preceded it. A captured message 3 from one session cannot be replayed into
+a different session.
+
+The nonce MUST be cryptographically random, minimum 32 bytes. Implementations
+MUST reject handshakes with nonces they have seen within the session TTL window.
+
+### 6.3 Downgrade Prevention
+
+Capability negotiation is covered by the confirmation hash. A man-in-the-middle
+that modifies the capabilities in message 1 to downgrade the negotiated
+algorithm will cause the confirmation hash in message 3 to fail verification,
+aborting the handshake.
+
+The `capabilities` and `extensions` fields in handshake messages also serve as
+the primary negotiation point for protocol extensions. Extension support
+advertised in the init message informs the server's negotiation response.
+Required extensions (`EXTENSIONS.md` §3) that are not mutually supported
+result in rejection with reason code `extension_unsupported`. The formal
+extension negotiation rules, criticality signaling, and size constraints are
+defined in `EXTENSIONS.md`.
+
+### 6.4 Algorithm Selection
+
+Servers MUST prefer the strongest mutually supported algorithm. If a client
+offers both `pq-kyber768-x25519` and `x25519-chacha20-poly1305`, the server
+MUST select the post-quantum hybrid unless it cannot support it. Selecting a
+weaker algorithm when a stronger one is available is a policy violation.
+
+### 6.5 Clock Synchronization
+
+Timestamp validation requires reasonably synchronized clocks. Implementations
+SHOULD reject messages with timestamps more than five minutes from the current
+time. NTP or equivalent time synchronization is RECOMMENDED.
+
+### 6.6 Handshake Timeout
+
+Implementations MUST enforce a timeout on handshake completion. If a handshake
+is not completed within the timeout, the connection MUST be closed. A timeout
+of 30 seconds is RECOMMENDED. Incomplete handshakes MUST NOT consume session
+resources beyond what is needed to enforce the timeout.
+
+---
+
+## 7. Privacy Considerations
+
+The client-to-server handshake exposes the following to a passive observer:
+
+- A connection was made to a SEMP server at a specific domain
+- The protocol version and transport type
+- The set of features the client supports (from message 1 capabilities)
+
+It does not expose:
+
+- Who made the connection
+- Who they intend to send to
+- Any message content
+
+A distinctive capability set in message 1 could fingerprint a specific client
+implementation. Clients SHOULD advertise all capabilities they support rather
+than a minimal subset, to reduce fingerprinting surface.
+
+---
+
+## 8. Relationship to Other Specifications
+
+| Specification | Relationship |
+|---|---|
+| `DESIGN.md` | Governing principles. Privacy constraint from section 2.1 implements DESIGN.md section 2.6. |
+| `KEY.md` | Long-term keys used in identity proofs are defined and published per the key specification. Scoped device certificates (section 10.3) affect post-handshake authorization. |
+| `DISCOVERY.md` | Discovery determines server addresses and declared auth methods before handshake begins. |
+| `ENVELOPE.md` | Envelopes are exchanged within sessions established by this handshake. |
+| `DELIVERY.md` | Block list checks occur at message 1 reception, before any session resources are allocated. |
+| `SESSION.md` | Defines the forward secrecy lifecycle of the session keys derived in section 2.4, the `SEMP_REKEY` protocol introduced in section 1.4, and key erasure requirements. |
+| `REPUTATION.md` | PoW challenge criteria (section 8.3) determine when `pow_required` is issued. Difficulty calibration is defined there. |
+| `EXTENSIONS.md` | Extension negotiation rules, criticality signaling, and size constraints for handshake-layer extensions. |
+
+---
+
+*This document is an Internet-Draft. It is subject to revision prior to
+finalization as a stable specification.*
