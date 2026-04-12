@@ -145,6 +145,6 @@ implementations are welcome. If you're interested in contributing:
 
 ## License
 
-Code is licensed under the [MIT License](LICENSE.md). Protocol specification
-documents are licensed under [CC BY 4.0](LICENSE.md). See [LICENSE](LICENSE.md) for
+Code is licensed under the [MIT License](LICENSE). Protocol specification
+documents are licensed under [Creative Commons Attribution 4.0 International License](LICENSE). See [LICENSE](LICENSE) for
 details.
