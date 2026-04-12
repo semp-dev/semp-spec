@@ -17,7 +17,7 @@ every applicable vector is interoperable at that operation. An implementation
 that produces different output has a bug.
 
 These vectors cover only deterministic operations: key derivation, canonical
-serialization, MAC computation, proof-of-work verification, and confirmation
+serialization, MAC computation, challenge verification, and confirmation
 hashing. Operations that depend on random input (key generation, nonce
 generation, encryption) cannot be tested with static vectors. Those operations
 are tested indirectly through round-trip vectors where both encryption and
@@ -325,9 +325,10 @@ sequence from a given envelope, which is the input to both `seal.signature` and
 
 Reference: `HANDSHAKE.md` §2.2b, `REPUTATION.md` §8.3.
 
-These vectors verify that an implementation correctly validates PoW solutions.
+These vectors verify that an implementation correctly validates proof of work
+challenge solutions.
 
-### 4.1 Vector: Valid PoW Solution (Difficulty 16)
+### 4.1 Vector: Valid Proof of Work Solution (Difficulty 16)
 
 **Inputs:**
 
@@ -377,7 +378,7 @@ First two bytes are `0x00 0x00` (16 leading zero bits).
 **Result:** PASS. The hash has exactly 16 leading zero bits, satisfying
 difficulty 16.
 
-### 4.2 Vector: Failed PoW Solution (Insufficient Difficulty)
+### 4.2 Vector: Failed Proof of Work Solution (Insufficient Difficulty)
 
 **Inputs:**
 
@@ -404,7 +405,7 @@ First byte is `0x01` (only 7 leading zero bits).
 **Result:** FAIL. The hash has only 7 leading zero bits, which is fewer
 than the required 16. The solution MUST be rejected.
 
-### 4.3 PoW Preimage Construction Reference
+### 4.3 Proof of Work Preimage Construction Reference
 
 The preimage is always constructed as:
 
@@ -618,8 +619,8 @@ reason codes as recoverable or non-recoverable.
 | `handshake_invalid` | Yes         | Re-handshake and retry.                           |
 | `no_session`        | Yes         | Establish new session and retry.                  |
 | `rate_limited`      | Yes         | Back off and retry.                               |
-| `pow_required`      | Yes         | Solve PoW challenge and continue handshake.       |
-| `pow_failed`        | Yes         | Request new challenge and retry.                  |
+| `challenge`         | Yes         | Solve the issued challenge and continue handshake.|
+| `challenge_failed`  | Yes         | Request new challenge and retry.                  |
 | `server_at_capacity`| Yes         | Back off and retry later.                         |
 
 ### 8.2 Envelope Rejection Codes
@@ -1126,7 +1127,7 @@ producing identical intermediate values.
 | Specification    | Relationship                                                      |
 |------------------|-------------------------------------------------------------------|
 | `CONFORMANCE.md` | Defines the requirements these vectors verify. Each vector section references the conformance requirement it tests. |
-| `HANDSHAKE.md`   | Handshake message formats, HKDF derivation, confirmation hash, and PoW verification are tested here. |
+| `HANDSHAKE.md`   | Handshake message formats, HKDF derivation, confirmation hash, and challenge verification are tested here. |
 | `SESSION.md`     | Session key derivation, lifecycle, rekeying, and concurrent session behavior are tested here. |
 | `ENVELOPE.md`    | Envelope canonicalization, seal computation, and rejection codes are tested here. |
 | `DISCOVERY.md`   | Discovery response parsing and outcome mapping are tested here. |

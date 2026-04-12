@@ -55,13 +55,13 @@ govern session establishment failures. Defined in `HANDSHAKE.md` section 4.1.
 | `handshake_invalid` | Yes         | Re-handshake and retry.                                           |
 | `no_session`        | Yes         | Establish new session and retry.                                  |
 | `rate_limited`      | Yes         | Back off and retry.                                               |
-| `pow_required`      | Yes         | Solve proof-of-work challenge and continue handshake.             |
-| `pow_failed`        | Yes         | Request new challenge by restarting the handshake.                |
+| `challenge`         | Yes         | Solve the issued challenge and continue handshake.                |
+| `challenge_failed`  | Yes         | Request new challenge by restarting the handshake.                |
 | `server_at_capacity`| Yes         | Back off and retry later.                                         |
 
-`pow_required` is unique: it is not a terminal rejection but a conditional
-gate. The handshake is suspended, not failed, until the challenge is resolved.
-See `HANDSHAKE.md` section 2.2a.
+`challenge` is unique: it is not a terminal rejection but a conditional gate.
+The handshake is suspended, not failed, until the challenge is resolved. See
+`HANDSHAKE.md` section 2.2a.
 
 ---
 
@@ -231,7 +231,7 @@ independent layers.
 |-------------|-----------------------------------------------------------------------|-------------|------------------------------------------------------|
 | 200         | SEMP message processed. Application outcome is in the response body.  | N/A         | Parse the SEMP response and act on its reason codes.  |
 | 400         | Malformed SEMP message. Could not parse.                              | No          | Fix the message. Do not retry the same payload.       |
-| 413         | Payload exceeds the server's `max_message_size`.                      | No          | Reduce payload size or split content.                 |
+| 413         | Payload exceeds the server's `max_envelope_size`.                      | No          | Reduce payload size or split content.                 |
 | 429         | Transport-level rate limit.                                           | Yes         | Back off and retry. Distinct from SEMP `rate_limited`.|
 | 503         | Server temporarily unavailable.                                       | Yes         | Back off and retry.                                   |
 

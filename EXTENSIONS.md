@@ -178,7 +178,7 @@ as this would break interoperability with conformant senders.
 ### 4.3 Interaction with Envelope Size Limits
 
 Extension size limits are independent of the overall envelope size limit
-advertised in `DISCOVERY.md` §3.1 (`max_message_size`). An envelope may be
+advertised in `DISCOVERY.md` §3.1 (`max_envelope_size`). An envelope may be
 within the overall size limit but still be rejected if an individual
 `extensions` object exceeds its layer limit.
 

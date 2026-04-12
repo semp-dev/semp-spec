@@ -97,9 +97,9 @@ The full discriminator matrix:
 | `init`         | `client` | Client   | Client opens handshake with home server         |
 | `init`         | `server` | Server A | Server A opens federation with Server B         |
 | `response`     | `server` | Server   | Server responds to either init type             |
-| `pow_required` | `server` | Server   | Server requires proof of work before proceeding |
-| `pow_solution` | `client` | Client   | Client submits PoW solution                     |
-| `pow_solution` | `server` | Server A | Server A submits PoW solution (federation)      |
+| `challenge`          | `server` | Server   | Server requires a challenge to be solved before proceeding |
+| `challenge_response` | `client` | Client   | Client submits challenge solution                          |
+| `challenge_response` | `server` | Server A | Server A submits challenge solution (federation)           |
 | `confirm`      | `client` | Client   | Client confirms after key exchange              |
 | `confirm`      | `server` | Server A | Server A confirms federation after key exchange |
 | `accepted`     | `server` | Server   | Server accepts the session                      |
@@ -152,16 +152,16 @@ Client                                          Home Server
   |          (server checks reputation,           |
   |           domain age, rate limits)            |
   |                                               |
-  |   [if PoW required]                           |
+  |   [if challenge required]                      |
   | <-- 1b. type=SEMP_HANDSHAKE               --- |
-  |          step=pow_required, party=server      |
-  |   (challenge, difficulty, expiry)             |
+  |          step=challenge, party=server         |
+  |   (challenge_type, parameters, expiry)        |
   |                                               |
   |--- 1c. type=SEMP_HANDSHAKE                --> |
-  |         step=pow_solution, party=client       |
-  |   (nonce, hash)                               |
+  |         step=challenge_response, party=client |
+  |   (solution)                                  |
   |                                               |
-  |   [PoW verified, continue]                   |
+  |   [challenge verified, continue]              |
   |                                               |
   |                (verify capabilities,          |
   |                 generate ephemeral key)        |
@@ -187,11 +187,11 @@ Client                                          Home Server
   |--- Begin envelope exchange ---------------→   |
 ```
 
-The PoW round trip (steps 1b and 1c) is conditional. It occurs only when the
-server determines a challenge is required per `REPUTATION.md` section 8.3.
-When PoW is not required, the handshake proceeds directly from step 1 to
-step 2. The four-message structure is preserved in both cases; PoW is an
-optional interstitial, not a replacement for any existing step.
+The challenge round trip (steps 1b and 1c) is conditional. It occurs only when
+the server determines a challenge is required per `REPUTATION.md` section 8.3.
+When no challenge is required, the handshake proceeds directly from step 1 to
+step 2. The four-message structure is preserved in both cases; the challenge is
+an optional interstitial, not a replacement for any existing step.
 
 ### 2.2 Message 1: init / client
 
@@ -246,70 +246,126 @@ The init message is NOT signed. Signing would require a key identifier, which
 would link this message to a client identity. Integrity of the init is
 established through the confirmation hash in message 3.
 
-### 2.2a Message 1b: pow_required / server (conditional)
+### 2.2a Message 1b: challenge / server (conditional)
 
-When the server determines a proof-of-work challenge is required (based on
+When the server determines a challenge is required before proceeding (based on
 domain reputation, registration age, or operator policy per `REPUTATION.md`
-section 8.3), it MUST respond with a `pow_required` message instead of
-proceeding directly to the `response` step. No session resources are allocated
-and no ephemeral key material is generated until PoW is verified.
+section 8.3), it MUST respond with a `challenge` message instead of proceeding
+directly to the `response` step. No session resources are allocated and no
+ephemeral key material is generated until the challenge is verified.
+
+The challenge mechanism is type agnostic. The `challenge_type` field identifies
+which kind of challenge the server is issuing, and the `parameters` object
+carries the type specific data needed by the client to compute a solution. This
+design allows new challenge types to be introduced in future revisions without
+altering the handshake structure.
 
 ```json
 {
     "type": "SEMP_HANDSHAKE",
-    "step": "pow_required",
+    "step": "challenge",
     "party": "server",
     "version": "1.0.0",
     "challenge_id": "challenge-ulid",
-    "algorithm": "sha256",
-    "prefix": "base64-random-bytes-min-16",
-    "difficulty": 20,
+    "challenge_type": "proof_of_work",
+    "parameters": {
+        "algorithm": "sha256",
+        "prefix": "base64-random-bytes-min-16",
+        "difficulty": 20
+    },
     "expires": "2025-06-10T20:35:00Z",
     "server_signature": "signature-over-entire-message"
 }
 ```
 
+#### 2.2a.1 Challenge Fields
+
 | Field              | Type      | Required | Description                                                         |
 |--------------------|-----------|----------|---------------------------------------------------------------------|
 | `challenge_id`     | `string`  | Yes      | Unique challenge identifier. ULID RECOMMENDED.                      |
-| `algorithm`        | `string`  | Yes      | Hash algorithm. MUST be `sha256`.                                   |
-| `prefix`           | `string`  | Yes      | Base64-encoded random bytes. Minimum 16 bytes of entropy.           |
-| `difficulty`       | `integer` | Yes      | Leading zero bits required in the solution hash. See `REPUTATION.md` section 8.3.2. |
+| `challenge_type`   | `string`  | Yes      | Identifies the challenge type. See section 2.2a.2 for defined types.|
+| `parameters`       | `object`  | Yes      | Type specific challenge data. Structure depends on `challenge_type`. |
 | `expires`          | `string`  | Yes      | ISO 8601 UTC timestamp. Solution MUST be submitted before expiry.   |
 | `server_signature` | `string`  | Yes      | Signature over the entire message using the server's domain key.    |
 
 The client MUST verify `server_signature` before computing a solution. A
-`pow_required` message with an invalid signature MUST be treated as a rejection
+`challenge` message with an invalid signature MUST be treated as a rejection
 and the handshake MUST be aborted.
 
-### 2.2b Message 1c: pow_solution / client (conditional)
+A client that does not recognize the `challenge_type` MUST abort the handshake.
+It MUST NOT silently ignore the challenge and proceed, as the server will reject
+any subsequent handshake message that lacks a valid solution.
 
-The client solves the challenge by finding a nonce such that:
+#### 2.2a.2 Challenge Type: proof_of_work
+
+The `proof_of_work` challenge type requires the client to find a nonce that
+produces a hash with a specified number of leading zero bits. It is the
+baseline challenge type and MUST be supported by all implementations.
+
+**Parameters for `proof_of_work`:**
+
+| Field       | Type      | Required | Description                                                              |
+|-------------|-----------|----------|--------------------------------------------------------------------------|
+| `algorithm` | `string`  | Yes      | Hash algorithm. MUST be `sha256`.                                        |
+| `prefix`    | `string`  | Yes      | Base64-encoded random bytes. Minimum 16 bytes of entropy.                |
+| `difficulty`| `integer` | Yes      | Leading zero bits required in the solution hash. See `REPUTATION.md` section 8.3.2. |
+
+#### 2.2a.3 Future Challenge Types
+
+Additional challenge types MAY be defined in future revisions of this
+specification or via extensions using the standard namespacing convention
+(`"vendor.example.com/challenge-name"`). Each new type MUST define its
+`parameters` schema, its solution format within `challenge_response`, and the
+server side verification procedure. All challenge types share the same
+`challenge` / `challenge_response` message structure and the same lifecycle
+rules (single use, expiry, signature verification).
+
+### 2.2b Message 1c: challenge_response / client (conditional)
+
+The client submits its solution to the challenge. The `challenge_type` field
+echoes the type from the `challenge` message. The `solution` object carries
+type specific data that the server uses for verification.
+
+```json
+{
+    "type": "SEMP_HANDSHAKE",
+    "step": "challenge_response",
+    "party": "client",
+    "version": "1.0.0",
+    "challenge_id": "echoed-challenge-ulid",
+    "challenge_type": "proof_of_work",
+    "solution": {
+        "nonce": "base64-encoded-nonce",
+        "hash": "hex-encoded-sha256-hash"
+    }
+}
+```
+
+#### 2.2b.1 Challenge Response Fields
+
+| Field            | Type     | Required | Description                                                     |
+|------------------|----------|----------|-----------------------------------------------------------------|
+| `challenge_id`   | `string` | Yes      | Echo of `challenge_id` from the `challenge` message.            |
+| `challenge_type` | `string` | Yes      | Echo of `challenge_type` from the `challenge` message.          |
+| `solution`       | `object` | Yes      | Type specific solution data. Structure depends on `challenge_type`. |
+
+#### 2.2b.2 Solution Format: proof_of_work
+
+For `proof_of_work` challenges, the client finds a nonce such that:
 
 ```
 SHA-256(prefix || ":" || challenge_id || ":" || nonce)
 ```
 
 produces a hash with at least `difficulty` leading zero bits. The nonce is an
-arbitrary byte string chosen by the client. The client submits the solution as:
+arbitrary byte string chosen by the client.
 
-```json
-{
-    "type": "SEMP_HANDSHAKE",
-    "step": "pow_solution",
-    "party": "client",
-    "version": "1.0.0",
-    "challenge_id": "echoed-challenge-ulid",
-    "nonce": "base64-encoded-nonce",
-    "hash": "hex-encoded-sha256-hash"
-}
-```
+**Solution fields for `proof_of_work`:**
 
-| Field          | Type     | Required | Description                                              |
-|----------------|----------|----------|----------------------------------------------------------|
-| `challenge_id` | `string` | Yes      | Echo of `challenge_id` from the `pow_required` message.  |
-| `nonce`        | `string` | Yes      | Base64-encoded nonce that satisfies the difficulty.      |
-| `hash`         | `string` | Yes      | Hex-encoded SHA-256 hash of the full preimage.           |
+| Field   | Type     | Required | Description                                         |
+|---------|----------|----------|-----------------------------------------------------|
+| `nonce` | `string` | Yes      | Base64-encoded nonce that satisfies the difficulty.  |
+| `hash`  | `string` | Yes      | Hex-encoded SHA-256 hash of the full preimage.       |
 
 The server MUST verify the solution before proceeding:
 
@@ -320,12 +376,12 @@ The server MUST verify the solution before proceeding:
 
 If verification passes, the handshake continues to step 2 (`response`). If
 verification fails or the challenge has expired, the server MUST respond with
-`step=rejected` and `reason_code: "pow_failed"`. Each challenge MUST be
+`step=rejected` and `reason_code: "challenge_failed"`. Each challenge MUST be
 single-use: the server MUST reject a duplicate `challenge_id` submission even
 if the solution is valid.
 
-A valid PoW solution permits the handshake to proceed. It does not grant trust
-or bypass any subsequent identity verification steps.
+A valid challenge solution permits the handshake to proceed. It does not grant
+trust or bypass any subsequent identity verification steps.
 
 ### 2.3 Message 2: response / server
 
@@ -355,7 +411,8 @@ the shared session secret.
     "negotiated": {
         "encryption_algorithm": "pq-kyber768-x25519",
         "compression": "zstd",
-        "features": ["groups", "threads", "reactions"]
+        "features": ["groups", "threads", "reactions"],
+        "max_envelope_size": 26214400
     },
     "server_signature": "signature-over-entire-message",
     "extensions": {}
@@ -376,6 +433,11 @@ the shared session secret.
 | `negotiated`           | `object` | Yes      | Agreed session parameters selected from client capabilities.      |
 | `server_signature`     | `string` | Yes      | Signature over the entire message using the server's domain key.  |
 | `extensions`           | `object` | No       | Handshake-layer extensions.                                       |
+
+The `negotiated` object MUST include `max_envelope_size`, which declares the
+maximum envelope size in bytes that this server will accept. Clients MUST NOT
+submit envelopes exceeding this value. In federation handshakes, the negotiated
+`max_envelope_size` is the minimum of both servers' advertised limits.
 
 The server MUST sign message 2 with its long-term domain key. The client
 verifies this signature using the server's published domain key before
@@ -659,7 +721,7 @@ codes are defined for session and envelope rejection:
 | `auth_failed`        | Identity or authentication verification failed during handshake.        |
 | `policy_violation`   | The request violates a server or federation policy.                     |
 | `rate_limited`       | The sender has exceeded the server's rate limits.                       |
-| `pow_failed`         | The submitted PoW solution was invalid or the challenge expired. The sender MAY request a new challenge by restarting the handshake. |
+| `challenge_failed`    | The submitted challenge solution was invalid or the challenge expired. The sender MAY request a new challenge by restarting the handshake. |
 | `server_at_capacity` | The server has reached its concurrent session limit per `SESSION.md` section 2.5.3. The sender SHOULD retry after a delay. |
 
 Additional reason codes MAY be defined in extensions using the standard
@@ -712,7 +774,7 @@ indicate a recoverable session state MUST trigger automatic retry:
 | `no_session`          | Establish a session, resend the envelope.                 |
 | `blocked`             | Do not retry. Surface the failure to the sending user.    |
 | `rate_limited`        | Retry after exponential backoff.                          |
-| `pow_failed`          | Restart the handshake from step 1 to obtain a fresh challenge. Do not surface to the sending user unless retries are exhausted. |
+| `challenge_failed`  | Restart the handshake from step 1 to obtain a fresh challenge. Do not surface to the sending user unless retries are exhausted. |
 | `server_at_capacity`  | Retry after exponential backoff. Do not surface to the sending user unless retries are exhausted. |
 | `auth_failed`         | Do not retry automatically. Surface to the sending user.  |
 
@@ -807,7 +869,7 @@ applies to user identity does not apply here.
         "features": [
             "groups", "threads", "reactions", "edit", "expiry", "horizon"
         ],
-        "max_message_size": 52428800,
+        "max_envelope_size": 52428800,
         "max_batch_size": 1000
     },
     "server_signature": "signature-over-entire-message",
@@ -884,7 +946,7 @@ message 2 is sent.
         "encryption_algorithm": "pq-kyber768-x25519",
         "compression": "zstd",
         "features": ["groups", "threads", "reactions"],
-        "max_message_size": 26214400,
+        "max_envelope_size": 26214400,
         "max_batch_size": 500
     },
     "federation_policy": {
@@ -1031,7 +1093,7 @@ than a minimal subset, to reduce fingerprinting surface.
 | `ENVELOPE.md` | Envelopes are exchanged within sessions established by this handshake. |
 | `DELIVERY.md` | Block list checks occur at message 1 reception, before any session resources are allocated. |
 | `SESSION.md` | Defines the forward secrecy lifecycle of the session keys derived in section 2.4, the `SEMP_REKEY` protocol introduced in section 1.4, and key erasure requirements. |
-| `REPUTATION.md` | PoW challenge criteria (section 8.3) determine when `pow_required` is issued. Difficulty calibration is defined there. |
+| `REPUTATION.md` | Challenge criteria (section 8.3) determine when `challenge` is issued. PoW difficulty calibration is defined there. |
 | `EXTENSIONS.md` | Extension negotiation rules, criticality signaling, and size constraints for handshake-layer extensions. |
 
 ---

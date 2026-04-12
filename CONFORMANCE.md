@@ -321,12 +321,12 @@ A conformant server MUST:
 - Verify observation signatures before using them. Discard observations
   signed by unknown or untrusted keys. (`REPUTATION.md` §9.1)
 - Not fabricate or inflate observation metrics. (`REPUTATION.md` §4.5)
-- Verify PoW solutions before proceeding with handshakes: confirm
+- Verify challenge solutions before proceeding with handshakes: confirm
   `challenge_id` matches an issued, unexpired challenge, recompute the hash,
   and confirm the required leading zero bits. (`REPUTATION.md` §8.3.4)
-- Treat each PoW challenge as single-use and reject duplicate submissions.
+- Treat each challenge as single use and reject duplicate submissions.
   (`REPUTATION.md` §8.3.4)
-- Not treat PoW completion as evidence of legitimacy.
+- Not treat challenge completion as evidence of legitimacy.
   (`REPUTATION.md` §8.3.5)
 - Not disclose decrypted envelope content in abuse evidence without the
   explicit, signed authorization of the affected user.
@@ -464,7 +464,7 @@ A conformant client MUST:
 - Record session state on receipt of the `accepted` message, including
   `session_ttl` and the locally computed `expires_at`.
   (`CLIENT.md` §2.1, `SESSION.md` §2.6.1)
-- Verify `server_signature` on `pow_required` messages before computing a
+- Verify `server_signature` on `challenge` messages before computing a
   solution. Abort on invalid signatures. (`HANDSHAKE.md` §2.2a)
 
 ### 5.4 Envelope Composition
@@ -672,8 +672,8 @@ The following primitives are fixed and not governed by the negotiated suite:
 
 - **Confirmation hash**:  SHA-256. Computed before suite negotiation
   completes. (`HANDSHAKE.md` §2.5.3, `ENVELOPE.md` §7.3.4)
-- **Proof-of-work hash**:  SHA-256. Occurs before session establishment.
-  (`HANDSHAKE.md` §2.2a, `ENVELOPE.md` §7.3.4)
+- **Challenge hash**:  SHA-256. Used by the proof of work challenge type.
+  Occurs before session establishment. (`HANDSHAKE.md` §2.2a, `ENVELOPE.md` §7.3.4)
 
 ---
 
@@ -823,7 +823,7 @@ requirements.
 | `HANDSHAKE.md` | Handshake protocol, capability negotiation, and session establishment requirements originate here. |
 | `DISCOVERY.md` | Discovery flow, caching, and legacy fallback requirements originate here. |
 | `KEY.md`       | Key publication, rotation, revocation, and storage requirements originate here. |
-| `REPUTATION.md`| Trust gossip, abuse reporting, proof-of-work, and zero-reputation behavior requirements originate here. |
+| `REPUTATION.md`| Trust gossip, abuse reporting, handshake challenges, and zero-reputation behavior requirements originate here. |
 | `DELIVERY.md`  | Blocking, acknowledgment types, and delivery pipeline requirements originate here. |
 | `CLIENT.md`    | Client-specific obligations for encryption, delivery state, and legacy interoperability originate here. |
 | `SESSION.md`   | Forward secrecy, session key lifecycle, rekeying, and memory safety requirements originate here. |
