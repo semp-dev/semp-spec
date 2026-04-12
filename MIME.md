@@ -206,7 +206,7 @@ UTF-8. Applications MUST NOT assume or attempt other encodings.
 
 The maximum size of a `.semp` file is bounded by the maximum envelope size
 advertised by the recipient's server in `DISCOVERY.md` section 3.1
-(`max_message_size`). For files created by export (section 3.4), the maximum
+(`max_envelope_size`). For files created by export (section 3.4), the maximum
 size is the size of the original envelope. Applications SHOULD handle files
 up to at least 25 MB, consistent with common maximum envelope sizes.
 

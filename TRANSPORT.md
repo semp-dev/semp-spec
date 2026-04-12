@@ -120,7 +120,7 @@ for framing requirements in custom transport bindings.
 ### 2.6 Binary-Safe Variable-Length Payloads
 
 The transport MUST support messages up to the server's advertised
-`max_message_size` (default 25 MB per `DISCOVERY.md` section 3.1). SEMP
+`max_envelope_size` (default 25 MB per `DISCOVERY.md` section 3.1). SEMP
 payloads contain base64-encoded binary data for keys, nonces, signatures, and
 encrypted content. The transport MUST NOT alter, truncate, or re-encode
 payload content.
@@ -155,7 +155,7 @@ requirements. A transport MAY satisfy one or both profiles.
 The synchronous profile covers protocol exchanges that follow a strict
 request-response or multi-message sequential pattern:
 
-- **Handshake**:  Four-message exchange with optional PoW interstitial.
+- **Handshake**:  Four-message exchange with optional challenge interstitial.
 - **Discovery**:  Request-response lookup.
 - **Key exchange**:  Request-response key fetch.
 - **Rekeying**:  Two-message exchange within an established session.
@@ -296,7 +296,7 @@ HTTP status codes indicate transport-level outcomes only:
 |-------------|---------------------------------------------------------------|
 | 200         | SEMP message processed. SEMP-level outcome is in the body.    |
 | 400         | Malformed SEMP message. Could not parse.                      |
-| 413         | Payload exceeds `max_message_size`.                           |
+| 413         | Payload exceeds `max_envelope_size`.                           |
 | 429         | Transport-level rate limit. Distinct from SEMP `rate_limited`.|
 | 503         | Server temporarily unavailable.                               |
 
@@ -308,8 +308,8 @@ status codes and SEMP reason codes are independent layers.
 The four-message handshake maps to sequential HTTP/2 POST requests. Each
 handshake message is a separate request-response round trip:
 
-1. Client POSTs `init` → Server responds with `response` (or `pow_required`)
-2. Client POSTs `pow_solution` (if required) → Server responds with `response`
+1. Client POSTs `init` → Server responds with `response` (or `challenge`)
+2. Client POSTs `challenge_response` (if required) → Server responds with `response`
 3. Client POSTs `confirm` → Server responds with `accepted` or `rejected`
 
 The server includes a `Semp-Session-Id` header in the response to message 1.
@@ -548,7 +548,7 @@ interoperability.
 #### 6.1.2 Handshake Mapping
 
 The handshake uses a bidirectional stream. The client sends `init`, reads
-`response` (or `pow_required`), sends `pow_solution` or `confirm`, and reads
+`response` (or `challenge`), sends `challenge_response` or `confirm`, and reads
 `accepted` or `rejected`. The stream is closed after the handshake completes.
 
 #### 6.1.3 Considerations
@@ -677,7 +677,7 @@ transports is length-prefix framing:
 
 The message length is the byte length of the UTF-8-encoded JSON message. The
 maximum message length is governed by the server's advertised
-`max_message_size`.
+`max_envelope_size`.
 
 ### 7.4 Profile Declaration
 

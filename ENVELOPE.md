@@ -599,9 +599,9 @@ before or outside of suite negotiation:
 - **Confirmation hash**:  `SHA-256(canonical(message_1) || canonical(message_2))`.
   This is computed before any suite is agreed and covers the message that
   contains the suite negotiation. It is a fixed protocol primitive.
-- **Proof-of-work hash**:  SHA-256 as specified in `HANDSHAKE.md` section 2.2a.
-  PoW occurs before session establishment and is independent of the session
-  suite.
+- **Challenge hash**:  SHA-256 as specified in `HANDSHAKE.md` section 2.2a.
+  The proof of work challenge occurs before session establishment and is
+  independent of the session suite.
 
 ---
 

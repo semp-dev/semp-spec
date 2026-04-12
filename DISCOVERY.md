@@ -71,7 +71,7 @@ controls load distribution among servers of equal priority.
 A companion TXT record advertises the server's SEMP capabilities:
 
 ```
-_semp._tcp.example.com.  3600  IN  TXT  "v=semp1;pq=ready;c=ws,h2,quic;f=groups,threads,reactions"
+_semp._tcp.example.com.  3600  IN  TXT  "v=semp1;pq=ready;c=ws,h2,quic;mes=26214400;f=groups,threads,reactions"
 ```
 
 | Parameter | Description                                                        |
@@ -79,6 +79,7 @@ _semp._tcp.example.com.  3600  IN  TXT  "v=semp1;pq=ready;c=ws,h2,quic;f=groups,
 | `v`       | SEMP protocol version. MUST be present. Current value: `semp1`.   |
 | `pq`      | Post-quantum readiness. Values: `ready`, `hybrid`, `none`.        |
 | `c`       | Supported transports, comma-separated. Values: `ws`, `h2`, `quic`.|
+| `mes`     | Maximum accepted envelope size in bytes. MUST be present. Senders MUST NOT transmit envelopes exceeding this value. |
 | `f`       | Supported features, comma-separated.                               |
 | `auth`    | Supported auth methods, comma-separated. Optional.                 |
 
@@ -174,7 +175,7 @@ The response is a JSON capability document:
     "features": ["groups", "threads", "reactions", "edit", "expiry", "horizon"],
     "post_quantum": "ready",
     "auth_methods": ["identity_key", "token"],
-    "max_message_size": 26214400,
+    "max_envelope_size": 26214400,
     "max_attachments": 10,
     "extensions": {}
 }
@@ -189,7 +190,7 @@ The response is a JSON capability document:
 | `features`         | `array`   | Yes      | Supported feature identifiers.                                 |
 | `post_quantum`     | `string`  | Yes      | Post-quantum readiness. Values: `ready`, `hybrid`, `none`.     |
 | `auth_methods`     | `array`   | No       | Supported authentication methods. Informs client configuration.|
-| `max_message_size` | `integer` | No       | Maximum accepted envelope size in bytes.                       |
+| `max_envelope_size`| `integer` | Yes      | Maximum accepted envelope size in bytes. Senders MUST NOT transmit envelopes exceeding this value. |
 | `max_attachments`  | `integer` | No       | Maximum number of attachments per envelope.                    |
 | `extensions`       | `object`  | No       | Operator-defined capability extensions.                        |
 
