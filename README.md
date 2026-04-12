@@ -133,8 +133,6 @@ SEMP is in the **draft specification** phase. The protocol design is complete
 and internally consistent. Reference implementations and client/server
 libraries are in development.
 
-The protocol is live at [semp.dev](https://semp.dev).
-
 ## Contributing
 
 SEMP is an open protocol. Contributions to the specification and
