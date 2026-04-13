@@ -197,9 +197,11 @@ The three core transports defined in section 4 all satisfy both profiles.
 
 ## 4. Core Transport Bindings
 
-SEMP defines bindings for three transports. Implementations MUST support at
-least one. These three are chosen because they are widely deployed, run over
-standard HTTPS infrastructure, and satisfy both transport profiles natively.
+SEMP defines bindings for three transports. Implementations MUST support
+HTTP/2 as the baseline transport for interoperability. Implementations SHOULD
+additionally support WebSocket and QUIC. All three are chosen because they are
+widely deployed, run over standard HTTPS infrastructure, and satisfy both
+transport profiles natively.
 
 ### 4.1 WebSocket (ws)
 
@@ -249,10 +251,11 @@ long-lived sessions. The recommended ping interval is 30 seconds.
 
 #### 4.1.4 Considerations
 
-WebSocket is the RECOMMENDED transport for general-purpose SEMP deployment.
-It blends with normal web traffic on port 443, making it resistant to
-protocol-specific blocking. It has mature library support across all major
-programming languages. Its persistent connection model maps naturally to
+WebSocket is RECOMMENDED as an additional transport alongside the mandatory
+HTTP/2 baseline. It blends with normal web traffic on port 443, making it
+resistant to protocol-specific blocking. It has mature library support across
+all major programming languages. Its persistent connection model maps naturally
+to
 SEMP's session lifecycle.
 
 ### 4.2 HTTP/2 (h2)
@@ -809,7 +812,7 @@ adjustment.
 
 A conformant server MUST:
 
-- Support at least one core transport (WebSocket, HTTP/2, or QUIC).
+- Support HTTP/2 as the baseline transport for interoperability.
 - Advertise supported transports accurately in discovery records.
 - Accept SEMP messages on any advertised transport without semantic
   differences; the same SEMP message produces the same outcome regardless
@@ -817,11 +820,13 @@ A conformant server MUST:
 - Satisfy all seven minimum transport requirements on every advertised
   transport.
 
+A conformant server SHOULD additionally support WebSocket and QUIC.
+
 ### 10.2 Client Conformance
 
 A conformant client MUST:
 
-- Support at least one core transport.
+- Support HTTP/2 as the baseline transport for interoperability.
 - Respect the server's advertised transport capabilities during selection.
 - Declare the selected transport in the handshake init message.
 - Implement transport fallback when the preferred transport is unreachable.

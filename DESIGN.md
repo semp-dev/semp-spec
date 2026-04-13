@@ -302,7 +302,8 @@ SEMP builds on existing standards where they serve its goals:
 - **DNS**:  server discovery, capability advertisement, key publication.
 - **TLS**:  transport security layer beneath SEMP's application-layer security.
 - **RFC 2119**:  normative language throughout all SEMP specifications.
-- **WebSocket / HTTP/2 / QUIC**:  supported transports, negotiated during
+- **HTTP/2**:  mandatory baseline transport for interoperability.
+- **WebSocket / QUIC**:  recommended additional transports, negotiated during
   discovery.
 
 SEMP operates as an application-layer protocol on top of DNS, TLS, and the
