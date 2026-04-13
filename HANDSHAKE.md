@@ -891,14 +891,14 @@ Before a federation handshake can proceed, both sides need each other's domain
 signing public key to verify handshake message signatures. The domain key
 bootstrap follows this order:
 
-1. **Local cache** — check if the peer's domain key is already cached from a
-   previous handshake or well-known fetch.
-2. **DNS SRV resolution** — resolve `_semp._tcp.<peer-domain>` to find the
-   peer's server hostname (see `DISCOVERY.md` section 2.1).
-3. **Well-known fetch** — fetch `https://<srv-target>/.well-known/semp/domain-keys`
-   from the resolved hostname (see `DISCOVERY.md` section 3.2). The HTTPS
-   certificate chain is the trust anchor.
-4. **Cache** — store the fetched domain key locally for future handshakes.
+1. Check the local cache for the peer's domain key. If present and not expired,
+   use it.
+2. Resolve `_semp._tcp.<peer-domain>` via DNS SRV to find the peer's server
+   hostname (see `DISCOVERY.md` section 2.1).
+3. Fetch `https://<srv-target>/.well-known/semp/domain-keys` from the resolved
+   hostname (see `DISCOVERY.md` section 3.2). The HTTPS certificate chain serves
+   as the trust anchor.
+4. Store the fetched domain key in the local cache for future handshakes.
 
 This bootstrap is performed lazily: the initiating server fetches the peer's
 domain key the first time it needs to federate with that domain. Subsequent
