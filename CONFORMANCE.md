@@ -759,11 +759,12 @@ session requires a fresh handshake regardless of TLS resumption state.
 
 ### 9.2 Transport Support
 
-Implementations MUST support at least one core transport as defined in
-`TRANSPORT.md` section 4: WebSocket, HTTP/2, or QUIC. Transport is negotiated
-during discovery and declared in the handshake init. Minimum transport
-requirements, transport profiles, fallback order, and extended transport
-bindings are defined in `TRANSPORT.md`.
+Implementations MUST support HTTP/2 as the baseline transport for
+interoperability as defined in `TRANSPORT.md` section 4. Implementations SHOULD
+additionally support WebSocket and QUIC. Transport is negotiated during
+discovery and declared in the handshake init. Minimum transport requirements,
+transport profiles, fallback order, and extended transport bindings are defined
+in `TRANSPORT.md`.
 (`TRANSPORT.md` §2, §4, §5, `HANDSHAKE.md` §2.2, `DISCOVERY.md` §2.2)
 
 ### 9.3 Clock Synchronization
