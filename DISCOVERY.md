@@ -164,69 +164,152 @@ records exist, the email domain itself. This path MUST be served over HTTPS.
 Servers MUST NOT serve it over plain HTTP. The HTTPS certificate chain is the
 trust anchor for the response contents.
 
-The response is a JSON configuration document. The document describes what the
-server supports and where to connect. The endpoint URLs inside the document are
-implementation-chosen; only the presence of the `endpoints` object is required.
+The response is a JSON configuration document that describes the server's
+capabilities, transport endpoints, API endpoints, and supported extensions.
+All URL values inside the document are implementation-chosen.
 
 ```json
 {
     "version": "1.0.0",
+    "domain": "example.com",
     "endpoints": {
-        "h2": "https://semp.example.com/v1/h2",
-        "ws": "wss://semp.example.com/v1/ws"
+        "client": {
+            "h2": "https://semp.example.com/v1/h2",
+            "ws": "wss://semp.example.com/v1/ws"
+        },
+        "federation": {
+            "h2": "https://semp.example.com/v1/h2/federate",
+            "ws": "wss://semp.example.com/v1/federate"
+        },
+        "register": "https://semp.example.com/v1/register",
+        "device_register": "https://semp.example.com/v1/device/register",
+        "blocklist": "https://semp.example.com/v1/blocklist",
+        "keys": "https://semp.example.com/.well-known/semp/keys/",
+        "domain_keys": "https://semp.example.com/.well-known/semp/domain-keys"
     },
     "suites": [
         "pq-kyber768-x25519",
         "x25519-chacha20-poly1305"
     ],
-    "max_envelope_size": 26214400,
-    "max_attachments": 10,
-    "extensions": {}
+    "limits": {
+        "max_envelope_size": 26214400
+    },
+    "extensions": []
 }
 ```
 
 ### 3.1 Configuration Document Fields
 
-| Field              | Type      | Required | Description                                                    |
-|--------------------|-----------|----------|----------------------------------------------------------------|
-| `version`          | `string`  | Yes      | SEMP protocol version supported (semver).                      |
-| `endpoints`        | `object`  | Yes      | Map of transport identifier to endpoint URL. The transport identifiers are defined in `TRANSPORT.md` section 4: `h2`, `ws`, `quic`. The URL values are implementation-chosen. At minimum, `h2` MUST be present (mandatory baseline transport). |
-| `suites`           | `array`   | Yes      | Cryptographic suite identifiers the server supports, in preference order. Suite identifiers are defined in `ENVELOPE.md` section 7: `x25519-chacha20-poly1305` (baseline, MUST be present) and `pq-kyber768-x25519` (post-quantum hybrid, RECOMMENDED). |
-| `max_envelope_size`| `integer` | Yes      | Maximum accepted envelope size in bytes. Senders MUST NOT transmit envelopes exceeding this value. |
-| `max_attachments`  | `integer` | No       | Maximum number of attachments per envelope.                    |
-| `extensions`       | `object`  | No       | Operator-defined capability extensions per `EXTENSIONS.md`.    |
+| Field        | Type     | Required | Description                                        |
+|--------------|----------|----------|----------------------------------------------------|
+| `version`    | `string` | Yes      | SEMP protocol version supported (semver).          |
+| `domain`     | `string` | Yes      | The email domain this server operates for.         |
+| `endpoints`  | `object` | Yes      | All discoverable endpoints. See section 3.1.1.     |
+| `suites`     | `array`  | Yes      | Cryptographic suite identifiers in preference order. See section 3.1.2. |
+| `limits`     | `object` | Yes      | Operational limits. See section 3.1.3.             |
+| `extensions` | `array`  | No       | Supported extensions. See section 3.1.4.           |
 
 Implementations MUST ignore unknown fields rather than failing, consistent with
 the extensibility principle.
 
+#### 3.1.1 Endpoints
+
+The `endpoints` object contains all URLs a client or federation peer needs.
+Transport endpoints (which carry SEMP sessions) are grouped by role; API
+endpoints (which are plain HTTPS) are flat.
+
+| Field              | Type     | Required | Description                                  |
+|--------------------|----------|----------|----------------------------------------------|
+| `client`           | `object` | Yes      | Transport endpoints for client sessions. Map of transport identifier (`h2`, `ws`, `quic`) to URL. `h2` MUST be present. |
+| `federation`       | `object` | Yes      | Transport endpoints for federation sessions. Same structure as `client`. `h2` MUST be present. |
+| `register`         | `string` | Yes      | URL for client key registration (`POST`). See `CLIENT.md` section 2.2.1. |
+| `device_register`  | `string` | No       | URL for delegated device registration (`POST`). See `KEY.md` section 10. |
+| `blocklist`        | `string` | No       | URL for block list management (`GET`/`POST`/`DELETE`). See `DELIVERY.md` section 4. |
+| `keys`             | `string` | Yes      | Base URL for user key publication. Append the user address to retrieve keys. |
+| `domain_keys`      | `string` | Yes      | URL for domain signing and encryption key publication. |
+
+All URL values are implementation-chosen. The protocol does not mandate URL path
+structure. The transport identifiers in `client` and `federation` are defined in
+`TRANSPORT.md` section 4: `h2`, `ws`, `quic`.
+
+#### 3.1.2 Suites
+
+The `suites` array lists the cryptographic suite identifiers the server supports,
+in preference order (most preferred first). Suite identifiers are defined in
+`ENVELOPE.md` section 7.
+
+The array MUST contain at least `x25519-chacha20-poly1305` (the baseline suite
+required for interoperability). `pq-kyber768-x25519` (post-quantum hybrid) is
+RECOMMENDED.
+
+#### 3.1.3 Limits
+
+The `limits` object declares operational constraints.
+
+| Field              | Type      | Required | Description                                    |
+|--------------------|-----------|----------|------------------------------------------------|
+| `max_envelope_size`| `integer` | Yes      | Maximum accepted envelope size in bytes. Senders MUST NOT transmit envelopes exceeding this value. |
+
+Future protocol versions MAY introduce additional limit fields.
+
+#### 3.1.4 Extensions
+
+The `extensions` array lists protocol extensions the server supports. Each
+entry declares the extension identifier and whether the connecting party MUST
+support it to interoperate.
+
+```json
+"extensions": [
+    {
+        "id": "semp.dev/read-receipts",
+        "required": false
+    },
+    {
+        "id": "example.com/custom-routing",
+        "required": true
+    }
+]
+```
+
+| Field      | Type      | Required | Description                                     |
+|------------|-----------|----------|-------------------------------------------------|
+| `id`       | `string`  | Yes      | Extension identifier per `EXTENSIONS.md`.       |
+| `required` | `boolean` | Yes      | If `true`, a connecting party that does not recognize this extension MUST NOT proceed with the connection. If `false`, the extension is informational and MAY be ignored. |
+
+An empty array indicates no extensions are advertised.
+
 ### 3.2 What Is and Is Not Mandated
 
 The configuration document separates what the protocol fixes from what
-implementations choose:
+implementations choose.
 
-**Fixed by the protocol:**
+Fixed by the protocol:
+
 - The bootstrapping path `/.well-known/semp/configuration` is fixed and MUST NOT
   vary across implementations.
 - The document MUST be served over HTTPS.
-- The `endpoints` object MUST be present and MUST contain at least an `h2` entry
-  (the mandatory baseline transport per `TRANSPORT.md` section 4).
-- The `suites` array MUST be present and MUST contain at least
-  `x25519-chacha20-poly1305` (the baseline suite per `ENVELOPE.md` section 7).
+- The `endpoints.client` and `endpoints.federation` objects MUST each contain at
+  least an `h2` entry (the mandatory baseline transport per `TRANSPORT.md`
+  section 4).
+- The `endpoints.register`, `endpoints.keys`, and `endpoints.domain_keys` fields
+  MUST be present.
+- The `suites` array MUST contain at least `x25519-chacha20-poly1305`.
+- The `limits.max_envelope_size` field MUST be present.
 
-**Chosen by the implementation:**
-- The endpoint URL paths (e.g. `/v1/h2`, `/v1/ws`) are implementation-chosen.
+Chosen by the implementation:
+
+- All URL values (paths, subdomains, port numbers) are implementation-chosen.
   The protocol does not mandate URL path structure.
-- The subdomain or hostname structure is implementation-chosen. The server
-  hostname may differ from the email domain (see section 5.5).
-- Which additional transports and suites to support beyond the mandatory
-  baselines is operator-chosen.
+- The hostname may differ from the email domain (see section 5.5).
+- Which additional transports, suites, and extensions to support beyond the
+  mandatory baselines is operator-chosen.
 
 This split exists so that the bootstrapping flow is deterministic (every SEMP
 client knows exactly where to find the configuration), while the operational
 deployment remains flexible (operators choose their own URL layout, subdomain
-structure, and transport/suite support).
+structure, and capability support).
 
-### 3.2 Domain Key Publication
+### 3.3 Domain Key Publication
 
 SEMP servers MUST publish their domain signing and encryption keys at:
 
@@ -270,7 +353,7 @@ to verify handshake signatures. The HTTPS certificate chain serves as the trust
 anchor: if the TLS certificate is valid for the hostname, the domain keys it
 publishes are trusted.
 
-### 3.3 User Key Publication
+### 3.4 User Key Publication
 
 SEMP servers MUST publish registered user keys at:
 
