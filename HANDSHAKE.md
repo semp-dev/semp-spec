@@ -983,7 +983,7 @@ message 2 is sent.
 }
 ```
 
-### 5.5 Message 3: confirm / server
+### 5.6 Message 3: confirm / server
 
 ```json
 {
@@ -1007,7 +1007,7 @@ initiating server accepts the federation policy terms returned in message 2.
 If the policy is unacceptable, the initiating server MUST send
 `accepted: false` with a reason rather than silently closing the connection.
 
-### 5.6 Message 4: accepted / server  or  rejected / server
+### 5.7 Message 4: accepted / server  or  rejected / server
 
 ```json
 {

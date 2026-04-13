@@ -382,11 +382,8 @@ QUIC provides benefits beyond HTTP/2 for SEMP:
 
 #### 4.3.3 Considerations
 
-QUIC support in server and client libraries is less mature than WebSocket or
-HTTP/2 as of this writing. Implementations SHOULD advertise QUIC support in
-discovery only when the deployment has been validated. QUIC's UDP-based
-transport may be blocked by some network middleboxes; implementations MUST
-fall back to HTTP/2 or WebSocket when QUIC is unreachable.
+QUIC operates over UDP, which may be blocked by some network middleboxes.
+Implementations MUST fall back to HTTP/2 or WebSocket when QUIC is unreachable.
 
 ---
 

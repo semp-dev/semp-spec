@@ -147,7 +147,8 @@ URL-safe properties. UUIDs are also acceptable.
 
 `hop_count` is an optional transit field. Relay servers that support hop
 tracking SHOULD increment it before forwarding. Relay servers that do not
-support it MAY forward the envelope without modifying or adding the field.
+support hop tracking MUST forward the field unchanged if present, and MAY
+forward the envelope without adding the field if absent.
 
 When present, servers MAY reject envelopes whose `hop_count` exceeds a
 configured maximum (RECOMMENDED ceiling: 25) as a loop prevention measure.
@@ -287,32 +288,6 @@ The computational cost of client-side key identification is bounded by the numbe
 of active keys a recipient maintains, which SHOULD be small (typically one to
 three keys per user). For large group messages, the cost scales linearly with
 recipient count at the sender side only.
-
-#### Future Direction: MLS for Large Group Key Agreement
-
-SEMP's per-envelope key wrapping is stateless by design, optimized for
-asynchronous federated delivery. Each envelope is a self-contained unit that
-can be decrypted with the recipient's long-term key alone, with no dependency
-on shared state between sender and recipient. This property is essential for
-email semantics: messages may be stored for years, accessed from new devices,
-or recovered from backups long after transmission.
-
-For large-group messaging where linear-cost key wrapping becomes a performance
-constraint and where continuous post-compromise security across the group is
-desirable, a future extension will define a binding to the Messaging Layer
-Security protocol (MLS, RFC 9420). MLS uses a ratchet tree structure that
-reduces the cost of group key operations from O(N) to O(log N) and provides
-automatic group healing after member compromise through epoch-based rekeying.
-
-The core protocol does not depend on MLS because email's durability and
-asynchrony requirements differ from the synchronized-state model that MLS
-assumes. MLS requires participants to maintain evolving epoch state across
-messages, which conflicts with the stateless decryption property that SEMP
-envelopes guarantee. An MLS binding would be negotiated via capability
-advertisement during the handshake and scoped to conversations where the
-`group_id` field is present in the brief. One-to-one and small-group
-messaging would continue to use the stateless per-envelope key wrapping
-defined in this section.
 
 ### 4.5 Symmetric Key Scope
 
@@ -773,21 +748,6 @@ Server-enforceable user-level blocking is retained at the cost of a
 server-visible correspondent graph. The alternative, moving block enforcement
 entirely to the client, would require the server to deliver envelopes it cannot
 screen, passing blocked traffic through to the client for client-side discard.
-
-#### Future Direction: Private Set Intersection
-
-A future revision may allow the server to check `brief.from` against the
-user's block list without learning the plaintext sender address. Private Set
-Intersection (PSI) protocols make this cryptographically possible: the server
-holds an encrypted representation of the block list, and the brief carries a
-committed form of the sender address that the server can test against the
-encrypted list without learning the address itself.
-
-PSI-based block enforcement is a candidate for a future revision of this
-specification. It would require defining a commitment scheme for sender
-addresses in the brief, a block list encryption format compatible with PSI
-evaluation, and a protocol for the server to perform the intersection check at
-delivery time.
 
 ### 10.7 Recipient Anonymity
 
