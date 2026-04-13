@@ -71,17 +71,15 @@ controls load distribution among servers of equal priority.
 A companion TXT record advertises the server's SEMP capabilities:
 
 ```
-_semp._tcp.example.com.  3600  IN  TXT  "v=semp1;pq=ready;c=ws,h2,quic;mes=26214400;f=groups,threads,reactions"
+_semp._tcp.example.com.  3600  IN  TXT  "v=semp1;s=pq-kyber768-x25519,x25519-chacha20-poly1305;c=h2,ws,quic;mes=26214400"
 ```
 
 | Parameter | Description                                                        |
 |-----------|--------------------------------------------------------------------|
 | `v`       | SEMP protocol version. MUST be present. Current value: `semp1`.   |
-| `pq`      | Post-quantum readiness. Values: `ready`, `hybrid`, `none`.        |
-| `c`       | Supported transports, comma-separated. Values: `ws`, `h2`, `quic`.|
-| `mes`     | Maximum accepted envelope size in bytes. MUST be present. Senders MUST NOT transmit envelopes exceeding this value. |
-| `f`       | Supported features, comma-separated.                               |
-| `auth`    | Supported auth methods, comma-separated. Optional.                 |
+| `s`       | Supported cryptographic suites, comma-separated, in preference order. Suite identifiers are defined in `ENVELOPE.md` section 7. `x25519-chacha20-poly1305` (baseline) MUST be present. `pq-kyber768-x25519` (post-quantum hybrid) is RECOMMENDED. |
+| `c`       | Supported transports, comma-separated. Values: `h2`, `ws`, `quic`. `h2` MUST be present (mandatory baseline transport per `TRANSPORT.md` section 4). |
+| `mes`     | Maximum accepted envelope size in bytes. Senders MUST NOT transmit envelopes exceeding this value. |
 
 Implementations MUST treat unknown parameters as ignored rather than as errors,
 consistent with the extensibility principle.
@@ -155,47 +153,78 @@ partition lookup request.
 ## 3. Well-Known URI Discovery
 
 When DNS records are absent or unreachable, the sender's server falls back to
-fetching the well-known configuration URI:
+fetching the well-known configuration URI. The bootstrapping path is fixed:
 
 ```
-https://example.com/.well-known/semp/configuration
+https://<hostname>/.well-known/semp/configuration
 ```
 
-This URI MUST be served over HTTPS. Servers MUST NOT serve it over plain HTTP.
-The response is a JSON capability document:
+The hostname is determined by DNS SRV resolution (section 5.5) or, when no SRV
+records exist, the email domain itself. This path MUST be served over HTTPS.
+Servers MUST NOT serve it over plain HTTP. The HTTPS certificate chain is the
+trust anchor for the response contents.
+
+The response is a JSON configuration document. The document describes what the
+server supports and where to connect. The endpoint URLs inside the document are
+implementation-chosen; only the presence of the `endpoints` object is required.
 
 ```json
 {
     "version": "1.0.0",
     "endpoints": {
-        "ws": "wss://semp.example.com/v1/ws",
-        "h2": "https://semp.example.com/v1",
-        "quic": "https://semp.example.com/v1"
+        "h2": "https://semp.example.com/v1/h2",
+        "ws": "wss://semp.example.com/v1/ws"
     },
-    "features": ["groups", "threads", "reactions", "edit", "expiry", "horizon"],
-    "post_quantum": "ready",
-    "auth_methods": ["identity_key", "token"],
+    "suites": [
+        "pq-kyber768-x25519",
+        "x25519-chacha20-poly1305"
+    ],
     "max_envelope_size": 26214400,
     "max_attachments": 10,
     "extensions": {}
 }
 ```
 
-### 3.1 Well-Known URI Fields
+### 3.1 Configuration Document Fields
 
 | Field              | Type      | Required | Description                                                    |
 |--------------------|-----------|----------|----------------------------------------------------------------|
-| `version`          | `string`  | Yes      | SEMP protocol version supported.                               |
-| `endpoints`        | `object`  | Yes      | Map of transport identifier to endpoint URL.                   |
-| `features`         | `array`   | Yes      | Supported feature identifiers.                                 |
-| `post_quantum`     | `string`  | Yes      | Post-quantum readiness. Values: `ready`, `hybrid`, `none`.     |
-| `auth_methods`     | `array`   | No       | Supported authentication methods. Informs client configuration.|
+| `version`          | `string`  | Yes      | SEMP protocol version supported (semver).                      |
+| `endpoints`        | `object`  | Yes      | Map of transport identifier to endpoint URL. The transport identifiers are defined in `TRANSPORT.md` section 4: `h2`, `ws`, `quic`. The URL values are implementation-chosen. At minimum, `h2` MUST be present (mandatory baseline transport). |
+| `suites`           | `array`   | Yes      | Cryptographic suite identifiers the server supports, in preference order. Suite identifiers are defined in `ENVELOPE.md` section 7: `x25519-chacha20-poly1305` (baseline, MUST be present) and `pq-kyber768-x25519` (post-quantum hybrid, RECOMMENDED). |
 | `max_envelope_size`| `integer` | Yes      | Maximum accepted envelope size in bytes. Senders MUST NOT transmit envelopes exceeding this value. |
 | `max_attachments`  | `integer` | No       | Maximum number of attachments per envelope.                    |
-| `extensions`       | `object`  | No       | Operator-defined capability extensions.                        |
+| `extensions`       | `object`  | No       | Operator-defined capability extensions per `EXTENSIONS.md`.    |
 
 Implementations MUST ignore unknown fields rather than failing, consistent with
 the extensibility principle.
+
+### 3.2 What Is and Is Not Mandated
+
+The configuration document separates what the protocol fixes from what
+implementations choose:
+
+**Fixed by the protocol:**
+- The bootstrapping path `/.well-known/semp/configuration` is fixed and MUST NOT
+  vary across implementations.
+- The document MUST be served over HTTPS.
+- The `endpoints` object MUST be present and MUST contain at least an `h2` entry
+  (the mandatory baseline transport per `TRANSPORT.md` section 4).
+- The `suites` array MUST be present and MUST contain at least
+  `x25519-chacha20-poly1305` (the baseline suite per `ENVELOPE.md` section 7).
+
+**Chosen by the implementation:**
+- The endpoint URL paths (e.g. `/v1/h2`, `/v1/ws`) are implementation-chosen.
+  The protocol does not mandate URL path structure.
+- The subdomain or hostname structure is implementation-chosen. The server
+  hostname may differ from the email domain (see section 5.5).
+- Which additional transports and suites to support beyond the mandatory
+  baselines is operator-chosen.
+
+This split exists so that the bootstrapping flow is deterministic (every SEMP
+client knows exactly where to find the configuration), while the operational
+deployment remains flexible (operators choose their own URL layout, subdomain
+structure, and transport/suite support).
 
 ### 3.2 Domain Key Publication
 
