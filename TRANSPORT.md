@@ -71,7 +71,7 @@ transports are prohibited.
 ### 2.2 Server Authentication
 
 The transport MUST allow the connecting party to verify the remote server's
-domain identity. In practice, this means TLS certificate verification where
+domain identity. This requirement is satisfied by TLS certificate verification where
 the certificate's Common Name or Subject Alternative Name matches the
 server's domain.
 
@@ -341,7 +341,7 @@ to `v1/session/{id}`.
 
 #### 4.2.5 Considerations
 
-HTTP/2 is well-suited to environments with existing HTTP infrastructure and
+HTTP/2 is RECOMMENDED for environments with existing HTTP infrastructure and
 API gateway patterns. The request-response model maps naturally to discovery
 and key exchange. The session stream mechanism for server-initiated messages
 is more complex than WebSocket's native bidirectional model but avoids the
@@ -444,10 +444,10 @@ RECOMMENDED fallback order for the core and extended transports:
 
 | Priority | Transport  | Rationale                                                   |
 |----------|------------|-------------------------------------------------------------|
-| 1        | QUIC       | Lowest latency (0-RTT/1-RTT), no head-of-line blocking, built-in TLS 1.3, connection migration. Best performance when available. |
-| 2        | WebSocket  | Persistent bidirectional connection, widely supported, traverses nearly all middleboxes, blends with HTTPS traffic. The most reliable general-purpose choice. |
-| 3        | HTTP/2     | Universally supported. Request-response model adds round-trip latency to handshakes but works everywhere HTTP works. |
-| 4        | gRPC       | Bidirectional streaming over HTTP/2. Preferred only when both parties have gRPC infrastructure. Not universally deployed. |
+| 1        | QUIC       | Lowest latency (0-RTT/1-RTT), no head-of-line blocking, built-in TLS 1.3, connection migration. |
+| 2        | WebSocket  | Persistent bidirectional connection, widely supported, traverses nearly all middleboxes. |
+| 3        | HTTP/2     | Mandatory baseline. Request-response model adds round-trip latency to handshakes. |
+| 4        | gRPC       | Bidirectional streaming over HTTP/2. Applicable only when both parties have gRPC infrastructure. |
 
 This order reflects a preference for performance first (QUIC), reliability
 second (WebSocket), universal availability third (HTTP/2), and
@@ -561,7 +561,7 @@ The handshake uses a bidirectional stream. The client sends `init`, reads
 
 #### 6.1.3 Considerations
 
-gRPC is well-suited to environments with existing gRPC infrastructure,
+gRPC is RECOMMENDED for environments with existing gRPC infrastructure,
 particularly enterprise deployments and microservice architectures. The
 bidirectional streaming model maps cleanly to the SEMP handshake. The main
 consideration is that gRPC adds a dependency on HTTP/2 and typically on

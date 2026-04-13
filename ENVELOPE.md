@@ -639,7 +639,7 @@ rejection response to the sending server containing:
 - A human-readable description
 - The `postmark.id` of the rejected envelope
 
-A server that cannot or will not deliver an envelope MUST return an explicit
+A server that is unable to deliver or declines to deliver an envelope MUST return an explicit
 rejection.
 
 ### 9.3 Envelope Rejection Reason Codes
@@ -674,8 +674,8 @@ Full sender and recipient addresses, timestamps, and threading metadata are
 inside the encrypted `brief`. The subject and message content are inside the
 encrypted `enclosure`.
 
-Observers in transit can determine that a message was sent from one domain to
-another. They cannot determine who sent it, who received it, what it was about,
+Observers of network traffic are able to determine that a message was sent from one domain to
+another. They MUST NOT be able to determine who sent it, who received it, what it was about,
 or when within the expiry window it was sent.
 
 ### 10.2 Replay Prevention

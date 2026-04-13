@@ -179,7 +179,7 @@ delegation flow:
    handshake. The server identifies the device by its key and retrieves the
    associated certificate.
 
-The delegated client is a full SEMP client — it composes envelopes, encrypts
+The delegated client is a full SEMP client. It composes envelopes, encrypts
 content, and signs handshake identity proofs. The scope restricts what the
 server will accept from it, not what it can compute locally.
 
