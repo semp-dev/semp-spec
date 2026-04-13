@@ -555,10 +555,14 @@ the federation endpoint as follows:
 
 1. If a static endpoint is configured for the peer, use it directly.
 2. If a well-known configuration document is available (from section 3),
-   extract the `ws` endpoint URL and replace `/v1/ws` with `/v1/federate`.
+   extract the endpoint URL for the preferred transport and replace `/v1/ws`
+   or `/v1` with `/v1/federate`.
 3. If only DNS SRV is available (no well-known document), construct the
-   endpoint from the SRV target: `wss://<srv-target>/v1/ws`, then replace
-   `/v1/ws` with `/v1/federate`.
+   endpoint from the SRV target using the mandatory HTTP/2 baseline:
+   `https://<srv-target>/v1/federate`. Because HTTP/2 is the mandatory
+   baseline transport (`TRANSPORT.md` section 4), every conformant server
+   MUST accept federation connections over HTTP/2 even when no transport
+   is explicitly advertised.
 
 The federation endpoint path `/v1/federate` is the standard path for
 server-to-server connections. Implementations MAY use a different path
