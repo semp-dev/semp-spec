@@ -456,10 +456,18 @@ This order reflects a preference for performance first (QUIC), reliability
 second (WebSocket), universal availability third (HTTP/2), and
 infrastructure-specific optimization last (gRPC).
 
-Implementations MAY deviate from this order based on operational context. For
-example, an enterprise deployment where all peers are known to support gRPC
-may reasonably prefer gRPC over WebSocket. The recommended order applies when
-the connecting party has no additional knowledge about the remote environment.
+Because HTTP/2 is the mandatory baseline transport (section 4), a connecting
+party MAY always attempt HTTP/2 even when the peer's DNS TXT record or
+well-known configuration does not explicitly advertise it. Every conformant
+SEMP server MUST accept connections over HTTP/2 regardless of what transports
+it advertises. This guarantees that two conformant servers can always
+communicate even when transport advertisement is absent or incomplete.
+
+Implementations MAY deviate from the fallback order based on operational
+context. For example, an enterprise deployment where all peers are known to
+support gRPC may reasonably prefer gRPC over WebSocket. The recommended order
+applies when the connecting party has no additional knowledge about the remote
+environment.
 
 ### 5.4 Fallback Procedure
 
