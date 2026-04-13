@@ -130,10 +130,14 @@ Each key object contains `algorithm`, `public_key` (base64-encoded), and `key_id
 (SHA-256 fingerprint of the raw public key bytes, hex-encoded).
 
 The HTTPS certificate chain is the trust anchor. If the TLS certificate is valid
-for the hostname, the domain keys it publishes are trusted. Relying parties
-SHOULD cross-check against DNS/DANE records where possible. A well-known URI
-key that cannot be corroborated by DNS SHOULD be treated with reduced trust and
-MAY be rejected by strict implementations.
+for the hostname, the domain keys it publishes are trusted. HTTPS and DNS are
+roughly equivalent in domain ownership proof: both require control of the
+domain. The difference is verifiability independence. A key published only via
+the well-known URI cannot be verified without contacting the server. A key
+corroborated by DNS/DANE can be verified independently via the DNS
+infrastructure. Relying parties SHOULD cross-check against DNS/DANE records
+where possible. Implementations MAY require DNS corroboration for
+routing-layer verification.
 
 ---
 
