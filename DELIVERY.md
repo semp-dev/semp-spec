@@ -24,7 +24,7 @@ servers.
 
 | Acknowledgment | Description                                                                 |
 |----------------|-----------------------------------------------------------------------------|
-| `delivered`    | The recipient server accepted the envelope and will deliver it to the client.|
+| `delivered`    | The recipient server accepted the envelope and has committed to making it available to the recipient client.|
 | `rejected`     | The recipient server explicitly refused the envelope with a reason code.    |
 | `silent`       | The recipient server did not respond within the sender's timeout window.    |
 

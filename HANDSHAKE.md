@@ -41,7 +41,7 @@ anonymous: it carries only an ephemeral key and capabilities. Client identity
 is revealed only after a shared secret is established, encrypted under that
 secret, and therefore invisible to passive observers.
 
-A passive observer sees that a connection was made to a server, but cannot
+A passive observer sees that a connection was made to a server but MUST NOT be able to
 determine who made it or who they intend to reach.
 
 ### 1.2 Connection Model
@@ -1032,7 +1032,7 @@ On rejection, `step` is `"rejected"` and the message carries `reason_code` and `
 
 Client identity is never transmitted in plaintext. The init message carries
 no identifying information. The identity proof is encrypted under the session
-secret established by ephemeral key exchange. Passive observers cannot
+secret established by ephemeral key exchange. Passive observers MUST NOT be able to
 determine who initiated a session.
 
 The residual leak is that a connection to a specific server was made. This is
@@ -1044,7 +1044,7 @@ intermediaries.
 
 Each handshake uses a fresh client nonce and server nonce. The confirmation
 hash in message 3 binds the identity proof to the specific exchange that
-preceded it. A captured message 3 from one session cannot be replayed into
+preceded it. A captured message 3 from one session MUST NOT be accepted for replay in
 a different session.
 
 The nonce MUST be cryptographically random, minimum 32 bytes. Implementations
