@@ -93,18 +93,71 @@ Clients authenticate to their home server using the handshake defined in
 
 On first launch or new device addition:
 
-1. The client generates a device key pair per `KEY.md` section 10.1.
-2. The client generates an identity key pair if this is the user's first device.
-3. The client generates an initial encryption key pair.
-4. The client registers the device with the home server, providing an
-   authorization proof from an existing trusted device per `KEY.md` section
-   10.2. A registration without a valid authorization proof MUST be rejected
-   by the home server.
-5. The client publishes the encryption public key to the home server for
-   inclusion in the well-known URI per `KEY.md` section 3.1.
+1. The client generates an identity key pair (Ed25519) if this is the user's
+   first device.
+2. The client generates an encryption key pair (suite-specific KEM).
+3. The client generates a device key pair per `KEY.md` section 10.1.
+4. The client registers with the home server via `POST /v1/register`,
+   submitting its public keys and account credentials.
+5. The server stores the public keys and returns its domain signing and
+   encryption keys. The client caches these locally for handshake verification.
 
 The identity private key MUST NOT transit the network. The server receives
-only the public key.
+only the public key. Private keys are generated on the client device and
+MUST never leave it.
+
+#### 2.2.1 Registration Endpoint
+
+Servers MUST implement `POST /v1/register` for client key registration.
+
+Request:
+
+```json
+{
+    "address": "alice@example.com",
+    "password": "account-password",
+    "identity_key": {
+        "algorithm": "ed25519",
+        "public_key": "base64-encoded-ed25519-public-key"
+    },
+    "encryption_key": {
+        "algorithm": "x25519-chacha20-poly1305",
+        "public_key": "base64-encoded-kem-public-key"
+    }
+}
+```
+
+Response (200 OK):
+
+```json
+{
+    "status": "registered",
+    "domain_signing_key": {
+        "algorithm": "ed25519",
+        "public_key": "base64-encoded-key",
+        "key_id": "sha256-fingerprint"
+    },
+    "domain_encryption_key": {
+        "algorithm": "x25519-chacha20-poly1305",
+        "public_key": "base64-encoded-key",
+        "key_id": "sha256-fingerprint"
+    }
+}
+```
+
+The server MUST verify the account credentials before storing the keys. The
+server MUST return its domain signing and encryption public keys so the client
+can cache them for handshake verification (the client needs the domain signing
+key to verify the server's signature in handshake message 2).
+
+After successful registration, the user's public keys are available via
+`/.well-known/semp/keys/<address>` and through the in-session `SEMP_KEYS`
+protocol.
+
+For subsequent device additions, the client MUST provide an authorization
+proof from an existing trusted device per `KEY.md` section 10.2. A device
+registration without a valid authorization proof MUST be rejected by the
+home server.
 
 ### 2.3 Delegated Client Registration
 

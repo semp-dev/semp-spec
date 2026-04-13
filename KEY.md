@@ -88,42 +88,52 @@ for the network, session enforcement for delivery. See
 ### 2.3 Well-Known URI (Fallback)
 
 When DNS/DANE is unavailable or unverifiable, the domain key is discoverable
-via the well-known URI:
+via the well-known endpoint defined in `DISCOVERY.md` section 3.2:
 
 ```
-https://example.com/.well-known/semp/domain-key
+https://<server-hostname>/.well-known/semp/domain-keys
 ```
+
+The hostname is the SRV target (e.g. `semp.example.com`), not necessarily the
+email domain. See `DISCOVERY.md` section 5.5 for how SRV targets map to
+well-known hostnames.
 
 Response:
 
 ```json
 {
-    "type": "SEMP_KEYS",
-    "step": "domain_key",
+    "type": "SEMP_DOMAIN_KEYS",
+    "version": "1.0.0",
     "domain": "example.com",
-    "keys": [
-        {
-            "key_type": "domain",
-            "algorithm": "ed25519",
-            "public_key": "base64-encoded-public-key",
-            "key_id": "key-fingerprint",
-            "created": "2025-01-15T08:30:00Z",
-            "expires": "2026-01-15T08:30:00Z"
-        }
-    ],
-    "timestamp": "2025-06-10T19:56:34Z",
-    "signature": {
+    "signing_key": {
         "algorithm": "ed25519",
-        "key_id": "key-fingerprint",
-        "value": "base64-self-signature"
+        "public_key": "base64-encoded-ed25519-public-key",
+        "key_id": "sha256-fingerprint"
+    },
+    "encryption_key": {
+        "algorithm": "x25519-chacha20-poly1305",
+        "public_key": "base64-encoded-x25519-public-key",
+        "key_id": "sha256-fingerprint"
     }
 }
 ```
 
-The domain key response is self-signed. Relying parties MUST cross-check the
-key against the DNS/DANE record where possible. A well-known URI key that
-cannot be corroborated by DNS SHOULD be treated with reduced trust and MAY
-be rejected by strict implementations.
+| Field            | Type     | Required | Description                              |
+|------------------|----------|----------|------------------------------------------|
+| `type`           | `string` | Yes      | MUST be `"SEMP_DOMAIN_KEYS"`             |
+| `version`        | `string` | Yes      | SEMP protocol version (semver)           |
+| `domain`         | `string` | Yes      | The email domain this server operates for |
+| `signing_key`    | `object` | Yes      | The domain's Ed25519 signing public key   |
+| `encryption_key` | `object` | Yes      | The domain's encryption public key        |
+
+Each key object contains `algorithm`, `public_key` (base64-encoded), and `key_id`
+(SHA-256 fingerprint of the raw public key bytes, hex-encoded).
+
+The HTTPS certificate chain is the trust anchor. If the TLS certificate is valid
+for the hostname, the domain keys it publishes are trusted. Relying parties
+SHOULD cross-check against DNS/DANE records where possible. A well-known URI
+key that cannot be corroborated by DNS SHOULD be treated with reduced trust and
+MAY be rejected by strict implementations.
 
 ---
 

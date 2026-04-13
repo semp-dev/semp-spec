@@ -197,6 +197,62 @@ The response is a JSON capability document:
 Implementations MUST ignore unknown fields rather than failing, consistent with
 the extensibility principle.
 
+### 3.2 Domain Key Publication
+
+SEMP servers MUST publish their domain signing and encryption keys at:
+
+```
+https://<server-hostname>/.well-known/semp/domain-keys
+```
+
+This endpoint MUST be served over HTTPS. The response is a JSON document:
+
+```json
+{
+    "type": "SEMP_DOMAIN_KEYS",
+    "version": "1.0.0",
+    "domain": "example.com",
+    "signing_key": {
+        "algorithm": "ed25519",
+        "public_key": "base64-encoded-ed25519-public-key",
+        "key_id": "sha256-fingerprint"
+    },
+    "encryption_key": {
+        "algorithm": "x25519-chacha20-poly1305",
+        "public_key": "base64-encoded-x25519-public-key",
+        "key_id": "sha256-fingerprint"
+    }
+}
+```
+
+| Field            | Type     | Required | Description                                      |
+|------------------|----------|----------|--------------------------------------------------|
+| `type`           | `string` | Yes      | MUST be `"SEMP_DOMAIN_KEYS"`                     |
+| `version`        | `string` | Yes      | SEMP protocol version (semver)                   |
+| `domain`         | `string` | Yes      | The email domain this server operates for         |
+| `signing_key`    | `object` | Yes      | The domain's Ed25519 signing public key           |
+| `encryption_key` | `object` | Yes      | The domain's encryption public key                |
+
+Each key object contains `algorithm`, `public_key` (base64-encoded), and `key_id`
+(SHA-256 fingerprint of the raw public key bytes, hex-encoded).
+
+Federation peers fetch this endpoint to obtain the domain signing key needed
+to verify handshake signatures. The HTTPS certificate chain serves as the trust
+anchor: if the TLS certificate is valid for the hostname, the domain keys it
+publishes are trusted.
+
+### 3.3 User Key Publication
+
+SEMP servers MUST publish registered user keys at:
+
+```
+https://<server-hostname>/.well-known/semp/keys/<address>
+```
+
+The response is a JSON document containing the user's identity and encryption
+public keys. See `KEY.md` section 3 for the response format and verification
+requirements.
+
 ---
 
 ## 4. Protocol Lookup
@@ -473,6 +529,53 @@ The recipient's block list is held by the receiving partition server. The
 sending partition server MUST NOT access, query, or cache the recipient's block
 list. Block list confidentiality requirements from `DELIVERY.md` section 7.1
 apply across partition boundaries within the same domain.
+
+### 5.5 SRV Target and Well-Known Host Resolution
+
+When DNS SRV resolves a domain to a target hostname (e.g. `_semp._tcp.example.com`
+resolves to `semp.example.com`), subsequent HTTPS operations against that domain
+MUST use the SRV target hostname, not the email domain:
+
+- Domain key fetch: `https://semp.example.com/.well-known/semp/domain-keys`
+- Configuration: `https://semp.example.com/.well-known/semp/configuration`
+- User key publication: `https://semp.example.com/.well-known/semp/keys/<address>`
+
+This is necessary because the email domain (e.g. `example.com`) may not host the
+SEMP server directly. The SRV record is the authoritative mapping from the email
+domain to the server hostname. The well-known endpoints are served by the SEMP
+server, not by whatever else runs on the bare domain.
+
+When SRV lookup fails or returns no records, the email domain is used as the
+hostname (the well-known URI fallback path in section 3).
+
+### 5.6 Federation Endpoint Derivation
+
+When a server needs to open a federation session to a peer domain, it derives
+the federation endpoint as follows:
+
+1. If a static endpoint is configured for the peer, use it directly.
+2. If a well-known configuration document is available (from section 3),
+   extract the `ws` endpoint URL and replace `/v1/ws` with `/v1/federate`.
+3. If only DNS SRV is available (no well-known document), construct the
+   endpoint from the SRV target: `wss://<srv-target>/v1/ws`, then replace
+   `/v1/ws` with `/v1/federate`.
+
+The federation endpoint path `/v1/federate` is the standard path for
+server-to-server connections. Implementations MAY use a different path
+if advertised in the well-known configuration.
+
+### 5.7 Automatic Peer Discovery
+
+Servers MUST NOT require pre-configured peer lists for federation. When a
+server receives an envelope addressed to a recipient on an unknown domain,
+it MUST attempt discovery for that domain using the standard flow (section 5.1).
+If the domain is discovered to support SEMP, the server MUST proceed with
+federation handshake and envelope forwarding.
+
+This means any two SEMP servers with correctly configured DNS SRV/TXT records
+can federate without prior arrangement. The domain signing key needed for the
+federation handshake is fetched from the peer's well-known endpoint
+(`/.well-known/semp/domain-keys`) and cached locally.
 
 ---
 

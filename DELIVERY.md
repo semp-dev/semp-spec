@@ -238,6 +238,36 @@ The privacy implication (that the server learns the full correspondent
 graph) is documented in `ENVELOPE.md` section 10.6. The enclosure remains
 inaccessible to the server at all times.
 
+### 2.1 Cross-Domain Delivery Prerequisites
+
+When an envelope is addressed to a recipient on a different domain, the sender's
+server MUST establish a federation session before forwarding. The prerequisite
+flow is:
+
+1. **Discovery** — the sender's server performs the discovery flow defined in
+   `DISCOVERY.md` section 5.1 to determine the peer's server address. This
+   happens automatically for any domain, without requiring pre-configured peer
+   lists (see `DISCOVERY.md` section 5.7).
+
+2. **Domain key fetch** — the sender's server obtains the peer's domain signing
+   key from `/.well-known/semp/domain-keys` on the resolved hostname (see
+   `HANDSHAKE.md` section 5.3). The key is cached for subsequent handshakes.
+
+3. **Federation handshake** — the sender's server opens a federation session
+   with the peer via the four-message federation handshake defined in
+   `HANDSHAKE.md` section 5. The session is cached and reused for subsequent
+   deliveries to the same domain.
+
+4. **Envelope forwarding** — the sender's server re-signs the envelope's
+   `seal.session_mac` under the federation session's `K_env_mac`, then forwards
+   it to the peer. The original `seal.signature` (sender domain proof of
+   provenance) is preserved. The peer's server runs the full delivery pipeline
+   (section 2) on the received envelope.
+
+Federation sessions support automatic in-session rekeying at 80% of the
+session TTL per `SESSION.md` section 3.1, keeping long-lived federation hops
+alive without repeated handshakes.
+
 ---
 
 ## 3. Sender Policy and Blocking
