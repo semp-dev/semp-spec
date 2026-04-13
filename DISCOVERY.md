@@ -170,6 +170,7 @@ All URL values inside the document are implementation-chosen.
 
 ```json
 {
+    "type": "SEMP_CONFIGURATION",
     "version": "1.0.0",
     "domain": "example.com",
     "endpoints": {
@@ -202,6 +203,7 @@ All URL values inside the document are implementation-chosen.
 
 | Field        | Type     | Required | Description                                        |
 |--------------|----------|----------|----------------------------------------------------|
+| `type`       | `string` | Yes      | MUST be `"SEMP_CONFIGURATION"`.                    |
 | `version`    | `string` | Yes      | SEMP protocol version supported (semver).          |
 | `domain`     | `string` | Yes      | The email domain this server operates for.         |
 | `endpoints`  | `object` | Yes      | All discoverable endpoints. See section 3.1.1.     |
