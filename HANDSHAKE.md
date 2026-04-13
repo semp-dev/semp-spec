@@ -885,7 +885,31 @@ applies to user identity does not apply here.
 | `relay`   | Relay only: message forwarding permitted, no user discovery          |
 | `limited` | Operator-defined restrictions negotiated via federation policy       |
 
-### 5.3 Domain Verification Methods
+### 5.3 Domain Key Bootstrap
+
+Before a federation handshake can proceed, both sides need each other's domain
+signing public key to verify handshake message signatures. The domain key
+bootstrap follows this order:
+
+1. **Local cache** — check if the peer's domain key is already cached from a
+   previous handshake or well-known fetch.
+2. **DNS SRV resolution** — resolve `_semp._tcp.<peer-domain>` to find the
+   peer's server hostname (see `DISCOVERY.md` section 2.1).
+3. **Well-known fetch** — fetch `https://<srv-target>/.well-known/semp/domain-keys`
+   from the resolved hostname (see `DISCOVERY.md` section 3.2). The HTTPS
+   certificate chain is the trust anchor.
+4. **Cache** — store the fetched domain key locally for future handshakes.
+
+This bootstrap is performed lazily: the initiating server fetches the peer's
+domain key the first time it needs to federate with that domain. Subsequent
+handshakes (including rekeys) use the cached key.
+
+When the SRV target hostname differs from the email domain (e.g. SRV target
+`semp.example.com` for email domain `example.com`), the well-known fetch
+MUST use the SRV target hostname, not the email domain. See `DISCOVERY.md`
+section 5.5.
+
+### 5.4 Domain Verification Methods
 
 Server-to-server handshakes require domain ownership verification. SEMP
 supports multiple methods, ordered by operator preference consistent with the
@@ -916,7 +940,7 @@ Servers MAY support multiple verification methods. The method used is declared
 in `domain_proof.method` and MUST be verifiable by the receiving server before
 message 2 is sent.
 
-### 5.4 Message 2: response / server
+### 5.5 Message 2: response / server
 
 ```json
 {
