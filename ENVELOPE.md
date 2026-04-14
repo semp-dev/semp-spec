@@ -240,6 +240,24 @@ The exclusion of `hop_count` is intentional because it is a mutable transit fiel
 All other postmark fields are immutable and covered by both proofs.
 
 This canonical form MUST be reproduced identically by any implementation.
+
+#### Signature Domain Separation
+
+All Ed25519 signatures in SEMP MUST prepend a context-specific prefix to the
+signed message before signing. This prevents cross-context signature confusion
+where a signature valid in one context could be misinterpreted in another.
+
+| Context | Prefix |
+|---------|--------|
+| Envelope seal signature | `SEMP-ENVELOPE:` |
+| Handshake message signature | `SEMP-HANDSHAKE:` |
+| Identity proof signature | `SEMP-IDENTITY:` |
+| Key response signature | `SEMP-KEYS:` |
+| Discovery response signature | `SEMP-DISCOVERY:` |
+| Revocation signature | `SEMP-REVOCATION:` |
+
+The signed input is always `prefix || canonical_bytes`. Verification MUST
+reconstruct the same prefixed input before calling Ed25519 Verify.
 Deviations in key ordering, whitespace, or field exclusion handling will
 produce verification failures.
 
@@ -276,6 +294,21 @@ The sender MUST fetch the recipient server's domain key at send time, in additio
 to the recipient client's encryption key. Domain keys are already published via
 DNS/DANE and the well-known URI per `KEY.md` section 2; this fetch does not
 require new infrastructure.
+
+Key wrapping uses the negotiated suite's KEM for per-recipient encapsulation.
+For the baseline suite (`x25519-chacha20-poly1305`), wrapping uses X25519
+ephemeral key agreement. For the post-quantum suite (`pq-kyber768-x25519`),
+wrapping uses the Kyber768+X25519 hybrid KEM. This ensures that post-quantum
+protection extends to envelope confidentiality at rest, not only to session key
+exchange. Recipient encryption keys MUST be generated using the same suite's KEM
+as the wrapping operation.
+
+The symmetric key ciphertext is bound to the recipient via the recipient's
+public key as AEAD additional authenticated data.
+
+The `brief` and `enclosure` AEAD encryption MUST pass `postmark.id` as additional
+authenticated data. This binds the ciphertext to the specific envelope and
+prevents transplanting encrypted payloads between envelopes.
 
 Recipient client identities are not present in either map as plaintext. A client
 identifies its entry by attempting decryption with each of its active private
