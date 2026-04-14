@@ -422,6 +422,23 @@ A conformant server MUST:
 - Not reject or delay envelopes based on recipient status. Status is
   informational only. (`DELIVERY.md` §1.6.3)
 
+### 4.12 Device Sync
+
+A conformant server MUST:
+
+- Accept self-addressed envelopes whose `brief.from` and `brief.to` resolve
+  to the same user address. The server MUST NOT reject an envelope solely
+  because the sender and recipient addresses are equal. (`CLIENT.md` §4.5.1)
+- Apply the ordinary delivery pipeline to envelopes carrying the
+  `semp.dev/device-sync` marker in `brief.extensions`, including seal
+  verification and per-device fan-out. (`CLIENT.md` §4.5.4)
+- Exclude sync envelopes from reputation signals, abuse accounting, and
+  trust gossip records. (`CLIENT.md` §4.5.4, `REPUTATION.md` §3)
+- Omit sync envelopes from delivery event notifications sent to external
+  correspondents. (`CLIENT.md` §4.5.4)
+- Not read or act on the contents of `enclosure.extensions` on a sync
+  envelope. (`CLIENT.md` §4.5.4)
+
 ---
 
 ## 5. Client Conformance Requirements
@@ -585,7 +602,30 @@ A conformant client performing server-assisted message history sync MUST:
 - Not initiate re-wrapping without explicit authorization from the existing
   device. (`CLIENT.md` §4.4.2)
 
-### 5.11 Content Security
+### 5.11 Device Sync
+
+A conformant client MUST:
+
+- Recognize the `semp.dev/device-sync` marker in `brief.extensions` and
+  treat any envelope carrying it as device sync traffic rather than
+  correspondence. (`CLIENT.md` §4.5.2)
+- Not surface a sync envelope as correspondence in a mailbox view or any
+  equivalent user interface element intended for the user's incoming mail.
+  (`CLIENT.md` §4.5.2)
+- Place sync payloads in `enclosure.extensions` under a namespaced
+  identifier specific to the sync kind. A client MUST NOT place sync
+  payloads in the brief or in public-layer extensions. (`CLIENT.md` §4.5.3)
+- Wrap `seal.enclosure_recipients` entries only for the target devices of
+  the sync message. A client MUST NOT wrap the enclosure key for devices
+  that are not intended recipients of the sync message. (`CLIENT.md` §4.5.1)
+
+A conformant client MAY support individual sync extensions (new device
+onboarding, historical mail rewrap, read-state synchronization, draft
+synchronization, classification results, and similar). Lack of support for
+a specific sync extension MUST NOT cause the device sync marker itself to
+be rejected. (`CLIENT.md` §4.5.7)
+
+### 5.12 Content Security
 
 A conformant client MUST:
 
@@ -802,7 +842,8 @@ requirements.
 | Reputation                | SHOULD | --      | §4.7    |
 | Legacy interoperability   | --      | SHOULD | §5.7    |
 | Envelope composition      | --      | MUST   | §5.4    |
-| Content security          | --      | MUST   | §5.11   |
+| Content security          | --      | MUST   | §5.12   |
+| Device sync               | MUST   | MUST   | §4.12, §5.11 |
 | Algorithm suites          | MUST   | MUST   | §6      |
 | Forward secrecy           | MUST   | MUST   | §7.1    |
 | Identity confidentiality  | MUST   | MUST   | §8.1    |

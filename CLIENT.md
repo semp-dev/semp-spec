@@ -440,6 +440,176 @@ decision. Both approaches preserve the security model: the server never holds
 plaintext keys or content, and the user controls which devices have access to
 historical envelopes.
 
+### 4.5 Device Sync
+
+A SEMP user frequently operates across multiple registered devices (see
+`KEY.md` section 10) and may also authorize delegated clients with scoped
+certificates (section 2.3). Coordination between these devices is a protocol
+concern, not an application concern, because without a defined mechanism
+clients from different vendors cannot interoperate when the same user
+switches clients or servers.
+
+This section defines the wire-level pattern for a device belonging to a user
+to send an opaque, end-to-end encrypted message to one or more other devices
+belonging to the same user, routed through the home server. The pattern
+covers new device onboarding, historical mail sync, read-state propagation,
+draft propagation, classification results produced by delegated filter
+devices, and any other coordination signal that remains within the scope of
+a single user's account.
+
+#### 4.5.1 Self-Addressed Envelope Pattern
+
+Device sync reuses the existing envelope delivery pipeline. A sync envelope
+is an ordinary SEMP envelope with the following properties:
+
+1. The envelope `from` and `to` fields in the brief MUST resolve to the same
+   user address.
+2. `seal.enclosure_recipients` MUST contain entries for the target device
+   encryption keys only. It MUST NOT contain entries for device keys that
+   are not intended recipients of the sync message.
+3. `seal.brief_recipients` MUST contain entries for the recipient device
+   encryption keys and MAY additionally contain entries for other registered
+   devices that require awareness of the sync message at the brief layer.
+4. The brief MUST include the device sync marker defined in section 4.5.2.
+
+Self-addressed envelopes are a valid envelope shape. Servers MUST NOT reject
+an envelope solely because `from` and `to` resolve to the same address.
+
+#### 4.5.2 Device Sync Marker
+
+The device sync marker is a core extension entry in `brief.extensions` with
+the identifier `semp.dev/device-sync`. It MUST be present on every sync
+envelope and it MUST carry `required: true`.
+
+```json
+"brief": {
+    "extensions": {
+        "semp.dev/device-sync": {
+            "required": true,
+            "data": {
+                "kind": "classification"
+            }
+        }
+    }
+}
+```
+
+| Field  | Type     | Required | Description                                                             |
+|--------|----------|----------|-------------------------------------------------------------------------|
+| `kind` | `string` | Yes      | Identifies the sync category. Each sync extension declares the `kind` value it produces. |
+
+The marker lives in the brief rather than the enclosure so that the home
+server can apply correct policy (section 4.5.4) without decrypting the
+enclosure. The marker is encrypted against routing servers because the
+brief is encrypted; it is visible only to the recipient server and the
+recipient client.
+
+Clients MUST recognize the marker. A client that decrypts a brief carrying
+`semp.dev/device-sync` MUST NOT surface the envelope as correspondence in
+a mailbox view or any equivalent user interface element. The client MAY
+surface the sync message in a diagnostic or developer view.
+
+#### 4.5.3 Sync Payload
+
+The sync payload MUST be placed in `enclosure.extensions` under a
+namespaced identifier specific to the sync kind. The payload is visible
+only to the target device, consistent with the enclosure trust scope
+defined in `ENVELOPE.md` section 8. Sync payloads MUST NOT be placed in the
+brief or in public-layer extensions.
+
+When a sync envelope carries no human-readable content, the enclosure body
+MAY be empty. The enclosure extensions field remains subject to the size
+limits defined in `EXTENSIONS.md` section 4.1.
+
+Example enclosure payload for a classification sync message:
+
+```json
+"enclosure": {
+    "extensions": {
+        "semp.dev/classification-result": {
+            "required": true,
+            "data": {
+                "source_envelope_id": "01HF3X7M8N9P0Q1R2S3T4U5V6W",
+                "labels": ["newsletter", "low-priority"],
+                "confidence": 0.92
+            }
+        }
+    }
+}
+```
+
+The specific sync extensions (new device onboarding, historical mail
+rewrap, read-state, draft state, classification results, and similar) are
+registered independently per `EXTENSIONS.md` section 5. Each such extension
+MUST declare the brief marker `kind` value it uses so that receiving
+devices can route the sync message to the correct handler without
+decrypting the enclosure speculatively.
+
+#### 4.5.4 Home Server Obligations
+
+When a home server processes an envelope whose brief carries
+`semp.dev/device-sync`, the server MUST:
+
+1. Apply the ordinary delivery pipeline (`DELIVERY.md` section 2) for
+   authentication, seal verification, and fan-out to the device keys
+   present in `seal.brief_recipients` and `seal.enclosure_recipients`.
+2. Exclude the envelope from reputation signals and abuse accounting
+   (`REPUTATION.md` section 3). A sync envelope is not correspondence and
+   MUST NOT contribute to sender abuse rates, recipient complaint rates,
+   or trust gossip records.
+3. Omit sync envelopes from delivery event notifications sent to external
+   correspondents. Sync envelopes have no external sender.
+
+The server MAY apply distinct retention policy to sync envelopes. The
+server MAY apply distinct rate limits to sync envelopes, since legitimate
+sync traffic (for example, per-envelope classification results produced by
+a delegated filter device, or historical mail rewrap during new device
+onboarding) can exceed ordinary correspondence rates by a significant
+margin.
+
+The server MUST NOT read or act on the contents of `enclosure.extensions`.
+The server MUST NOT log, cache, or transmit the enclosure plaintext.
+
+#### 4.5.5 Delegated Client Authorization
+
+A delegated client that produces sync envelopes MUST hold a
+`SEMP_DEVICE_CERTIFICATE` (`KEY.md` section 10.3) whose `scope.send.allow`
+permits sending to the user's own address. The home server enforces scope
+at submission (section 2.4) without special-casing sync envelopes.
+
+A delegated client that consumes sync envelopes MUST hold a certificate
+with `scope.receive` set to `true` for the user's inbound stream. The home
+server delivers sync envelopes to delegated devices on the same terms as
+correspondence envelopes, subject to the device keys present in
+`seal.enclosure_recipients`.
+
+#### 4.5.6 Relationship to Message History Sync
+
+The server-assisted message history sync flow defined in section 4.4.1
+MAY use the device sync pattern as its wire format. When a history sync
+extension is defined, it carries the rewrapped `K_brief` and `K_enclosure`
+entries as a sync payload addressed from the rewrapping device to the new
+device. The home server applies the resulting seal entries to stored
+envelopes as described in section 4.4.1 without learning the plaintext
+keys.
+
+#### 4.5.7 Conformance
+
+The device sync marker is a core extension. A conformant SEMP client MUST
+recognize `semp.dev/device-sync` and MUST implement the user-interface
+obligations in section 4.5.2 regardless of which specific sync extensions
+it supports. A conformant SEMP server MUST implement the home server
+obligations in section 4.5.4.
+
+Support for individual sync extensions (new device onboarding, historical
+mail rewrap, read-state synchronization, draft synchronization,
+classification results, and similar) is optional and is negotiated through
+capability advertisement per `DISCOVERY.md` section 3.1 and `HANDSHAKE.md`
+section 2.2. Lack of support for a specific sync extension MUST NOT cause
+the device sync marker itself to be rejected; the unrecognized inner
+extension is handled per the criticality rules in `EXTENSIONS.md`
+section 3.
+
 ---
 
 ## 5. Key Management
