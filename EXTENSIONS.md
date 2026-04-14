@@ -383,6 +383,12 @@ once this framework is established.
 | Reactions                     | enclosure     | Lightweight response annotations on existing messages.                         |
 | Priority hints                | postmark      | Delivery urgency signaling visible to routing servers.                         |
 | Content negotiation           | enclosure     | Sender capability advertisement for rich content formats.                      |
+| Device sync marker            | brief         | `semp.dev/device-sync`. Core marker identifying an envelope as device sync traffic rather than correspondence. See `CLIENT.md` §4.5. |
+| New device onboarding         | enclosure     | QR-code or code-based authorization, identity key transfer, and initial registration payload exchanged between an existing device and a newly joining device. Builds on `KEY.md` §10.1. |
+| Historical mail rewrap        | enclosure     | Rewrapped `K_brief` and `K_enclosure` seal entries sent from an existing device to a new device so the new device can decrypt mail received before its keys existed. Builds on `CLIENT.md` §4.4.1. |
+| Read-state synchronization    | enclosure     | Per-envelope read, unread, and archive state propagated between the user's own devices. |
+| Draft synchronization         | enclosure     | In-progress compose state propagated between the user's own devices. |
+| Classification result         | enclosure     | `semp.dev/classification-result`. Label and confidence payload produced by a delegated filter device. See `CLIENT.md` §4.5.3. |
 
 ---
 
