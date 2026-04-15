@@ -386,13 +386,22 @@ a conservative observer.
 
 ### 5.1 Publication
 
-Observation records are published at the observer's well-known URI:
+A server that publishes trust gossip MUST advertise a `reputation` endpoint
+in its configuration document (`DISCOVERY.md` section 3.1.1). The advertised
+URL is the base URL for published observations. Observation records for a
+given subject domain are retrieved by appending the subject domain to the
+base URL:
 
 ```
-https://reporting-server.com/.well-known/semp/reputation/<subject-domain>
+<endpoints.reputation><subject-domain>
 ```
 
-Response:
+A server that does not advertise a `reputation` endpoint does not publish
+trust gossip. Peers MUST NOT probe for observations at any other path and
+MUST treat the absence of the endpoint as a definitive signal that the
+server does not participate in gossip publication.
+
+Response format:
 
 ```json
 {
@@ -416,30 +425,41 @@ subject, covering different time windows.
 ### 5.2 Fetching
 
 Trust gossip is pull-based. When a server encounters a domain it has no prior
-experience with, it MAY fetch observations from servers it already trusts:
+experience with, it MAY fetch observations from servers it already trusts.
+The fetch flow is:
+
+1. Resolve the trusted server's configuration document per `DISCOVERY.md`
+   section 3.
+2. Read `endpoints.reputation` from the configuration. If the field is
+   absent, the trusted server does not publish gossip and MUST NOT be
+   probed further.
+3. Append the subject domain to the advertised base URL and perform a
+   `GET` on the resulting URL.
+4. Verify the signature on every fetched observation before using it. An
+   unsigned or unverifiable observation MUST be discarded.
 
 ```
 Sender's server delivers envelope from unknown-domain.com
   │
   ├─ Check local observation ledger → no data
-  ├─ Fetch observations from trusted-server-1.com
-  │     GET /.well-known/semp/reputation/unknown-domain.com
-  ├─ Fetch observations from trusted-server-2.com
-  │     GET /.well-known/semp/reputation/unknown-domain.com
+  ├─ Fetch configuration from trusted-server-1.com
+  │     GET /.well-known/semp/configuration
+  │     Read endpoints.reputation (if present)
+  ├─ Fetch observations from trusted-server-1.com's reputation endpoint
+  │     GET <endpoints.reputation>unknown-domain.com
+  ├─ Repeat for other trusted servers
   ├─ Verify signatures on all fetched observations
   ├─ Apply local policy using fetched observations as input
   └─ Proceed with delivery decision
 ```
 
-Servers MUST verify the signature on every fetched observation before using it.
-An unsigned or unverifiable observation MUST be discarded.
-
 ### 5.3 Observation Fetching Is Optional
 
 Servers are not required to fetch or publish trust gossip. A server that makes
 all reputation decisions based solely on its own direct observations is fully
-compliant. Trust gossip is a tool for informed decision-making, not a protocol
-obligation.
+compliant, and a server that omits the `reputation` endpoint from its
+configuration is fully compliant. Trust gossip is a tool for informed
+decision-making, not a protocol obligation.
 
 ### 5.4 Speculative Caching
 
@@ -451,10 +471,12 @@ fetch timing from communication intent and improves privacy.
 ### 5.5 Evidence Fetching
 
 When an observation record has `evidence_available: true` and provides an
-`evidence_uri`, the fetching server MAY retrieve the underlying evidence:
+`evidence_uri`, the fetching server MAY retrieve the underlying evidence.
+The `evidence_uri` is an absolute URL chosen by the publishing server and
+is not required to share a path prefix with the reputation endpoint:
 
 ```
-GET https://reporting-server.com/.well-known/semp/reputation/evidence/observed-domain.com
+GET <evidence_uri>
 ```
 
 Response:
@@ -505,13 +527,12 @@ produce the envelopes cited as evidence.
 
 ### 5.6 Reputation Self-Referencing
 
-A domain MAY publish a reputation references document at its own well-known
-URI, containing links to observation records that other servers have published
-about it:
-
-```
-https://example.com/.well-known/semp/reputation/references
-```
+A domain MAY publish a reputation references document containing links to
+observation records that other servers have published about it. The
+publishing URL is advertised as `endpoints.reputation_references` in the
+domain's configuration document (`DISCOVERY.md` section 3.1.1). A domain
+that does not advertise `reputation_references` does not self-publish
+references. The response format is:
 
 Response:
 
