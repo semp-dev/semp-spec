@@ -948,9 +948,10 @@ bootstrap follows this order:
    use it.
 2. Resolve `_semp._tcp.<peer-domain>` via DNS SRV to find the peer's server
    hostname (see `DISCOVERY.md` section 2.1).
-3. Fetch `https://<srv-target>/.well-known/semp/domain-keys` from the resolved
-   hostname (see `DISCOVERY.md` section 3.2). The HTTPS certificate chain serves
-   as the trust anchor.
+3. Fetch `https://<srv-target>/.well-known/semp/configuration` from the
+   resolved hostname, read `endpoints.domain_keys` from the configuration
+   document, and fetch the domain keys from that URL (see `DISCOVERY.md`
+   section 3.3). The HTTPS certificate chain serves as the trust anchor.
 4. Store the fetched domain key in the local cache for future handshakes.
 
 This bootstrap is performed lazily: the initiating server fetches the peer's
@@ -980,14 +981,22 @@ Domain ownership established via the TLS certificate presented during the
 underlying mTLS connection. The certificate common name or SAN MUST match
 `server_domain`.
 
-#### Well-Known URI
+#### Configuration Verify Endpoint
+
+The initiating server advertises a `verify` endpoint in its configuration
+document (`DISCOVERY.md` section 3.1.1). The verification token is
+derived from the server's identity proof signature and appended to the
+advertised base URL:
 
 ```
-https://example.com/.well-known/semp/verify/<verification-token>
+GET <endpoints.verify><verification-token>
 ```
 
-The verification token is derived from the server's identity proof signature.
-The responding server fetches this URI to confirm domain control.
+The responding server resolves the initiator's configuration document,
+reads `endpoints.verify`, and fetches the resulting URL to confirm domain
+control. A server that does not advertise a `verify` endpoint does not
+support this verification method and MUST use certificate or DNS TXT
+verification instead.
 
 Servers MAY support multiple verification methods. The method used is declared
 in `domain_proof.method` and MUST be verifiable by the receiving server before

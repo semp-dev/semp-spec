@@ -249,9 +249,10 @@ flow is:
    automatically for any domain, without requiring pre-configured peer lists
    (see `DISCOVERY.md` section 5.7).
 
-2. The sender's server obtains the peer's domain signing key from
-   `/.well-known/semp/domain-keys` on the resolved hostname (see
-   `HANDSHAKE.md` section 5.3). The key is cached for subsequent handshakes.
+2. The sender's server obtains the peer's domain signing key from the
+   peer's configuration document, at the URL advertised as
+   `endpoints.domain_keys` (see `HANDSHAKE.md` section 5.3, `DISCOVERY.md`
+   section 3.3). The key is cached for subsequent handshakes.
 
 3. The sender's server opens a federation session with the peer via the
    four-message federation handshake defined in `HANDSHAKE.md` section 5. The

@@ -85,18 +85,19 @@ only by the receiving server. Together they form a two-layer proof: integrity
 for the network, session enforcement for delivery. See
 `ENVELOPE.md` section 4.3.
 
-### 2.3 Well-Known URI (Fallback)
+### 2.3 Configuration Endpoint (Fallback)
 
 When DNS/DANE is unavailable or unverifiable, the domain key is discoverable
-via the well-known endpoint defined in `DISCOVERY.md` section 3.2:
+through the `domain_keys` endpoint advertised in the server's configuration
+document (`DISCOVERY.md` section 3.1.1, 3.3):
 
 ```
-https://<server-hostname>/.well-known/semp/domain-keys
+GET <endpoints.domain_keys>
 ```
 
-The hostname is the SRV target (e.g. `semp.example.com`), not necessarily the
-email domain. See `DISCOVERY.md` section 5.5 for how SRV targets map to
-well-known hostnames.
+The hostname that serves the configuration document is the SRV target (e.g.
+`semp.example.com`), not necessarily the email domain. See `DISCOVERY.md`
+section 5.5 for how SRV targets map to configuration hostnames.
 
 Response:
 
@@ -143,12 +144,15 @@ routing-layer verification.
 
 ## 3. User Key Publication
 
-### 3.1 Well-Known URI (Primary)
+### 3.1 Configuration Endpoint (Primary)
 
-User public keys are published at the user's home server via the well-known URI:
+User public keys are published at the user's home server through the `keys`
+endpoint advertised in the server's configuration document (`DISCOVERY.md`
+sections 3.1.1 and 3.4). The full fetch URL for a given user is the base URL
+with the user's address appended:
 
 ```
-https://example.com/.well-known/semp/keys/<user@example.com>
+GET <endpoints.keys><user@example.com>
 ```
 
 Response:
@@ -208,13 +212,11 @@ The response is signed by the serving domain's key. Recipients MUST verify
 this signature using the domain's published domain key before trusting the
 user keys.
 
-For batch requests:
-
-```
-https://example.com/.well-known/semp/keys/batch
-```
-
-POST body:
+For batch requests, the request is a `POST` to the `endpoints.keys` base URL
+with no address suffix. A server that supports batch fetch MUST accept a
+`POST` at `<endpoints.keys>`. A server that does not support batch fetch
+MUST respond with HTTP 405. The request body is the standard `SEMP_KEYS`
+request message:
 
 ```json
 {

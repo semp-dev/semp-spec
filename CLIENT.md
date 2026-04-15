@@ -150,9 +150,10 @@ server MUST return its domain signing and encryption public keys so the client
 can cache them for handshake verification (the client needs the domain signing
 key to verify the server's signature in handshake message 2).
 
-After successful registration, the user's public keys are available via
-`/.well-known/semp/keys/<address>` and through the in-session `SEMP_KEYS`
-protocol.
+After successful registration, the user's public keys are available at
+`<endpoints.keys><address>` (where `endpoints.keys` is read from the home
+server's configuration document per `DISCOVERY.md` section 3.4) and
+through the in-session `SEMP_KEYS` protocol.
 
 For subsequent device additions, the client MUST provide an authorization
 proof from an existing trusted device per `KEY.md` section 10.2. A device
