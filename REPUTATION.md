@@ -309,7 +309,7 @@ The receiving server interprets these signals according to its own policy.
     },
     "assessment": "neutral",
     "evidence_available": true,
-    "evidence_uri": "https://reporting-server.com/.well-known/semp/reputation/evidence/observed-domain.com",
+    "evidence_uri": "https://reporting-server.com/v1/reputation/evidence/observed-domain.com",
     "timestamp": "2025-06-01T12:00:00Z",
     "expires": "2025-07-01T12:00:00Z",
     "signature": {
@@ -544,13 +544,13 @@ Response:
     "references": [
         {
             "observer": "trusted-server-1.com",
-            "uri": "https://trusted-server-1.com/.well-known/semp/reputation/example.com",
+            "uri": "https://trusted-server-1.com/v1/reputation/example.com",
             "fetched_at": "2025-06-10T12:00:00Z",
             "assessment": "trusted"
         },
         {
             "observer": "large-provider.net",
-            "uri": "https://large-provider.net/.well-known/semp/reputation/example.com",
+            "uri": "https://large-provider.net/reputation/example.com",
             "fetched_at": "2025-06-10T11:30:00Z",
             "assessment": "trusted"
         }
@@ -716,19 +716,28 @@ transfer severs it.
 
 ### 7.4 Transfer Publication
 
-The transfer record MUST be published on both domains:
+The transfer record MUST be published on both domains through the
+`reputation_transfer` endpoint advertised in each domain's configuration
+document (`DISCOVERY.md` section 3.1.1). The endpoint is a base URL; the
+outgoing and incoming records are retrieved by appending `out` and `in`
+respectively:
 
 **Old domain (seller/previous key):**
 
 ```
-https://transferred-domain.com/.well-known/semp/reputation/transfer-out
+GET <endpoints.reputation_transfer>out
 ```
 
 **New domain (buyer/new key):**
 
 ```
-https://transferred-domain.com/.well-known/semp/reputation/transfer-in
+GET <endpoints.reputation_transfer>in
 ```
+
+A domain that does not advertise `reputation_transfer` does not publish
+transfer records. For `ownership_change` and `key_rotation`, the
+publishing domain MUST advertise the endpoint for the duration that
+transfer continuity is relevant.
 
 For `ownership_change`, the old domain's record persists so that servers with
 cached reputation for the old key can discover the transfer. The new domain's

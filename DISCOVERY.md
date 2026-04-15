@@ -232,6 +232,8 @@ endpoints (which are plain HTTPS) are flat.
 | `domain_keys`      | `string` | Yes      | URL for domain signing and encryption key publication. Response format in section 3.3. |
 | `reputation`       | `string` | No       | Base URL for this server's published trust gossip observations. Append the subject domain to retrieve observations. Absence indicates the server does not publish gossip. See `REPUTATION.md` section 5. |
 | `reputation_references` | `string` | No  | URL for the domain's self-published reputation references document, listing third-party observers that have published observations about this domain. Absence indicates the domain does not self-publish references. See `REPUTATION.md` section 5.6. |
+| `verify`           | `string` | No       | Base URL for domain-ownership verification tokens used during federation handshakes. Append the verification token to retrieve the ownership proof. Absence indicates the server does not support well-known URI verification and relies on certificate or DNS TXT verification instead. See `HANDSHAKE.md` section 5.3. |
+| `reputation_transfer` | `string` | No    | Base URL for trust-transfer records published when a domain changes ownership. Append `out` or `in` to retrieve the outgoing or incoming transfer record. Absence indicates the domain does not publish transfer records. See `REPUTATION.md` section 11. |
 
 All URL values are implementation-chosen. The protocol does not mandate URL path
 structure. The transport identifiers in `client` and `federation` are defined in
@@ -676,43 +678,47 @@ sending partition server MUST NOT access, query, or cache the recipient's block
 list. Block list confidentiality requirements from `DELIVERY.md` section 7.1
 apply across partition boundaries within the same domain.
 
-### 5.5 SRV Target and Well-Known Host Resolution
+### 5.5 SRV Target and Configuration Host Resolution
 
 When DNS SRV resolves a domain to a target hostname (e.g. `_semp._tcp.example.com`
-resolves to `semp.example.com`), subsequent HTTPS operations against that domain
-MUST use the SRV target hostname, not the email domain:
+resolves to `semp.example.com`), the configuration document is fetched from the
+SRV target, not from the email domain:
 
-- Domain key fetch: `https://semp.example.com/.well-known/semp/domain-keys`
-- Configuration: `https://semp.example.com/.well-known/semp/configuration`
-- User key publication: `https://semp.example.com/.well-known/semp/keys/<address>`
+```
+GET https://<srv-target>/.well-known/semp/configuration
+```
 
-This is necessary because the email domain (e.g. `example.com`) may not host the
-SEMP server directly. The SRV record is the authoritative mapping from the email
-domain to the server hostname. The well-known endpoints are served by the SEMP
-server, not by whatever else runs on the bare domain.
+All subsequent operations (domain key fetch, user key fetch, reputation fetch,
+federation handshake, and any other endpoint) use the URLs advertised in the
+configuration document. Those URLs are implementation-chosen and need not
+share the hostname or path of the configuration document.
+
+Using the SRV target for the configuration fetch is necessary because the
+email domain (e.g. `example.com`) may not host the SEMP server directly.
+The SRV record is the authoritative mapping from the email domain to the
+configuration host.
 
 When SRV lookup fails or returns no records, the email domain is used as the
 hostname (the well-known URI fallback path in section 3).
 
-### 5.6 Federation Endpoint Derivation
+### 5.6 Federation Endpoint Resolution
 
-When a server needs to open a federation session to a peer domain, it derives
-the federation endpoint as follows:
+When a server needs to open a federation session to a peer domain, it
+resolves the federation endpoint exclusively from the peer's configuration
+document. The procedure is:
 
-1. If a static endpoint is configured for the peer, use it directly.
-2. If a well-known configuration document is available (from section 3),
-   extract the endpoint URL for the preferred transport and replace `/v1/ws`
-   or `/v1` with `/v1/federate`.
-3. If only DNS SRV is available (no well-known document), construct the
-   endpoint from the SRV target using the mandatory HTTP/2 baseline:
-   `https://<srv-target>/v1/federate`. Because HTTP/2 is the mandatory
-   baseline transport (`TRANSPORT.md` section 4), every conformant server
-   MUST accept federation connections over HTTP/2 even when no transport
-   is explicitly advertised.
+1. If a static endpoint is configured for the peer by operator policy, use
+   it directly.
+2. Otherwise, resolve the peer's configuration document per section 3 and
+   read `endpoints.federation.<transport>` for the transport selected
+   during negotiation. The `h2` entry MUST be present in every conformant
+   configuration and serves as the baseline fallback when the preferred
+   transport is unavailable.
 
-The federation endpoint path `/v1/federate` is the standard path for
-server-to-server connections. Implementations MAY use a different path
-if advertised in the well-known configuration.
+Servers MUST NOT derive federation endpoints by path manipulation or by
+guessing based on other advertised URLs. The absence of a configuration
+document means the peer is not a conformant SEMP server and federation is
+not possible.
 
 ### 5.7 Automatic Peer Discovery
 
@@ -723,9 +729,9 @@ If the domain is discovered to support SEMP, the server MUST proceed with
 federation handshake and envelope forwarding.
 
 This means any two SEMP servers with correctly configured DNS SRV/TXT records
-can federate without prior arrangement. The domain signing key needed for the
-federation handshake is fetched from the peer's well-known endpoint
-(`/.well-known/semp/domain-keys`) and cached locally.
+and a published configuration document can federate without prior
+arrangement. The domain signing key needed for the federation handshake is
+fetched from the peer's `endpoints.domain_keys` URL and cached locally.
 
 ---
 
