@@ -611,6 +611,148 @@ before or outside of suite negotiation:
   The proof of work challenge occurs before session establishment and is
   independent of the session suite.
 
+### 7.4 Per-Extension Cryptographic Key Scoping
+
+Some extensions place data in `enclosure.extensions` that is intended for
+only a subset of the recipient user's devices. A delegated filter device
+(`CLIENT.md` section 2.3) that produces a classification result for the
+user's main reading device is the canonical example: the filter device
+SHOULD be able to read the inbound envelope's enclosure to perform the
+classification, but the classification result it produces SHOULD be
+readable only by the main reading device, not by every device that
+receives the envelope.
+
+The reference SDK enforcement contract (`EXTENSIONS.md` section 9)
+restricts behavior at the implementation layer. Cryptographic key scoping
+restricts read access at the protocol layer, independent of any SDK
+guarantees. A device that is not given the wrapped key for a particular
+extension's enclosure data cannot decrypt that data, regardless of
+implementation honesty.
+
+#### 7.4.1 Wire Format
+
+When an extension entry in `enclosure.extensions` requires per-extension
+key scoping, the entry's `data` field is itself an encrypted blob and the
+seal carries a separate `extension_keys` map keyed by extension identifier:
+
+```json
+"seal": {
+    "enclosure_recipients": {
+        "default": {
+            "device-key-id-1": "wrapped-K_enclosure-default",
+            "device-key-id-2": "wrapped-K_enclosure-default"
+        },
+        "extension_keys": {
+            "semp.dev/classification-result": {
+                "device-key-id-1": "wrapped-K_ext-classification"
+            }
+        }
+    }
+}
+```
+
+```json
+"enclosure": {
+    "extensions": {
+        "semp.dev/classification-result": {
+            "required": true,
+            "scoped": true,
+            "data": "base64-AEAD-ciphertext-encrypted-under-K_ext"
+        }
+    }
+}
+```
+
+The `default` map under `enclosure_recipients` carries the wrapped
+`K_enclosure` for entries that do not use per-extension scoping (the
+existing behavior). The `extension_keys` map carries one entry per
+scoped extension; each entry is a map from device key fingerprint to the
+wrapped per-extension key.
+
+A scoped extension entry MUST set `scoped: true` and MUST place its
+encrypted payload in the `data` field as a base64-encoded AEAD ciphertext
+under the per-extension key. The plaintext under encryption is the
+canonical JSON serialization of the extension-specific data object as
+defined by the extension's `data_schema`.
+
+#### 7.4.2 Key Derivation
+
+Each per-extension key is generated freshly for each envelope by the
+producing party. The key is derived independently from `K_enclosure`:
+
+```
+K_ext = HKDF-Expand(
+    PRK = random(32 bytes, generated per envelope),
+    info = "SEMP-v1-ext-" || extension_identifier,
+    L = 32
+)
+```
+
+The PRK is generated freshly per envelope and is not derived from
+`K_enclosure` or any session key. This ensures that compromise of
+`K_enclosure` does not yield `K_ext`, and compromise of `K_ext` does not
+yield `K_enclosure`. The two key spaces are independent.
+
+The AEAD cipher MUST match the negotiated suite's symmetric cipher
+(`ChaCha20-Poly1305` for both currently defined suites). The associated
+data MUST include the canonical envelope ID (`postmark.id`) and the
+extension identifier to bind the ciphertext to its envelope and to
+prevent cross-extension substitution.
+
+#### 7.4.3 Wrapping
+
+The producing party wraps the per-extension key under the public
+encryption keys of every device that should be able to read the
+extension data. Devices not listed in the `extension_keys` map for a
+given extension cannot recover the plaintext.
+
+The wrapping uses the same key encapsulation mechanism as
+`enclosure_recipients` (the negotiated suite's KEM, applied per
+recipient device key).
+
+#### 7.4.4 Decryption
+
+A receiving device performs the following steps for each scoped
+extension entry it encounters:
+
+1. Look up its own device key fingerprint in
+   `seal.enclosure_recipients.extension_keys[<identifier>]`.
+2. If no entry is present, the device is not authorized to read this
+   extension. The device MUST treat the entry as opaque and MUST NOT
+   attempt to decrypt the `data` field.
+3. If an entry is present, unwrap to recover `K_ext`.
+4. Decrypt the `data` field using `K_ext` and the AEAD cipher with the
+   declared associated data.
+5. Validate the resulting plaintext against the extension's
+   `data_schema` per `EXTENSIONS.md` section 8.2.
+
+A device that is not authorized to read a scoped extension MUST NOT
+include the extension in any user-visible representation of the
+envelope and MUST NOT report decryption failure as an error to the user.
+Absence of authorization is normal operation, not failure.
+
+#### 7.4.5 Use With `required` Flag
+
+A scoped extension MAY be marked `required: true`. The required-extension
+semantics (`EXTENSIONS.md` section 3.1) apply at the recipient server
+layer, since the server can confirm the extension's presence and
+identifier without holding the per-extension key. A receiving device that
+holds no key for a required scoped extension processes the envelope
+normally; the extension is required to be present, not required to be
+readable by every device.
+
+#### 7.4.6 Size Accounting
+
+The encrypted `data` blob counts toward the size limit on
+`enclosure.extensions` defined in `EXTENSIONS.md` section 4.1. Producing
+parties SHOULD account for ciphertext expansion (typically 16 bytes of
+AEAD tag plus base64 overhead) when sizing scoped extension payloads.
+
+The `extension_keys` map in the seal counts toward the seal size budget
+and adds approximately 64 bytes per device per scoped extension. Heavy
+use of per-extension key scoping across many devices increases envelope
+size proportionally.
+
 ---
 
 ## 8. Extensibility

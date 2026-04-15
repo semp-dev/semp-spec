@@ -81,7 +81,7 @@ additions. Defined in `ENVELOPE.md` section 9.3.
 | `handshake_invalid`   | Yes         | Establish new session and resend.                               |
 | `handshake_expired`   | Yes         | Establish new session and resend.                               |
 | `no_session`          | Yes         | Establish new session and resend.                               |
-| `extension_unsupported` | No        | A required extension is not supported by the recipient. Surface the unsupported extension key to the sender. Do not retry without removing or renegotiating the extension. |
+| `extension_unsupported` | No        | A required extension is not supported by the recipient, or runtime validation against the extension's definition document failed (`EXTENSIONS.md` §8.3). Surface the unsupported extension key and any `validation_failure` diagnostic to the sender. Do not retry without removing or renegotiating the extension. |
 | `extension_size_exceeded` | No      | An `extensions` object exceeds the size limit for its layer. Reduce extension payload size. Do not retry the same envelope. |
 | `scope_exceeded`    | No          | The submitting device's scoped certificate does not authorize sending to one or more recipients. Surface the rejected recipient(s) to the operator. Do not retry without updating the device certificate scope. See `KEY.md` section 10.3. |
 
@@ -334,7 +334,7 @@ case-sensitive matching. `Blocked` is not `blocked`.
 | `SESSION.md`   | Defines rekeying reason codes (section 3.2).                                          |
 | `REPUTATION.md`| Defines abuse report categories (section 3.4).                                        |
 | `TRANSPORT.md` | Defines transport-layer status codes (section 4.2.2) and transport failure conditions (section 5.4). |
-| `EXTENSIONS.md`| Defines extension framework, criticality signaling, and size constraints. `extension_unsupported` and `extension_size_exceeded` originate there (sections 3.1 and 4.2). |
+| `EXTENSIONS.md`| Defines extension framework, criticality signaling, and size constraints. `extension_unsupported` and `extension_size_exceeded` originate there (sections 3.1 and 4.2). The `validation_failure` diagnostic vocabulary attached to `extension_unsupported` is defined in section 8.3. |
 
 ---
 

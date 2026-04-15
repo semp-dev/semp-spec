@@ -408,7 +408,21 @@ A conformant server MUST:
   `brief.extensions`, 64 KB for `enclosure.extensions`. The rejection reason
   code is `extension_size_exceeded`. (`EXTENSIONS.md` §4.1, §4.2)
 - Enforce extension size limits before performing signature verification to
-  prevent resource exhaustion. (`EXTENSIONS.md` §8.2)
+  prevent resource exhaustion. (`EXTENSIONS.md` §13.2)
+- Resolve every recognized extension's identifier to its canonical
+  definition document URL per `EXTENSIONS.md` §6.1, fetch and cache the
+  document, and verify the document's signature against the namespace
+  owner's domain key before treating the definition as authoritative.
+  (`EXTENSIONS.md` §6.8, §6.9)
+- Perform runtime validation on every received extension entry: `data`
+  field MUST conform to the extension's `data_schema`, the entry MUST
+  appear in a layer listed in `placement.allowed_layers`, the producing
+  party MUST match `authority.produced_by`, all `dependencies` MUST be
+  present or advertised, and no entry from `conflicts_with` MUST be
+  present. (`EXTENSIONS.md` §8.2)
+- Reject any envelope failing runtime extension validation with
+  `extension_unsupported` and SHOULD include the `validation_failure`
+  diagnostic. (`EXTENSIONS.md` §8.3)
 
 Extensions MUST:
 
@@ -418,6 +432,54 @@ Extensions MUST:
   (`ENVELOPE.md` §8.1)
 - Include a `required` boolean and a `data` object in every extension entry.
   (`EXTENSIONS.md` §2.2)
+- Resolve to a definition document at the URL derived from the identifier,
+  signed by the namespace owner's domain key. Vendor extensions without a
+  conformant definition document MUST NOT participate in the standard
+  extension ecosystem. (`EXTENSIONS.md` §6)
+
+### 4.9.1 Reference SDK Enforcement
+
+A SEMP implementation that claims **reference SDK conformance** MUST:
+
+- Mediate every extension access to envelope state through host-provided
+  accessor functions and check each access against the calling extension's
+  declared `permissions.reads` and `permissions.writes`. Direct memory
+  access to envelope structures MUST NOT be exposed.
+  (`EXTENSIONS.md` §9.2)
+- Invoke registered extensions only at hooks declared in their definition
+  document. Extensions MUST NOT run at undeclared hook points.
+  (`EXTENSIONS.md` §9.2)
+- Log denied access attempts and treat repeated denials from a single
+  extension as evidence of misbehavior reportable as `protocol_abuse`.
+  (`EXTENSIONS.md` §9.2, `REPUTATION.md` §3.4)
+- Verify extension definition document signatures at extension load time,
+  including for bundled definitions shipped with the SDK.
+  (`EXTENSIONS.md` §6.8, §6.9)
+
+Reference SDK conformance is RECOMMENDED for all conformant
+implementations and is strongly RECOMMENDED for any implementation
+loading `semp.dev/*` extensions that handle sensitive data.
+
+### 4.9.2 Per-Extension Key Scoping
+
+A conformant server that processes envelopes carrying scoped extension
+entries (`scoped: true`) MUST:
+
+- Forward the seal's `enclosure_recipients.extension_keys` map intact
+  during delivery without modification. (`ENVELOPE.md` §7.4.1)
+- Account for scoped extension ciphertext sizes against the
+  `enclosure.extensions` size limit. (`ENVELOPE.md` §7.4.6)
+
+A conformant client MUST:
+
+- Treat absent per-extension keys as a normal authorization signal, not
+  as decryption failure, and MUST NOT surface absence to the user as an
+  error. (`ENVELOPE.md` §7.4.4)
+- Bind per-extension AEAD ciphertexts with associated data including
+  `postmark.id` and the extension identifier, to prevent cross-extension
+  substitution. (`ENVELOPE.md` §7.4.2)
+- Generate per-extension keys freshly per envelope, independently of
+  `K_enclosure`. (`ENVELOPE.md` §7.4.2)
 
 ### 4.10 Scoped Device Certificate Enforcement
 
