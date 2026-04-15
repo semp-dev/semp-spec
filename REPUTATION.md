@@ -177,7 +177,7 @@ keeps the reporting relationship within the existing trust boundary.
 | `harassment`        | Targeted abusive or threatening content.                             |
 | `phishing`          | Impersonation or credential harvesting attempts.                     |
 | `malware`           | Messages containing or linking to malicious software.                |
-| `protocol_abuse`    | Malformed envelopes, enumeration, handshake flooding, or similar.    |
+| `protocol_abuse`    | Malformed envelopes, enumeration, handshake flooding, unreasonable challenge issuance (section 8.3.6), or similar. |
 | `impersonation`     | Sender falsely represents their identity or affiliation.             |
 | `other`             | Abuse not covered by defined categories.                             |
 
@@ -851,15 +851,26 @@ suspicious patterns regardless of reputation age. Difficulty above 24 SHOULD
 be reserved for confirmed suspicious behavior, as it imposes meaningful latency
 on legitimate senders.
 
+Servers MUST NOT issue a `proof_of_work` challenge with difficulty greater
+than 28. This cap is defined normatively in `HANDSHAKE.md` section 2.2a.2
+and prevents a malicious or compromised server from exhausting the
+resources of either clients or federation peers through prohibitively
+expensive challenges. Any handshake initiator, whether a client or a
+federation peer, MUST abort the handshake with reason code
+`challenge_invalid` when it receives a challenge above the cap. Servers
+that require stronger gating than difficulty 28 provides MUST use blocking
+(`DELIVERY.md` section 4) or another non-challenge mechanism rather than
+raising the difficulty further.
+
 Suggested difficulty by condition:
 
 | Condition                                        | Suggested Difficulty |
 |--------------------------------------------------|----------------------|
 | Zero reputation, domain age < threshold          | 20                   |
 | Zero reputation, domain age > threshold          | 16                   |
-| Established domain, `suspicious` assessment      | 20–24                |
-| Established domain, `hostile` assessment         | 24–28                |
-| Operator policy (any domain)                     | Operator-configured  |
+| Established domain, `suspicious` assessment      | 20 to 24             |
+| Established domain, `hostile` assessment         | 24 to 28             |
+| Operator policy (any domain)                     | Operator-configured, capped at 28 |
 
 #### 8.3.3 Solution
 
@@ -916,6 +927,50 @@ rate limiting, and reputation evaluation.
 
 Servers MUST NOT treat PoW completion as evidence of legitimacy. A bulk spammer
 with sufficient compute can satisfy PoW, but doing so at scale is expensive.
+
+#### 8.3.6 Challenge Issuance Observations
+
+A server that issues challenges MUST itself behave reasonably. The difficulty
+cap (`HANDSHAKE.md` section 2.2a.2) and the minimum expiry table bound each
+individual challenge, but the pattern of challenges a server issues over time
+is itself a reputation signal. A server that routinely issues challenges at
+or near the cap to peers or clients without corresponding risk indicators is
+degrading the performance of the ecosystem and MAY be the subject of
+observation records published by affected parties.
+
+An initiator that aborts a handshake with `reason_code: "challenge_invalid"`
+SHOULD record the event, including the signed `challenge` message, for
+potential inclusion in an abuse report. The signed challenge message is
+self-authenticating evidence because it carries the issuing server's
+domain signature.
+
+A conformant server MAY publish an observation record against a remote
+domain when it has observed, across multiple unrelated handshakes within a
+single observation window (section 4.4), both of the following:
+
+1. A sustained share of that domain's issued challenges at `difficulty`
+   greater than 24, measured against handshakes where the observing server
+   or its users had no reputation condition that would justify elevated
+   difficulty.
+2. Either a challenge above the difficulty cap of 28, or a challenge whose
+   `expires` value was below the minimum expiry floor for its difficulty.
+
+The observation record MUST use the `protocol_abuse` category (section
+3.4) and SHOULD include one or more signed `challenge` messages as
+evidence under a `signed_handshake_challenge` evidence type. The evidence
+MUST NOT include any material derived from a session that the observing
+server did not itself initiate or receive.
+
+A server that issues challenges MUST be prepared for its challenge
+pattern to be observed and reported. Operators that wish to use aggressive
+challenge policy for defensible reasons (a recent abuse surge from a
+specific network, for example) SHOULD document the policy publicly so that
+peer observations can be interpreted in context.
+
+Servers MUST NOT publish observations based on a single challenge in
+isolation, except in the case of a challenge that violates the cap or the
+minimum expiry floor, which is a conformance violation rather than a
+policy choice.
 
 ---
 

@@ -57,6 +57,7 @@ govern session establishment failures. Defined in `HANDSHAKE.md` section 4.1.
 | `rate_limited`      | Yes         | Back off and retry.                                               |
 | `challenge`         | Yes         | Solve the issued challenge and continue handshake.                |
 | `challenge_failed`  | Yes         | Request new challenge by restarting the handshake.                |
+| `challenge_invalid` | No          | The challenge exceeds protocol bounds (for example, `proof_of_work` difficulty greater than 28, or `expires` below the minimum floor for its difficulty). Surface to user or operator as a misbehaving or compromised server. Do not retry. Implementations SHOULD retain the signed `challenge` message for potential inclusion in an abuse report under category `protocol_abuse` (`REPUTATION.md` section 8.3.6). See `HANDSHAKE.md` section 2.2a.2. |
 | `server_at_capacity`| Yes         | Back off and retry later.                                         |
 
 `challenge` is unique: it is not a terminal rejection but a conditional gate.
