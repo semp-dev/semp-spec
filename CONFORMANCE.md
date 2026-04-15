@@ -328,6 +328,13 @@ A conformant server MUST:
   (`REPUTATION.md` §8.3.4)
 - Not treat challenge completion as evidence of legitimacy.
   (`REPUTATION.md` §8.3.5)
+- Not issue a `proof_of_work` challenge with `difficulty` greater than 28,
+  regardless of sender reputation or operator policy. (`HANDSHAKE.md`
+  §2.2a.2, `REPUTATION.md` §8.3.2)
+- Not issue a `proof_of_work` challenge whose `expires` value is below the
+  minimum expiry floor for its difficulty (30 seconds at difficulty 0 to
+  20, 60 seconds at 21 to 24, 120 seconds at 25 to 28). (`HANDSHAKE.md`
+  §2.2a.2)
 - Not disclose decrypted envelope content in abuse evidence without the
   explicit, signed authorization of the affected user.
   (`REPUTATION.md` §3.7)
@@ -355,6 +362,25 @@ A conformant server participating in federation MUST:
   other, resolve the collision deterministically: the session whose
   `session_id` sorts lower lexicographically is abandoned.
   (`SESSION.md` §2.5.2)
+- When performing a server-to-server handshake as the initiator, abort with
+  reason code `challenge_invalid` on receipt of a `proof_of_work`
+  challenge whose `difficulty` exceeds 28, and not attempt to solve the
+  challenge. The initiating server MUST treat the remote server as
+  misbehaving and MUST NOT retry under the same conditions.
+  (`HANDSHAKE.md` §2.2a.2)
+- When performing a server-to-server handshake as the initiator, abort
+  with reason code `challenge_invalid` on receipt of a `proof_of_work`
+  challenge whose `expires` value is below the minimum expiry floor for
+  its difficulty. (`HANDSHAKE.md` §2.2a.2)
+
+A conformant federation server SHOULD:
+
+- Record `challenge_invalid` aborts as a metric and retain the signed
+  `challenge` message as evidence. (`ERRORS.md` §2)
+- Publish `protocol_abuse` observation records against remote domains that
+  exhibit the sustained challenge issuance pattern described in
+  `REPUTATION.md` section 8.3.6, subject to the evidence and threshold
+  requirements defined there.
 
 ### 4.9 Extensibility
 
@@ -483,6 +509,24 @@ A conformant client MUST:
   (`CLIENT.md` §2.1, `SESSION.md` §2.6.1)
 - Verify `server_signature` on `challenge` messages before computing a
   solution. Abort on invalid signatures. (`HANDSHAKE.md` §2.2a)
+- Abort the handshake with reason code `challenge_invalid` on receipt of a
+  `proof_of_work` challenge whose `difficulty` exceeds 28, and not attempt
+  to solve the challenge. This requirement applies equally to federation
+  peers performing server-to-server handshakes. (`HANDSHAKE.md` §2.2a.2,
+  §5)
+- Abort the handshake with reason code `challenge_invalid` on receipt of a
+  `proof_of_work` challenge whose `expires` value, measured against the
+  initiator's clock at receipt, is below the minimum expiry floor for its
+  difficulty. (`HANDSHAKE.md` §2.2a.2)
+
+A conformant client SHOULD:
+
+- Surface `challenge_invalid` aborts to the user as a security warning
+  rather than a generic connection failure, identifying the remote domain
+  as potentially misbehaving or compromised. (`ERRORS.md` §2)
+- Retain the signed `challenge` message that caused a `challenge_invalid`
+  abort for potential inclusion in a `protocol_abuse` report.
+  (`REPUTATION.md` §8.3.6)
 
 ### 5.4 Envelope Composition
 

@@ -288,13 +288,16 @@ altering the handshake structure.
 | `expires`          | `string`  | Yes      | ISO 8601 UTC timestamp. Solution MUST be submitted before expiry.   |
 | `server_signature` | `string`  | Yes      | Signature over the entire message using the server's domain key.    |
 
-The client MUST verify `server_signature` before computing a solution. A
+The initiator MUST verify `server_signature` before computing a solution. A
 `challenge` message with an invalid signature MUST be treated as a rejection
-and the handshake MUST be aborted.
+and the handshake MUST be aborted. This obligation applies to both client
+initiators performing client-to-server handshakes and federation peers
+performing server-to-server handshakes (section 5).
 
-A client that does not recognize the `challenge_type` MUST abort the handshake.
-It MUST NOT silently ignore the challenge and proceed, as the server will reject
-any subsequent handshake message that lacks a valid solution.
+An initiator that does not recognize the `challenge_type` MUST abort the
+handshake. It MUST NOT silently ignore the challenge and proceed, since the
+server will reject any subsequent handshake message that lacks a valid
+solution.
 
 #### 2.2a.2 Challenge Type: proof_of_work
 
@@ -308,7 +311,57 @@ baseline challenge type and MUST be supported by all implementations.
 |-------------|-----------|----------|--------------------------------------------------------------------------|
 | `algorithm` | `string`  | Yes      | Hash algorithm. MUST be `sha256`.                                        |
 | `prefix`    | `string`  | Yes      | Base64-encoded random bytes. Minimum 16 bytes of entropy.                |
-| `difficulty`| `integer` | Yes      | Leading zero bits required in the solution hash. See `REPUTATION.md` section 8.3.2. |
+| `difficulty`| `integer` | Yes      | Leading zero bits required in the solution hash. MUST be in the range 0 to 28 inclusive. See `REPUTATION.md` section 8.3.2. |
+
+**Difficulty cap.** A conformant server MUST NOT issue a `proof_of_work`
+challenge with `difficulty` greater than 28. A conformant handshake
+initiator MUST abort the handshake with
+`reason_code: "challenge_invalid"` if it receives a `proof_of_work`
+challenge with `difficulty` greater than 28, and MUST NOT attempt to solve
+a challenge that exceeds the cap even if it has sufficient compute to do
+so. This requirement applies equally to clients performing client-to-server
+handshakes and to federation peers performing server-to-server handshakes
+(section 5). A federation peer receiving a challenge above the cap MUST
+treat the issuing server as misbehaving and MUST NOT retry under the same
+conditions.
+
+The cap prevents a malicious or compromised server from issuing
+prohibitively expensive challenges against either clients (exhausting
+device resources or draining batteries) or federation peers (consuming CPU
+on shared infrastructure and degrading legitimate mail flow for unrelated
+correspondents). The cap applies to every `proof_of_work` challenge
+regardless of the initiator's role, reputation, the operator's policy, or
+the handshake context. Servers that require stronger gating than
+difficulty 28 provides MUST use a different challenge type or a
+non-challenge mechanism such as block listing (`DELIVERY.md` section 4).
+
+**Minimum expiry.** The `expires` timestamp MUST be far enough in the
+future to allow a legitimate initiator on constrained hardware or a high
+latency network to compute a solution. A conformant server MUST NOT issue a
+`proof_of_work` challenge whose `expires` value is less than the floor
+corresponding to its `difficulty`:
+
+| Difficulty range | Minimum `expires` relative to issuance |
+|------------------|-----------------------------------------|
+| 0 to 20          | 30 seconds                              |
+| 21 to 24         | 60 seconds                              |
+| 25 to 28         | 120 seconds                             |
+
+A conformant initiator MUST abort the handshake with
+`reason_code: "challenge_invalid"` if it receives a `proof_of_work`
+challenge whose `expires` value, measured against the initiator's clock at
+receipt, is shorter than the floor for its difficulty. The initiator MUST
+NOT attempt to solve such a challenge. The floor prevents a server from
+issuing a technically conformant challenge that is unsolvable in practice
+for legitimate initiators on mobile devices, over Tor, or on otherwise
+constrained links. The floor is intentionally generous relative to 2024
+compute baselines; faster hardware in future years only widens the margin
+for legitimate initiators and does not require revision of this table.
+
+Servers MAY issue longer expiry values than the floor and SHOULD do so
+when operator policy anticipates clients on slow links. Initiators MUST
+accept any expiry at or above the floor and MUST NOT impose their own
+upper bound on `expires` beyond ordinary clock skew tolerance.
 
 #### 2.2a.3 Future Challenge Types
 
