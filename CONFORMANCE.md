@@ -202,6 +202,13 @@ A conformant server MUST:
 
 - Perform discovery for recipient domains before cross-domain delivery.
   (`DISCOVERY.md` §1)
+- Serve its configuration document at `/.well-known/semp/configuration`
+  over HTTPS. This is the only fixed URL in the protocol.
+  (`DISCOVERY.md` §3, §3.2.1)
+- Advertise every protocol endpoint it exposes, without exception, through
+  the `endpoints` object of its configuration document. A server MUST NOT
+  expose a protocol endpoint that is not advertised in its configuration
+  document. (`DISCOVERY.md` §3.2.1)
 - Keep discovery requests anonymous by default: a lookup request MUST NOT
   identify the requester or the specific sender. (`DISCOVERY.md` §1.2)
 - Follow the discovery flow: DNS SRV/TXT first, well-known URI as fallback,
@@ -219,6 +226,11 @@ A conformant server MUST:
 - Verify the signature on lookup responses before caching or acting on
   results. Discard unsigned or unverifiable responses.
   (`DISCOVERY.md` §4.6, §8.1)
+- Resolve every peer protocol endpoint exclusively from the peer's
+  configuration document. A server MUST NOT probe well-known or guessed
+  paths for peer endpoints. Absence of a field in `endpoints` is
+  definitive: the peer does not offer that capability.
+  (`DISCOVERY.md` §3.2.1)
 - Return per-recipient results in the submission response when a message has
   recipients across multiple discovery outcomes. (`DISCOVERY.md` §5.3)
 - Ignore unknown fields in capability documents rather than failing.

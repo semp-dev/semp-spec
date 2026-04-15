@@ -185,8 +185,9 @@ All URL values inside the document are implementation-chosen.
         "register": "https://semp.example.com/v1/register",
         "device_register": "https://semp.example.com/v1/device/register",
         "blocklist": "https://semp.example.com/v1/blocklist",
-        "keys": "https://semp.example.com/.well-known/semp/keys/",
-        "domain_keys": "https://semp.example.com/.well-known/semp/domain-keys"
+        "keys": "https://semp.example.com/v1/keys/",
+        "domain_keys": "https://semp.example.com/v1/domain-keys",
+        "reputation": "https://semp.example.com/v1/reputation/"
     },
     "suites": [
         "pq-kyber768-x25519",
@@ -227,8 +228,10 @@ endpoints (which are plain HTTPS) are flat.
 | `register`         | `string` | Yes      | URL for client key registration (`POST`). See `CLIENT.md` section 2.2.1. |
 | `device_register`  | `string` | No       | URL for delegated device registration (`POST`). See `KEY.md` section 10. |
 | `blocklist`        | `string` | No       | URL for block list management (`GET`/`POST`/`DELETE`). See `DELIVERY.md` section 4. |
-| `keys`             | `string` | Yes      | Base URL for user key publication. Append the user address to retrieve keys. |
-| `domain_keys`      | `string` | Yes      | URL for domain signing and encryption key publication. |
+| `keys`             | `string` | Yes      | Base URL for user key publication. Append the user address to retrieve keys. Response format in section 3.4. |
+| `domain_keys`      | `string` | Yes      | URL for domain signing and encryption key publication. Response format in section 3.3. |
+| `reputation`       | `string` | No       | Base URL for this server's published trust gossip observations. Append the subject domain to retrieve observations. Absence indicates the server does not publish gossip. See `REPUTATION.md` section 5. |
+| `reputation_references` | `string` | No  | URL for the domain's self-published reputation references document, listing third-party observers that have published observations about this domain. Absence indicates the domain does not self-publish references. See `REPUTATION.md` section 5.6. |
 
 All URL values are implementation-chosen. The protocol does not mandate URL path
 structure. The transport identifiers in `client` and `federation` are defined in
@@ -311,15 +314,42 @@ client knows exactly where to find the configuration), while the operational
 deployment remains flexible (operators choose their own URL layout, subdomain
 structure, and capability support).
 
+#### 3.2.1 Configuration Is the Sole Endpoint Registry
+
+The configuration document is the single source of truth for every endpoint
+exposed by a SEMP server. The path `/.well-known/semp/configuration` is the
+only fixed URL in the protocol. Every other endpoint, including transport
+endpoints, registration, key publication, block list management, reputation
+publication, and any endpoint added by future protocol revisions or
+extensions, is whatever URL the configuration document advertises.
+
+The following normative rules apply:
+
+- A SEMP server MUST NOT expose a protocol endpoint that is not advertised
+  in its configuration document. Endpoints that exist only by convention
+  or only at well-known paths are not discoverable and MUST NOT be assumed
+  by peers.
+- A SEMP client or federation peer MUST NOT probe well-known or guessed
+  paths for functionality that is not advertised in the target server's
+  configuration document. The absence of a field in `endpoints` is
+  definitive: the capability is not offered, regardless of what path
+  conventions other implementations may follow.
+- A SEMP server MAY place any advertised endpoint at any URL it chooses,
+  including under `/.well-known/`, on a different hostname, on a different
+  port, or behind a reverse proxy. Peers locate the URL through the
+  configuration document, not through a path convention.
+
+This invariant eliminates ambiguity about optional capabilities, allows
+operators to route specific endpoints through dedicated infrastructure,
+and ensures that the absence of a capability is always an explicit
+signal rather than a probing failure.
+
 ### 3.3 Domain Key Publication
 
-SEMP servers MUST publish their domain signing and encryption keys at:
-
-```
-https://<server-hostname>/.well-known/semp/domain-keys
-```
-
-This endpoint MUST be served over HTTPS. The response is a JSON document:
+SEMP servers MUST publish their domain signing and encryption keys at the
+URL advertised as `endpoints.domain_keys` in their configuration document
+(section 3.1.1). The endpoint MUST be served over HTTPS. The response is a
+JSON document:
 
 ```json
 {
@@ -357,15 +387,17 @@ publishes are trusted.
 
 ### 3.4 User Key Publication
 
-SEMP servers MUST publish registered user keys at:
+SEMP servers MUST publish registered user keys under the base URL advertised
+as `endpoints.keys` in their configuration document (section 3.1.1). The full
+fetch URL for a given user is the base URL with the user's address appended:
 
 ```
-https://<server-hostname>/.well-known/semp/keys/<address>
+<endpoints.keys><address>
 ```
 
-The response is a JSON document containing the user's identity and encryption
-public keys. See `KEY.md` section 3 for the response format and verification
-requirements.
+The endpoint MUST be served over HTTPS. The response is a JSON document
+containing the user's identity and encryption public keys. See `KEY.md`
+section 3 for the response format and verification requirements.
 
 ---
 
