@@ -52,6 +52,44 @@ service, or blocklist provider. Reputation is a peer-to-peer concern. Servers
 observe, record, and optionally share their observations. Third-party
 aggregation services may emerge as a convenience layer.
 
+### 1.3 Reputation Is Domain-Keyed
+
+Every reputation signal, observation record, gossip fetch, and abuse
+report defined in this document is keyed by **domain identity** rather
+than by IP address. IP addresses are transport-layer artifacts and MUST
+NOT appear as keys in any protocol-layer reputation artifact. This
+applies specifically to:
+
+- The local observation ledger a server maintains per section 4.1.
+- Observation records published via trust gossip per section 5.1.
+- Abuse reports per section 3.
+- Block list entries per `DELIVERY.md` section 4 (which uses user,
+  domain, or server identity, never IP).
+- Rate limits that feed into reputation assessment per
+  `DISCOVERY.md` section 6.2.4.
+
+The separation between transport-layer operational defenses and
+protocol-layer trust is defined in `DESIGN.md` section 2.2.1. A server
+that observes abusive traffic from a specific IP MAY apply transport-
+layer operational defenses to that IP (DoS protection, connection caps)
+but MUST NOT translate that observation into a protocol-layer
+reputation signal keyed by IP.
+
+A conformant server MUST:
+
+- Key every reputation ledger entry and published observation by
+  domain. An entry keyed by IP or by any transport-layer artifact MUST
+  be rejected as malformed.
+- Preserve a domain's accumulated reputation across changes of source
+  IP. A domain that migrates hosting, adopts a CDN, or becomes
+  Tor-only does not lose its reputation history as a consequence.
+- Start unrelated SEMP domains that share a single hosting IP at
+  independent zero reputation. One domain's behavior MUST NOT taint
+  another domain on the same IP.
+- Accept federation from domains reached via Tor exit nodes or other
+  anonymizing transports on the same terms as domains reached over
+  conventional IP transport, subject only to domain-level policy.
+
 ---
 
 ## 2. Reputation Signals
