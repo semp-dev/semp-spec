@@ -85,8 +85,13 @@ message to a different address. In SEMP, the server cannot do this because it
 cannot read the enclosure to reconstruct the envelope for a new recipient.
 
 Forwarding is a client operation. The recipient's client composes a new envelope
-to the forwarding target, encrypting under the new recipient's keys. The
-provenance chain is preserved through reference fields in the enclosure.
+to the forwarding target, encrypting under the new recipient's keys. The original
+enclosure plaintext, including the original sender's identity-key signature
+(`enclosure.sender_signature`), is preserved verbatim inside
+`enclosure.forwarded_from` of the new envelope. The new recipient verifies the
+original sender's signature against the original sender's published identity
+key, giving cryptographic provenance regardless of how many times the message
+has been forwarded. See `ENVELOPE.md` sections 6.5 and 6.6.
 
 Automatic forwarding is handled through the delegation model. A user registers
 a delegated client with receive permission and a restricted send scope limited

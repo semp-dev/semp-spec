@@ -233,15 +233,22 @@ A delegated client has the same cryptographic obligations as any other client
 When sending a message, the client MUST execute this sequence:
 
 1. Compose the plaintext `brief` and `enclosure` JSON objects from user input.
+   For a forward, populate `enclosure.forwarded_from` per `ENVELOPE.md`
+   section 6.6 and produce `forwarded_from.forwarder_attestation` over its
+   canonical bytes using the sending user's identity key.
 
-2. Generate two fresh independent random symmetric keys: `K_brief` and
+2. Compute `enclosure.sender_signature` over the canonical enclosure bytes
+   per `ENVELOPE.md` section 6.5.2, using the sending user's identity key.
+   The signature MUST be computed before any enclosure encryption.
+
+3. Generate two fresh independent random symmetric keys: `K_brief` and
    `K_enclosure`. These MUST be freshly generated for each envelope and MUST
    NOT be reused.
 
-3. Encrypt the `brief` JSON under `K_brief`. Encrypt the `enclosure` JSON
-   under `K_enclosure`.
+4. Encrypt the `brief` JSON under `K_brief`. Encrypt the (now signed)
+   `enclosure` JSON under `K_enclosure`.
 
-4. Request recipient public keys from the home server using the key request
+5. Request recipient public keys from the home server using the key request
    protocol defined in section 5.4. The response includes both the recipient
    server's domain key and the recipient client's encryption key, along with
    the remote domain's original signature. The client MUST check the revocation
@@ -249,7 +256,7 @@ When sending a message, the client MUST execute this sequence:
    If a `replacement_key_id` is present, the client MUST fetch and validate the
    replacement before proceeding.
 
-5. For each recipient, produce:
+6. For each recipient, produce:
    - `K_brief` encrypted under the recipient server's domain key →
      entry in `seal.brief_recipients` keyed by server domain key fingerprint
    - `K_brief` encrypted under the recipient client's encryption key →
@@ -257,12 +264,12 @@ When sending a message, the client MUST execute this sequence:
    - `K_enclosure` encrypted under the recipient client's encryption key →
      entry in `seal.enclosure_recipients` keyed by client key fingerprint
 
-6. For BCC recipients, generate a distinct envelope copy per recipient per
+7. For BCC recipients, generate a distinct envelope copy per recipient per
    `ENVELOPE.md` section 5.3.
 
-7. Compose the `postmark`, including the active `session_id`.
+8. Compose the `postmark`, including the active `session_id`.
 
-8. Transmit the assembled envelope to the home server. The server computes
+9. Transmit the assembled envelope to the home server. The server computes
    `seal.signature` and `seal.session_mac`. Clients are not required to compute
    these, since they require the domain private key and session key material, which
    clients do not hold.
@@ -314,6 +321,43 @@ When composing a reply, the client MUST:
 The `thread_id` MUST remain stable for the life of the thread and MUST NOT
 change when recipients are added.
 
+### 3.7 Forward Composition
+
+To forward a previously received envelope, the client MUST:
+
+1. Take the original received envelope's decrypted enclosure plaintext
+   verbatim, including its `sender_signature`. This becomes
+   `enclosure.forwarded_from.original_enclosure_plaintext` in the new
+   envelope. The forwarder MUST NOT modify any field of the original
+   enclosure plaintext.
+
+2. Populate the remaining `forwarded_from` fields per `ENVELOPE.md`
+   section 6.6.2:
+   - `original_sender_address`: the full sender address from the original
+     envelope's `brief.from` as the forwarder observed it on receipt.
+   - `received_at`: the timestamp at which the forwarding client received
+     the original envelope from its home server.
+   - `original_seal` and `original_postmark` MAY be included verbatim from
+     the original envelope as advisory context.
+
+3. Compute `forwarded_from.forwarder_attestation` over the canonical bytes
+   of `forwarded_from` (with `forwarder_attestation.value` set to `""`)
+   using the forwarding user's identity key, per `ENVELOPE.md` section
+   6.6.3. The `forwarder_attestation.key_id` MUST equal the
+   `key_id` that will appear in the new enclosure's `sender_signature`.
+
+4. Compose the rest of the new enclosure normally. The forwarder's own
+   commentary, if any, belongs in the new enclosure's `subject`, `body`,
+   and `attachments` fields. The original content MUST NOT be duplicated
+   into these fields.
+
+5. Sign and encrypt the new enclosure per section 3.1 (steps 2 and 4).
+
+A forward of a forward MAY be composed by repeating this process: the
+inner `original_enclosure_plaintext` MAY itself contain a non-null
+`forwarded_from`, preserving the full chain. Clients MUST NOT collapse,
+truncate, or reorder a forwarding chain.
+
 ---
 
 ## 4. Envelope Receipt and Decryption
@@ -332,8 +376,16 @@ On receiving an envelope from the home server, the client:
 
 4. Decrypts `envelope.enclosure` using `K_enclosure` and parses the result.
 
-5. Verifies each attachment hash against its decrypted content per `ENVELOPE.md`
-   section 7.2 step 10.
+5. Verifies `enclosure.sender_signature` per `ENVELOPE.md` section 6.5.3
+   against the sender's published identity key. The client MUST NOT render
+   enclosure content if verification fails. A failure MUST be surfaced as
+   a security warning per `ENVELOPE.md` section 6.5.3.
+
+6. If `enclosure.forwarded_from` is non-null, performs the forwarded-envelope
+   verification chain per `ENVELOPE.md` section 6.6.4.
+
+7. Verifies each attachment hash against its decrypted content per `ENVELOPE.md`
+   section 7.2 step 12.
 
 If any step fails, the client MUST surface an explicit error and MUST NOT
 silently discard the envelope or present partial content as complete.

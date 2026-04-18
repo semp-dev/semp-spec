@@ -715,8 +715,13 @@ A conformant client SHOULD:
 A conformant client MUST:
 
 - Follow the composition sequence defined in `CLIENT.md` §3.1: compose
-  plaintext, generate fresh `K_brief` and `K_enclosure`, encrypt, wrap keys
-  under recipient public keys, compose the postmark.
+  plaintext, sign the enclosure, generate fresh `K_brief` and `K_enclosure`,
+  encrypt, wrap keys under recipient public keys, compose the postmark.
+- Compute `enclosure.sender_signature` over the canonical enclosure bytes
+  using the sending user's identity key, before encrypting the enclosure.
+  (`CLIENT.md` §3.1, `ENVELOPE.md` §6.5)
+- Use the sending user's identity key (not a device, ephemeral, or session
+  key) for `enclosure.sender_signature`. (`ENVELOPE.md` §6.5.1)
 - Generate `K_brief` and `K_enclosure` freshly for each envelope. MUST NOT
   reuse. (`CLIENT.md` §3.1)
 - Check the revocation status of every recipient key received.
@@ -724,6 +729,41 @@ A conformant client MUST:
 - Support `x25519-chacha20-poly1305` (baseline) and `pq-kyber768-x25519`
   (recommended). (`ENVELOPE.md` §7.3)
 - Not negotiate algorithms below the minimum baseline. (`ENVELOPE.md` §7.3)
+
+For forward composition, a conformant client MUST:
+
+- Preserve the original received enclosure plaintext verbatim, including
+  its `sender_signature`, in `enclosure.forwarded_from.original_enclosure_plaintext`.
+  MUST NOT modify any field of the original enclosure plaintext.
+  (`CLIENT.md` §3.7, `ENVELOPE.md` §6.6)
+- Sign `forwarded_from` with `forwarder_attestation` using the forwarding
+  user's identity key, with `forwarder_attestation.key_id` matching the
+  outer `enclosure.sender_signature.key_id`.
+  (`ENVELOPE.md` §6.6.3)
+- Place forwarder commentary only in the new enclosure's own `subject`,
+  `body`, and `attachments` fields, not by modifying the original enclosure
+  plaintext. (`CLIENT.md` §3.7)
+- Not collapse, truncate, or reorder a multi-level forwarding chain.
+  (`CLIENT.md` §3.7, `ENVELOPE.md` §6.6.5)
+
+For envelope receipt, a conformant client MUST:
+
+- Verify `enclosure.sender_signature` against the sender's identity key
+  before rendering enclosure content. MUST NOT render content if
+  verification fails. (`CLIENT.md` §4.1, `ENVELOPE.md` §6.5.3)
+- Surface a security warning when sender signature verification fails.
+  (`ENVELOPE.md` §6.5.3)
+- When `enclosure.forwarded_from` is non-null, perform the verification
+  chain in `ENVELOPE.md` §6.6.4: outer sender signature, forwarder
+  attestation, then the original sender's signature on
+  `original_enclosure_plaintext`. MUST NOT display original content as
+  attributed to the claimed original sender if any verification fails.
+  (`CLIENT.md` §4.1, `ENVELOPE.md` §6.6.4)
+- Not present `original_seal` or `original_postmark` from a forwarded
+  block as cryptographically verified evidence. These fields are advisory
+  only. (`ENVELOPE.md` §6.6.4)
+- For multi-level forwards, verify each level of the forwarding chain
+  recursively. (`ENVELOPE.md` §6.6.5)
 
 ### 5.5 Session State Management
 
