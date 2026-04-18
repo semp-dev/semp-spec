@@ -267,7 +267,7 @@ endpoints (which are plain HTTPS) are flat.
 | `federation`       | `object` | Yes      | Transport endpoints for federation sessions. Same structure as `client`. `h2` MUST be present. |
 | `register`         | `string` | Yes      | URL for client key registration (`POST`). See `CLIENT.md` section 2.2.1. |
 | `device_register`  | `string` | No       | URL for delegated device registration (`POST`). See `KEY.md` section 10. |
-| `blocklist`        | `string` | No       | URL for block list management (`GET`/`POST`/`DELETE`). See `DELIVERY.md` section 4. |
+| `blocklist`        | `string` | No       | URL for block list management (`GET`/`POST`/`DELETE`). See `DELIVERY.md` section 5. |
 | `keys`             | `string` | Yes      | Base URL for user key publication. Append the user address to retrieve keys. Response format in section 3.4. |
 | `domain_keys`      | `string` | Yes      | URL for domain signing and encryption key publication. Response format in section 3.3. |
 | `reputation`       | `string` | No       | Base URL for this server's published trust gossip observations. Append the subject domain to retrieve observations. Absence indicates the server does not publish gossip. See `REPUTATION.md` section 5. |
@@ -675,7 +675,7 @@ Sender's Server A
        |--- Determine: recipient is on Server B
        |
        |--- Internal routing to Server B
-       |--- Server B runs delivery pipeline (DELIVERY.md §2)
+       |--- Server B runs delivery pipeline (DELIVERY.md §3)
        |--- Server B returns acknowledgment to Server A
        |--- Server A surfaces result to client
 ```
@@ -704,7 +704,7 @@ considerations apply. Internal routing does not exempt an envelope from delivery
 policy enforcement.
 
 The receiving partition server MUST execute the full delivery pipeline defined
-in `DELIVERY.md` section 2 before returning an acknowledgment. This includes
+in `DELIVERY.md` section 3 before returning an acknowledgment. This includes
 seal verification, session validation, domain and server policy checks, `brief`
 decryption, and user policy checks. Block list enforcement occurs on the
 receiving partition server (the server that holds the recipient's block list)
@@ -745,7 +745,7 @@ server MUST NOT override or suppress the receiving server's acknowledgment.
 
 When the receiving partition server operates in `silent` mode for a given
 sender, it MUST maintain the same consistent timing requirements defined in
-`DELIVERY.md` section 7.2. The sending partition server MUST enforce a timeout
+`DELIVERY.md` section 8.2. The sending partition server MUST enforce a timeout
 on internally routed deliveries and treat expiry as `silent`, consistent with
 `DELIVERY.md` section 1.5. A timeout of 30 seconds is RECOMMENDED.
 
@@ -753,7 +753,7 @@ on internally routed deliveries and treat expiry as `silent`, consistent with
 
 The recipient's block list is held by the receiving partition server. The
 sending partition server MUST NOT access, query, or cache the recipient's block
-list. Block list confidentiality requirements from `DELIVERY.md` section 7.1
+list. Block list confidentiality requirements from `DELIVERY.md` section 8.1
 apply across partition boundaries within the same domain.
 
 ### 5.5 SRV Target and Configuration Host Resolution

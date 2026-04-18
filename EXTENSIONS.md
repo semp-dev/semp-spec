@@ -30,7 +30,7 @@ exposes an `extensions` object with different visibility and trust properties:
 | Content                  | `enclosure.extensions`      | Recipient client only                   | `ENVELOPE.md` §8     |
 | Discovery                | `configuration.extensions`  | Any querying server                     | `DISCOVERY.md` §3.1  |
 | Handshake                | `init.extensions`           | Handshake participants                  | `HANDSHAKE.md`       |
-| Delivery                 | `block_entry.extensions`    | Local server only (never transmitted)   | `DELIVERY.md` §4.2   |
+| Delivery                 | `block_entry.extensions`    | Local server only (never transmitted)   | `DELIVERY.md` §5.2   |
 
 Extensions at public layers (`postmark.extensions`, `seal.extensions`) are
 visible to all routing servers and MUST be treated as public metadata. Extensions

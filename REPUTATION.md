@@ -63,7 +63,7 @@ applies specifically to:
 - The local observation ledger a server maintains per section 4.1.
 - Observation records published via trust gossip per section 5.1.
 - Abuse reports per section 3.
-- Block list entries per `DELIVERY.md` section 4 (which uses user,
+- Block list entries per `DELIVERY.md` section 5 (which uses user,
   domain, or server identity, never IP).
 - Rate limits that feed into reputation assessment per
   `DISCOVERY.md` section 6.2.4.
@@ -927,7 +927,7 @@ expensive challenges. Any handshake initiator, whether a client or a
 federation peer, MUST abort the handshake with reason code
 `challenge_invalid` when it receives a challenge above the cap. Servers
 that require stronger gating than difficulty 28 provides MUST use blocking
-(`DELIVERY.md` section 4) or another non-challenge mechanism rather than
+(`DELIVERY.md` section 5) or another non-challenge mechanism rather than
 raising the difficulty further.
 
 Suggested difficulty by condition:

@@ -320,21 +320,50 @@ A conformant server MUST:
 - Enforce a timeout on delivery attempts (30 seconds recommended for initial
   attempts). (`DELIVERY.md` §1.5)
 - Follow the fixed delivery pipeline sequence for envelope processing.
-  (`DELIVERY.md` §2)
+  (`DELIVERY.md` §3)
+- Maintain a sender-side queue for submitted envelopes, persist queued
+  envelopes across restart, and not mutate `seal` or `postmark` between
+  attempts. (`DELIVERY.md` §2.1)
+- Classify per-attempt outcomes as terminal or non-terminal and retry only
+  recoverable non-terminal outcomes. (`DELIVERY.md` §2.2)
+- Retry non-terminal outcomes according to the exponential backoff bounds,
+  jitter requirement, and minimum attempt count defined in the retry
+  schedule. (`DELIVERY.md` §2.3)
+- Compute an effective delivery deadline as the earlier of `postmark.expires`
+  and `queued_at + server_max_retry_horizon`, and not retry past it.
+  (`DELIVERY.md` §2.4)
+- Transition an envelope to the terminal state `expired` when the effective
+  deadline is reached without a terminal acknowledgment. (`DELIVERY.md` §2.4)
+- Maintain a queue state record per queued envelope and retain the terminal
+  record for at least 24 hours after termination. (`DELIVERY.md` §2.5)
+- Not generate synthetic bounce envelopes and not transmit any message
+  across federation in response to a terminal delivery failure.
+  (`DELIVERY.md` §2.6)
+- Store queued envelopes encrypted at rest and not decrypt the enclosure at
+  any point in the queue lifecycle. (`DELIVERY.md` §2.8)
+- Accept client-initiated cancellation requests for queued envelopes, halt
+  retry scheduling, transition affected queue state records to `canceled`,
+  and emit the corresponding delivery event. (`DELIVERY.md` §2.7)
+- Enforce delegated-client authority on cancellation: a delegated client
+  MAY cancel only envelopes it submitted itself. (`DELIVERY.md` §2.7.2)
+- Not propagate cancellation across federation and not attempt to retract an
+  envelope already delivered to the recipient server. (`DELIVERY.md` §2.7.3)
+- Treat cancellation as idempotent and not override a prior terminal state.
+  (`DELIVERY.md` §2.7.2, §2.7.4)
 - Enforce delivery policy on cryptographically verified identifiers.
-  (`DELIVERY.md` §8.1)
+  (`DELIVERY.md` §9.1)
 - Verify signatures on block list sync messages before storing or
   propagating. Reject unsigned or unverifiable sync messages.
-  (`DELIVERY.md` §6.2, §8.2)
+  (`DELIVERY.md` §7.2, §9.2)
 - Store block lists encrypted at rest; the server MUST NOT be able to read
-  block list contents in plaintext. (`DELIVERY.md` §6.3)
+  block list contents in plaintext. (`DELIVERY.md` §7.3)
 - Not disclose block list contents to any party other than the owning user's
-  authenticated devices. (`DELIVERY.md` §7.1)
+  authenticated devices. (`DELIVERY.md` §8.1)
 - Explicitly reject envelopes with invalid seals even when operating in
   silent mode. (`DELIVERY.md` §1.3)
 - Maintain consistent timing in silent mode, because timing variations that
   correlate with delivery policy would leak information.
-  (`DELIVERY.md` §7.2)
+  (`DELIVERY.md` §8.2)
 - Send a delivery event notification to the client when the outcome of a
   queued envelope is known. (`CLIENT.md` §6.5)
 - Reject block list entries whose `entity.type` is `ip`, whose entity
@@ -342,16 +371,16 @@ A conformant server MUST:
   range, CIDR block, autonomous system number, or geographic region
   derived from IP. Block lists are protocol-layer trust artifacts and
   MUST be keyed by user, domain, or server identity.
-  (`DELIVERY.md` §4.3.1, `DESIGN.md` §2.2.1)
+  (`DELIVERY.md` §5.3.1, `DESIGN.md` §2.2.1)
 - Not propagate transport-layer operational defenses (firewall rules,
   connection rate limits, DoS mitigation entries) as SEMP block list
   entries or as federation-visible policy signals.
-  (`DELIVERY.md` §4.3.1, `DESIGN.md` §2.2.1)
+  (`DELIVERY.md` §5.3.1, `DESIGN.md` §2.2.1)
 
 A conformant server MAY:
 
 - Return a generic reason code rather than `blocked` if revealing the
-  specific reason would itself be harmful. (`DELIVERY.md` §7.2)
+  specific reason would itself be harmful. (`DELIVERY.md` §8.2)
 - Propagate block events to federation partners as policy signals. Partners
   are not required to honor another server's block decisions.
   (`DESIGN.md` §7)
@@ -360,15 +389,15 @@ A conformant server MAY:
 
 A conformant server that receives an envelope via `SEMP_INTERNAL_ROUTE` MUST:
 
-- Execute the full delivery pipeline defined in `DELIVERY.md` §2 before
-  returning an acknowledgment. (`DELIVERY.md` §5.3, `DISCOVERY.md` §5.4.1)
+- Execute the full delivery pipeline defined in `DELIVERY.md` §3 before
+  returning an acknowledgment. (`DELIVERY.md` §6.3, `DISCOVERY.md` §5.4.1)
 - Return an acknowledgment using one of the three standard acknowledgment
   types: `delivered`, `rejected`, or `silent`. (`DISCOVERY.md` §5.4.1)
 - Enforce the recipient's block list. Block enforcement is the responsibility
   of the partition server that holds the recipient's block list.
-  (`DELIVERY.md` §5.3, `DISCOVERY.md` §5.4.2)
+  (`DELIVERY.md` §6.3, `DISCOVERY.md` §5.4.2)
 - Maintain consistent timing in silent mode, identical to cross-domain
-  delivery. (`DELIVERY.md` §7.2)
+  delivery. (`DELIVERY.md` §8.2)
 
 A conformant server that sends an envelope via `SEMP_INTERNAL_ROUTE` MUST:
 
@@ -381,7 +410,7 @@ A conformant server that sends an envelope via `SEMP_INTERNAL_ROUTE` MUST:
 A conformant server MUST NOT:
 
 - Access, query, or cache the block list of a recipient on another partition
-  server. (`DISCOVERY.md` §5.4.2, `DELIVERY.md` §7.1)
+  server. (`DISCOVERY.md` §5.4.2, `DELIVERY.md` §8.1)
 
 ### 4.7 Reputation
 
@@ -597,7 +626,7 @@ A conformant server MUST:
   rule. (`DELIVERY.md` §1.6.4)
 - Not disclose status to senders who do not match any visibility rule. A
   non-matching sender MUST receive an acknowledgment with no
-  `recipient_status` field. (`DELIVERY.md` §7.4)
+  `recipient_status` field. (`DELIVERY.md` §8.4)
 - Not reject or delay envelopes based on recipient status. Status is
   informational only. (`DELIVERY.md` §1.6.3)
 
@@ -728,11 +757,21 @@ A conformant client SHOULD:
 A conformant client MUST:
 
 - Accurately reflect the submission status received from the home server
-  for all six states: `delivered`, `rejected`, `silent`, `legacy_required`,
-  `recipient_not_found`, `queued`. (`CLIENT.md` §7.1)
-- Distinguish all six states in the user interface. (`CLIENT.md` §7.1)
+  for all submission states (`delivered`, `rejected`, `silent`,
+  `legacy_required`, `recipient_not_found`, `queued`) and all event-only
+  terminal states (`expired`, `canceled`). (`CLIENT.md` §7.1)
+- Distinguish all states listed above in the user interface.
+  (`CLIENT.md` §7.1)
 - Not display a delivery-confirmed indicator until a `delivered` status has
   been received. (`CLIENT.md` §7.1)
+- Not display a `canceled` indicator for a recipient until a
+  `cancel_response` entry or a delivery event reports `state: canceled` for
+  that recipient. (`CLIENT.md` §6.6.3)
+- Not misrepresent a `delivered` envelope as `canceled` when an in-flight
+  attempt completed before cancellation could be applied.
+  (`CLIENT.md` §6.6.3, `DELIVERY.md` §1.4)
+- Not send cancellation requests for envelopes the client did not itself
+  submit, where the client is a delegated client. (`CLIENT.md` §6.6.3)
 - Surface which recipients received a multi-recipient message and which did
   not. Partial failure MUST NOT be suppressed or aggregated.
   (`CLIENT.md` §7.2)
@@ -969,10 +1008,10 @@ session requires a fresh handshake regardless of TLS resumption state.
 
 - Block lists are private. Servers MUST NOT disclose block list contents to
   any party other than the owning user's authenticated devices.
-  (`DELIVERY.md` §7.1)
-- Block lists MUST be stored encrypted at rest. (`DELIVERY.md` §6.3)
+  (`DELIVERY.md` §8.1)
+- Block lists MUST be stored encrypted at rest. (`DELIVERY.md` §7.3)
 - Implementations MUST NOT expose block list size or contents through any
-  observable interface. (`DELIVERY.md` §7.3)
+  observable interface. (`DELIVERY.md` §8.3)
 
 ### 8.4 Abuse Reporter Privacy
 
