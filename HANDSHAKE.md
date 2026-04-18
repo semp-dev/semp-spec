@@ -216,7 +216,6 @@ capabilities. Nothing in this message identifies the client.
             "pq-kyber768-x25519",
             "x25519-chacha20-poly1305"
         ],
-        "compression": ["zstd", "gzip", "none"],
         "extensions": [
             "semp.dev/device-sync",
             "semp.dev/read-receipts",
@@ -236,7 +235,7 @@ capabilities. Nothing in this message identifies the client.
 | `nonce`                | `string` | Yes      | Cryptographically random value, base64-encoded, min 32 bytes. Used for replay prevention and key derivation. |
 | `transport`            | `string` | Yes      | Transport in use. One of the identifiers defined in `TRANSPORT.md` section 4 (`ws`, `h2`, `quic`) or an extended binding identifier per `TRANSPORT.md` section 7. |
 | `client_ephemeral_key` | `object` | Yes      | Ephemeral public key for this session only. MUST NOT be reused.|
-| `capabilities`         | `object` | Yes      | Supported algorithms, compression, and extension identifiers advertised for this session. The `capabilities.extensions` array lists extension identifiers the client supports, per `EXTENSIONS.md` section 6. |
+| `capabilities`         | `object` | Yes      | Supported cryptographic algorithms and extension identifiers advertised for this session. The `capabilities.extensions` array lists extension identifiers the client supports, per `EXTENSIONS.md` section 6. |
 | `extensions`           | `object` | No       | Handshake-layer extension entries (distinct from `capabilities.extensions`, which advertises session-wide extension support). See `EXTENSIONS.md` section 1. |
 
 The init message is NOT signed. Signing would require a key identifier, which
@@ -460,7 +459,6 @@ the shared session secret.
     },
     "negotiated": {
         "encryption_algorithm": "pq-kyber768-x25519",
-        "compression": "zstd",
         "extensions": [
             "semp.dev/device-sync",
             "semp.dev/read-receipts"
@@ -918,7 +916,6 @@ applies to user identity does not apply here.
             "pq-kyber768-x25519",
             "x25519-chacha20-poly1305"
         ],
-        "compression": ["zstd", "gzip", "none"],
         "extensions": [
             "semp.dev/device-sync",
             "semp.dev/read-receipts",
@@ -1032,7 +1029,6 @@ message 2 is sent.
     },
     "negotiated": {
         "encryption_algorithm": "pq-kyber768-x25519",
-        "compression": "zstd",
         "extensions": [
             "semp.dev/device-sync",
             "semp.dev/read-receipts"
