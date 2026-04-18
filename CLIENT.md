@@ -556,7 +556,7 @@ decrypting the enclosure speculatively.
 When a home server processes an envelope whose brief carries
 `semp.dev/device-sync`, the server MUST:
 
-1. Apply the ordinary delivery pipeline (`DELIVERY.md` section 2) for
+1. Apply the ordinary delivery pipeline (`DELIVERY.md` section 3) for
    authentication, seal verification, and fan-out to the device keys
    present in `seal.brief_recipients` and `seal.enclosure_recipients`.
 2. Exclude the envelope from reputation signals and abuse accounting
@@ -917,6 +917,108 @@ The client MUST update its local delivery state on receipt of a delivery event.
 A delivery event with `status: delivered` is the only valid basis for
 displaying a confirmed delivery indicator for a previously queued envelope.
 
+The `status` field in a delivery event MAY take any terminal state defined in
+`DELIVERY.md` section 2.6, including `delivered`, `rejected`, `expired`, and
+`canceled`. The `reason_code` field is present for `rejected` terminal states
+and absent for the others.
+
+### 6.6 Cancellation Request
+
+A client MAY request cancellation of a queued envelope before it reaches a
+terminal state, per `DELIVERY.md` section 2.7. The client sends a cancellation
+request to its home server over its authenticated client session.
+
+#### 6.6.1 Cancellation Request Schema
+
+```json
+{
+    "type": "SEMP_SUBMISSION",
+    "step": "cancel",
+    "version": "1.0.0",
+    "envelope_id": "postmark-ulid",
+    "recipient": "user@example.com",
+    "timestamp": "2025-06-10T20:36:00Z"
+}
+```
+
+| Field         | Type           | Required | Description                                                                  |
+|---------------|----------------|----------|------------------------------------------------------------------------------|
+| `type`        | `string`       | Yes      | MUST be `"SEMP_SUBMISSION"`.                                                 |
+| `step`        | `string`       | Yes      | MUST be `"cancel"`.                                                          |
+| `version`     | `string`       | Yes      | SEMP protocol version (semver).                                              |
+| `envelope_id` | `string`       | Yes      | The `postmark.id` of the envelope to cancel.                                 |
+| `recipient`   | `string\|null` | No       | Target recipient address. If absent, cancel applies to all non-terminal recipients of the envelope. |
+| `timestamp`   | `string`       | Yes      | ISO 8601 UTC timestamp of the cancellation request.                          |
+
+#### 6.6.2 Cancellation Response Schema
+
+The home server MUST respond with a per-record summary:
+
+```json
+{
+    "type": "SEMP_SUBMISSION",
+    "step": "cancel_response",
+    "version": "1.0.0",
+    "envelope_id": "postmark-ulid",
+    "timestamp": "2025-06-10T20:36:01Z",
+    "results": [
+        {
+            "recipient": "user@example.com",
+            "state": "canceled",
+            "reason_code": null,
+            "reason": null
+        }
+    ]
+}
+```
+
+| Field         | Type     | Required | Description                                                                 |
+|---------------|----------|----------|-----------------------------------------------------------------------------|
+| `type`        | `string` | Yes      | MUST be `"SEMP_SUBMISSION"`.                                                |
+| `step`        | `string` | Yes      | MUST be `"cancel_response"`.                                                |
+| `version`     | `string` | Yes      | SEMP protocol version (semver).                                             |
+| `envelope_id` | `string` | Yes      | The `postmark.id` of the envelope addressed by the cancellation request.    |
+| `timestamp`   | `string` | Yes      | ISO 8601 UTC timestamp of the response.                                     |
+| `results`     | `array`  | Yes      | One entry per affected queue state record. See below.                       |
+
+Each `results` entry has the following fields:
+
+| Field         | Type           | Required | Description                                                                 |
+|---------------|----------------|----------|-----------------------------------------------------------------------------|
+| `recipient`   | `string`       | Yes      | The recipient address this result applies to.                               |
+| `state`       | `string`       | Yes      | The queue state record's state after processing: `canceled`, `delivered`, `rejected`, `expired`, or `queued` (if cancellation was not accepted). |
+| `reason_code` | `string\|null` | No       | Machine-readable reason when `state` is `rejected` or when the cancellation was refused. |
+| `reason`      | `string\|null` | No       | Human-readable description. Present when `reason_code` is present.          |
+
+#### 6.6.3 Client Obligations
+
+The client MUST NOT display a `canceled` indicator for a recipient until a
+`cancel_response` entry or a delivery event (`step: event`, section 6.5)
+reports `state: canceled` for that recipient. The client MUST NOT assume
+cancellation succeeded based on having sent the request.
+
+If the cancellation response reports a terminal state other than `canceled`
+for a given recipient (for example, `delivered` because an in-flight attempt
+completed before the cancellation could be applied), the client MUST display
+that terminal state instead of `canceled`. Per `DELIVERY.md` section 1.4, the
+client MUST NOT misrepresent a delivered envelope as canceled.
+
+A delegated client MUST NOT send cancellation requests for envelopes it did
+not itself submit. Attempting to cancel another client's envelope MUST result
+in a refused cancellation (section 6.6.4).
+
+#### 6.6.4 Refused Cancellation
+
+If the home server refuses a cancellation request in whole or in part, it
+MUST return `state: queued` (or the current non-canceled state) with a
+`reason_code`. The following reason codes apply:
+
+| Reason code              | Meaning                                                                        |
+|--------------------------|--------------------------------------------------------------------------------|
+| `not_found`              | No queue state record exists for the given `envelope_id` and `recipient`.      |
+| `scope_exceeded`         | The requesting delegated client did not submit the target envelope.            |
+| `unauthorized`           | The requesting session does not belong to the sending user account.            |
+
 ---
 
 ## 7. Delivery State
@@ -934,10 +1036,12 @@ server:
 | `legacy_required`     | Surface degradation warning and await user confirmation before SMTP fallback. |
 | `recipient_not_found` | Display an undeliverable indicator. No fallback is available.                 |
 | `queued`              | Display a pending state. Update when delivery event is received.              |
+| `expired`             | Display a delivery-failed indicator. Received only via delivery event after the effective deadline elapses (`DELIVERY.md` §2.4). |
+| `canceled`            | Display a canceled indicator. Received only via delivery event or cancellation response (`DELIVERY.md` §2.7). |
 
 Clients MUST NOT display a delivery-confirmed indicator until a `delivered`
 status has been received, either in the submission response or in a subsequent
-delivery event. Clients MUST distinguish all six states in the UI presented
+delivery event. Clients MUST distinguish all states above in the UI presented
 to the user.
 
 ### 7.2 Multi-Recipient Partial Failure
@@ -955,7 +1059,7 @@ not suppressed or aggregated.
 ### 8.1 Sync Message Obligations
 
 Block list changes initiated by the client MUST be transmitted to the home
-server as signed sync messages per `DELIVERY.md` section 6.1. The client MUST
+server as signed sync messages per `DELIVERY.md` section 7.1. The client MUST
 sign sync messages with the originating device's key before transmission.
 
 ### 8.2 Abuse Reporting
@@ -1030,7 +1134,7 @@ most restrictive access controls available on the platform.
 | `HANDSHAKE.md` | Client implements the client side of the handshake: anonymous init, encrypted identity proof, server signature verification. |
 | `ENVELOPE.md` | Client is responsible for all encryption of `brief` and `enclosure` content, and all decryption. Composition implements section 7.1. |
 | `KEY.md` | Client holds and manages user private keys. Key generation, storage, rotation, and revocation are client responsibilities. Recipient key fetching uses `SEMP_KEYS` over the session channel (section 5.4), with the home server proxying requests to remote domains. |
-| `DELIVERY.md` | Client surfaces delivery state to users per section 7. Submission response protocol defined in section 6 of this document. |
+| `DELIVERY.md` | Client surfaces delivery state to users per sections 1.4 and 2.5. Queued-state visibility rules are in section 2.5. Submission response protocol defined in section 6 of this document. |
 | `REPUTATION.md` | Client provides abuse reporting and disclosure authorization per section 3. |
 | `DISCOVERY.md` | Server performs discovery on the client's behalf. `legacy_required` (section 6.3) is the client-visible result of a failed SEMP discovery. |
 

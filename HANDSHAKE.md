@@ -329,7 +329,7 @@ correspondents). The cap applies to every `proof_of_work` challenge
 regardless of the initiator's role, reputation, the operator's policy, or
 the handshake context. Servers that require stronger gating than
 difficulty 28 provides MUST use a different challenge type or a
-non-challenge mechanism such as block listing (`DELIVERY.md` section 4).
+non-challenge mechanism such as block listing (`DELIVERY.md` section 5).
 
 **Minimum expiry.** The `expires` timestamp MUST be far enough in the
 future to allow a legitimate initiator on constrained hardware or a high
