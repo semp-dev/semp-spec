@@ -130,11 +130,13 @@ To avoid delivery failures from required extensions, senders SHOULD verify
 that the recipient supports the extension before sending. Extension support
 is advertised in two places:
 
-- **Discovery capability documents** (`DISCOVERY.md` §3.1): the `features`
-  array and `extensions` field advertise server-level extension support.
-- **Handshake capabilities** (`HANDSHAKE.md`): the `capabilities` field in
-  the handshake init and response messages advertises session-level extension
-  support.
+- **Discovery capability documents** (`DISCOVERY.md` §3.1): the
+  `extensions` field of the server's `SEMP_CONFIGURATION` document, and
+  the `extensions` array in per-address `SEMP_DISCOVERY` results,
+  advertise server-level extension support.
+- **Handshake capabilities** (`HANDSHAKE.md`): the
+  `capabilities.extensions` array in the handshake init and response
+  messages advertises session-level extension support.
 
 A sender that marks an extension as `required: true` without confirming
 recipient support through capability negotiation accepts the risk of rejection.

@@ -239,10 +239,10 @@ A conformant server MUST:
   (`DISCOVERY.md` §2.2)
 - Return a valid response to unauthenticated discovery requests from unknown
   domains, subject to rate limiting. (`DISCOVERY.md` §6.2)
-- Return identical `status`, `transports`, `features`, and `ttl` values for
-  every address on the same recipient domain, regardless of whether the
-  address corresponds to a registered user. Per-address existence MUST NOT
-  be inferable from the response. (`DISCOVERY.md` §4.6.1)
+- Return identical `status`, `transports`, `extensions`, and `ttl` values
+  for every address on the same recipient domain, regardless of whether
+  the address corresponds to a registered user. Per-address existence
+  MUST NOT be inferable from the response. (`DISCOVERY.md` §4.6.1)
 - Not include per-user signals (mailbox existence, activity timestamps,
   recipient status) in discovery result objects. The result object fields
   defined in `DISCOVERY.md` §4.5 are exhaustive for anonymous discovery.

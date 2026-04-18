@@ -437,13 +437,13 @@ handshake exchange.
 Message 1 (init) canonical form:
 
 ```json
-{"capabilities":{"compression":["zstd","none"],"encryption_algorithms":["pq-kyber768-x25519","x25519-chacha20-poly1305"],"features":["groups","threads"]},"client_ephemeral_key":{"algorithm":"pq-kyber768-x25519","key":"Y2xpZW50LWVwaGVtZXJhbC1rZXk=","key_id":"client-eph-fp"},"extensions":{},"nonce":"qqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqs=","party":"client","step":"init","transport":"websocket","type":"SEMP_HANDSHAKE","version":"1.0.0"}
+{"capabilities":{"compression":["zstd","none"],"encryption_algorithms":["pq-kyber768-x25519","x25519-chacha20-poly1305"],"extensions":["semp.dev/device-sync","semp.dev/read-receipts"]},"client_ephemeral_key":{"algorithm":"pq-kyber768-x25519","key":"Y2xpZW50LWVwaGVtZXJhbC1rZXk=","key_id":"client-eph-fp"},"extensions":{},"nonce":"qqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqs=","party":"client","step":"init","transport":"ws","type":"SEMP_HANDSHAKE","version":"1.0.0"}
 ```
 
 Message 2 (response) canonical form:
 
 ```json
-{"client_nonce":"qqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqs=","extensions":{},"negotiated":{"compression":"zstd","encryption_algorithm":"pq-kyber768-x25519","features":["groups","threads"]},"party":"server","server_ephemeral_key":{"algorithm":"pq-kyber768-x25519","key":"c2VydmVyLWVwaGVtZXJhbC1rZXk=","key_id":"server-eph-fp"},"server_identity_proof":{"domain":"example.com","key_id":"server-lt-fp","signature":"c2VydmVyLXNpZw=="},"server_nonce":"u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7s=","server_signature":"c2VydmVyLXNpZ25hdHVyZQ==","session_id":"01JTEST33333333333333333333","step":"response","type":"SEMP_HANDSHAKE","version":"1.0.0"}
+{"client_nonce":"qqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqs=","extensions":{},"negotiated":{"compression":"zstd","encryption_algorithm":"pq-kyber768-x25519","extensions":["semp.dev/device-sync","semp.dev/read-receipts"]},"party":"server","server_ephemeral_key":{"algorithm":"pq-kyber768-x25519","key":"c2VydmVyLWVwaGVtZXJhbC1rZXk=","key_id":"server-eph-fp"},"server_identity_proof":{"domain":"example.com","key_id":"server-lt-fp","signature":"c2VydmVyLXNpZw=="},"server_nonce":"u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7s=","server_signature":"c2VydmVyLXNpZ25hdHVyZQ==","session_id":"01JTEST33333333333333333333","step":"response","type":"SEMP_HANDSHAKE","version":"1.0.0"}
 ```
 
 **Procedure:**
@@ -539,7 +539,7 @@ discovery responses.
             "address": "alice@example.com",
             "status": "semp",
             "transports": ["ws", "h2"],
-            "features": ["groups", "threads", "reactions"],
+            "extensions": ["semp.dev/device-sync", "semp.dev/read-receipts"],
             "server": "semp.example.com",
             "ttl": 3600
         },
@@ -832,7 +832,7 @@ criticality signaling, and size limits.
 extension is unknown to the implementation, it is silently ignored. Envelope
 processing continues normally.
 
-### 13.2 Vector: Required Extension — Known
+### 13.2 Vector: Required Extension, Known
 
 ```json
 {
@@ -855,7 +855,7 @@ Envelope is rejected with reason code `extension_unsupported`. The rejection
 MUST include the key `"semp.dev/message-expiry"` so the sender can identify
 which extension caused the failure.
 
-### 13.3 Vector: Required Extension — Unknown
+### 13.3 Vector: Required Extension, Unknown
 
 ```json
 {

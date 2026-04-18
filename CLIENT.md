@@ -97,8 +97,10 @@ On first launch or new device addition:
    first device.
 2. The client generates an encryption key pair (suite-specific KEM).
 3. The client generates a device key pair per `KEY.md` section 10.1.
-4. The client registers with the home server via `POST /v1/register`,
-   submitting its public keys and account credentials.
+4. The client registers with the home server via `POST` to the URL
+   advertised as `endpoints.register` in the server's configuration
+   document (`DISCOVERY.md` section 3.1.1), submitting its public keys
+   and account credentials.
 5. The server stores the public keys and returns its domain signing and
    encryption keys. The client caches these locally for handshake verification.
 
@@ -108,7 +110,10 @@ MUST never leave it.
 
 #### 2.2.1 Registration Endpoint
 
-Servers MUST implement `POST /v1/register` for client key registration.
+Servers MUST advertise a client registration endpoint as
+`endpoints.register` in their configuration document (`DISCOVERY.md`
+section 3.1.1) and MUST accept `POST` requests at that URL for client
+key registration.
 
 Request:
 

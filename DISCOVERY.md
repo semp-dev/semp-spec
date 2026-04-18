@@ -500,7 +500,10 @@ SHOULD batch multiple pending lookups into a single request where possible.
             "address": "user1@example.com",
             "status": "semp",
             "transports": ["ws", "h2", "quic"],
-            "features": ["groups", "threads", "reactions"],
+            "extensions": [
+                "semp.dev/device-sync",
+                "semp.dev/read-receipts"
+            ],
             "server": "semp.example.com",
             "ttl": 3600
         },
@@ -546,7 +549,7 @@ SHOULD batch multiple pending lookups into a single request where possible.
 | `address`    | `string`  | Yes      | The queried address.                                                        |
 | `status`     | `string`  | Yes      | One of the status values defined in section 4.6.                            |
 | `transports` | `array`   | No       | Supported transports. Present when `status` is `semp` or `legacy`.          |
-| `features`   | `array`   | No       | Supported SEMP features. Present only when `status` is `semp`.              |
+| `extensions` | `array`   | No       | Supported extension identifiers per `EXTENSIONS.md` section 6. Present only when `status` is `semp`. |
 | `server`     | `string`  | No       | Hostname of the server handling this address. Present when `status` is `semp` or `legacy`. |
 | `ttl`        | `integer` | Yes      | Seconds the result may be cached.                                           |
 
@@ -571,7 +574,7 @@ existence MUST NOT be inferred from the response.
 
 A conformant server responding to `SEMP_DISCOVERY` MUST:
 
-- Return the same `status`, `transports`, and `features` values for every
+- Return the same `status`, `transports`, and `extensions` values for every
   address on the same recipient domain, regardless of whether the address
   corresponds to a registered user. An address that does not exist on a
   SEMP-supporting domain MUST still receive `status: "semp"`.
