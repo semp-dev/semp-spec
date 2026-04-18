@@ -436,19 +436,27 @@ or by any other server handling the envelope in transit.
             "content": "base64-encoded-encrypted-attachment-content"
         }
     ],
-    "extensions": {}
+    "forwarded_from": null,
+    "extensions": {},
+    "sender_signature": {
+        "algorithm": "ed25519",
+        "key_id": "sender-identity-key-fingerprint",
+        "value": "base64-signature"
+    }
 }
 ```
 
 ### 6.2 Enclosure Fields
 
-| Field          | Type      | Required | Description                                                         |
-|----------------|-----------|----------|---------------------------------------------------------------------|
-| `subject`      | `string`  | No       | Subject of the correspondence. Belongs here because it is semantic content, not routing metadata. |
-| `content_type` | `string`  | Yes      | MIME type of the body. Use `multipart/alternative` for multiple formats. |
-| `body`         | `object`  | Yes      | Map of MIME type to encrypted body content (base64).                |
-| `attachments`  | `array`   | No       | List of attached files.                                             |
-| `extensions`   | `object`  | No       | Enclosure-layer extensions for content metadata.                    |
+| Field              | Type            | Required | Description                                                         |
+|--------------------|-----------------|----------|---------------------------------------------------------------------|
+| `subject`          | `string`        | No       | Subject of the correspondence. Belongs here because it is semantic content, not routing metadata. |
+| `content_type`     | `string`        | Yes      | MIME type of the body. Use `multipart/alternative` for multiple formats. |
+| `body`             | `object`        | Yes      | Map of MIME type to encrypted body content (base64).                |
+| `attachments`      | `array`         | No       | List of attached files.                                             |
+| `forwarded_from`   | `object\|null`  | Yes      | Forwarding evidence block. `null` if the envelope is not a forward. See section 6.6. |
+| `extensions`       | `object`        | No       | Enclosure-layer extensions for content metadata.                    |
+| `sender_signature` | `object`        | Yes      | Sender identity key signature over the enclosure. See section 6.5.  |
 
 ### 6.3 Attachment Fields
 
@@ -480,6 +488,209 @@ always include a `text/plain` representation as a baseline.
 When `content_type` is a single MIME type, the `body` object MUST contain
 exactly one key matching that type.
 
+### 6.5 Sender Signature
+
+`enclosure.sender_signature` is a signature produced by the sending user's
+identity key over the canonical bytes of the enclosure. It binds the
+enclosure plaintext to the sender's identity independently of the
+`seal.signature` (which binds ciphertext at the sender's domain).
+
+The sender_signature exists so that an enclosure plaintext, once decrypted,
+can be cryptographically attributed to its original sender by any party
+that subsequently obtains the plaintext. This is the foundation of forward
+provenance defined in section 6.6.
+
+#### 6.5.1 Signing Key
+
+The signing key MUST be the sending user's published identity key
+(`KEY.md` section 1.1). Device subkeys, ephemeral keys, and session keys
+MUST NOT be used. Identity is the property that survives forwarding; per
+device attribution is not.
+
+#### 6.5.2 Signature Scope
+
+The sender computes the signature as follows:
+
+1. Set `enclosure.sender_signature.algorithm` to the suite-bound signature
+   algorithm.
+2. Set `enclosure.sender_signature.key_id` to the fingerprint of the
+   identity key.
+3. Set `enclosure.sender_signature.value` to the empty string `""`.
+4. Compute the canonical JSON serialization of the entire enclosure object
+   per section 4.3 canonicalization rules.
+5. Sign the canonical bytes with the identity private key.
+6. Replace `enclosure.sender_signature.value` with the base64-encoded
+   signature.
+
+Every other field of the enclosure (`subject`, `content_type`, `body`,
+`attachments`, `forwarded_from`, `extensions`) is covered by the signature.
+
+#### 6.5.3 Signature Verification
+
+A recipient client MUST verify `enclosure.sender_signature` after decrypting
+the enclosure and before rendering any content to the user. Verification:
+
+1. Reconstruct the canonical bytes by setting `sender_signature.value` to
+   `""` and re-serializing per section 4.3.
+2. Fetch the sender's identity key indicated by `sender_signature.key_id`,
+   sourced from the sender's published key set (`KEY.md` section 3).
+3. Verify the signature against the canonical bytes.
+
+If verification fails, the recipient client MUST NOT display the enclosure
+content as authored by the claimed sender. The client SHOULD surface the
+verification failure to the user as a security warning. The client MUST
+NOT silently render the content.
+
+If `sender_signature.key_id` does not match any currently published or
+historically-published-and-now-revoked identity key for the sender, the
+client MUST treat verification as failed.
+
+#### 6.5.4 Non-Repudiation Property
+
+The sender signature is a non-repudiable signature over the enclosure
+content. A sender who signs an enclosure cannot later credibly deny having
+authored it, given the signature plus the plaintext.
+
+This is an intentional property of the design. SEMP prioritizes
+verifiable provenance (so that forwarded content can be attributed to its
+true author) over plausible deniability. Senders who require deniability
+SHOULD use ephemeral channels outside SEMP for such content.
+
+### 6.6 Forwarded Envelopes
+
+When a recipient client forwards a previously received envelope, the new
+envelope's enclosure carries a `forwarded_from` block containing the
+original enclosure plaintext and accompanying advisory metadata.
+
+A forward composes a fresh envelope addressed to the new recipient, sealed
+by the forwarder's domain and signed by the forwarder's identity key.
+The new envelope is structurally indistinguishable from any other envelope
+to routing servers; the forward is visible only to the new recipient
+client after enclosure decryption.
+
+#### 6.6.1 Forwarded Block Schema
+
+```json
+{
+    "original_enclosure_plaintext": {
+        "subject": "...",
+        "content_type": "...",
+        "body": { "...": "..." },
+        "attachments": [],
+        "forwarded_from": null,
+        "extensions": {},
+        "sender_signature": {
+            "algorithm": "ed25519",
+            "key_id": "original-sender-identity-key-fingerprint",
+            "value": "base64-signature"
+        }
+    },
+    "original_seal": { },
+    "original_postmark": { },
+    "original_sender_address": "alice@example.com",
+    "received_at": "2026-04-15T14:30:00Z",
+    "forwarder_attestation": {
+        "algorithm": "ed25519",
+        "key_id": "forwarder-identity-key-fingerprint",
+        "value": "base64-signature"
+    }
+}
+```
+
+#### 6.6.2 Forwarded Block Fields
+
+| Field                          | Type     | Required | Description                                                                                       |
+|--------------------------------|----------|----------|---------------------------------------------------------------------------------------------------|
+| `original_enclosure_plaintext` | `object` | Yes      | The full decrypted enclosure of the original envelope, including its `sender_signature`.          |
+| `original_seal`                | `object` | No       | The original envelope's seal, preserved verbatim. Advisory only (see section 6.6.4).              |
+| `original_postmark`            | `object` | No       | The original envelope's postmark, preserved verbatim. Advisory only (see section 6.6.4).          |
+| `original_sender_address`      | `string` | Yes      | The full sender address from the original envelope's `brief.from`. Bound by `forwarder_attestation`. |
+| `received_at`                  | `string` | Yes      | ISO 8601 UTC timestamp at which the forwarder received the original envelope.                     |
+| `forwarder_attestation`        | `object` | Yes      | Forwarder's identity key signature over the forwarded block. See section 6.6.3.                   |
+
+The new enclosure's own `subject`, `body`, and `attachments` MAY contain
+the forwarder's own commentary on the forwarded content. The original
+content lives only in `forwarded_from.original_enclosure_plaintext`. The
+forwarder MUST NOT modify `original_enclosure_plaintext` in any way; doing
+so would invalidate the original sender's `sender_signature` carried within
+it.
+
+#### 6.6.3 Forwarder Attestation
+
+`forwarded_from.forwarder_attestation` is a signature produced by the
+forwarder's identity key over the canonical bytes of the
+`forwarded_from` object with `forwarder_attestation.value` set to `""`.
+
+The attestation binds:
+
+- The original enclosure plaintext (and through its inner
+  `sender_signature`, the original sender's identity).
+- The advisory `original_seal` and `original_postmark` if present.
+- The claimed `original_sender_address`.
+- The `received_at` timestamp.
+
+The forwarder's identity is established by the new envelope's outer
+`enclosure.sender_signature` (section 6.5), which the new recipient
+verifies first. The attestation key in `forwarder_attestation.key_id`
+MUST match the `sender_signature.key_id` of the new enclosure. A new
+recipient MUST reject a `forwarded_from` block whose
+`forwarder_attestation.key_id` differs from the outer
+`sender_signature.key_id`.
+
+#### 6.6.4 Verification by the New Recipient
+
+A recipient client receiving an envelope with non-null
+`forwarded_from` MUST perform the following verification, in order, after
+the standard decryption flow (section 7.2):
+
+1. Verify the new envelope's `enclosure.sender_signature` per section 6.5.3.
+   This authenticates the forwarder.
+2. Verify `forwarded_from.forwarder_attestation` against the canonical
+   bytes of `forwarded_from` (with `forwarder_attestation.value` set to
+   `""`), using the forwarder's identity key. This authenticates the
+   forwarding act.
+3. Verify
+   `forwarded_from.original_enclosure_plaintext.sender_signature` per
+   section 6.5.3, using the original sender's identity key as indicated
+   by that signature's `key_id` and the
+   `forwarded_from.original_sender_address`. This authenticates the
+   original content as authored by the original sender.
+
+If steps 1 or 3 fail, the recipient client MUST NOT display the original
+content as attributed to the claimed original sender. If step 2 fails,
+the recipient client MUST NOT display the forwarded block at all and
+SHOULD treat the envelope as if `forwarded_from` were null, surfacing a
+security warning.
+
+`original_seal` and `original_postmark` are advisory only. The new
+recipient cannot independently verify `original_seal.signature` because
+the original ciphertext is not preserved in the forward. Clients MAY use
+these fields to display additional context (such as the original
+postmark expiry or message ID) but MUST NOT present them as
+cryptographically verified evidence.
+
+#### 6.6.5 Multi-Level Forwarding
+
+`original_enclosure_plaintext.forwarded_from` MAY itself be non-null,
+representing a forward of a forward. Verification in section 6.6.4
+applies recursively: the new recipient verifies each level of the
+forwarding chain using the inner `sender_signature` and
+`forwarder_attestation` at each level.
+
+A recipient MUST verify the full chain or treat any unverified inner
+level as advisory. A client that displays forwarded content from a
+chain SHOULD make the chain depth and the identity of each forwarder
+visible to the user.
+
+#### 6.6.6 Forwarding and Non-Repudiation
+
+Because `original_enclosure_plaintext.sender_signature` is preserved
+verbatim, a forwarded enclosure carries the original sender's
+non-repudiable signature to every downstream recipient. Senders who do
+not wish their content to be cryptographically attributable when
+forwarded SHOULD use ephemeral channels outside SEMP for such content.
+SEMP does not provide a sender-side opt-out from forward provenance.
+
 ---
 
 ## 7. Encryption Model
@@ -488,32 +699,37 @@ exactly one key matching that type.
 
 Sending an envelope follows this sequence:
 
-1. Compose the plaintext `brief` and `enclosure` as JSON objects.
-2. Generate two fresh independent random symmetric keys: `K_brief` and `K_enclosure`.
-3. Encrypt the `brief` JSON bytes under `K_brief`. Store result in `envelope.brief`.
-4. Encrypt the `enclosure` JSON bytes under `K_enclosure`. Store result in
-   `envelope.enclosure`.
-5. Fetch the recipient client's current public encryption key and the recipient
+1. Compose the plaintext `brief` and `enclosure` as JSON objects. If the
+   envelope is a forward, populate `enclosure.forwarded_from` per section
+   6.6, including the forwarder's `forwarder_attestation` signature.
+2. Compute `enclosure.sender_signature` over the canonical enclosure bytes
+   per section 6.5.2, using the sending user's identity key. The
+   resulting signature value is written into `enclosure.sender_signature`.
+3. Generate two fresh independent random symmetric keys: `K_brief` and `K_enclosure`.
+4. Encrypt the `brief` JSON bytes under `K_brief`. Store result in `envelope.brief`.
+5. Encrypt the (now signed) `enclosure` JSON bytes under `K_enclosure`. Store
+   result in `envelope.enclosure`.
+6. Fetch the recipient client's current public encryption key and the recipient
    server's published domain key. The client obtains these from its home server
    via `SEMP_KEYS` with `step: request` per `CLIENT.md` section 5.4.
-6. Encrypt `K_brief` under the recipient server's domain key. Store in
+7. Encrypt `K_brief` under the recipient server's domain key. Store in
    `seal.brief_recipients` keyed by the server's domain key fingerprint.
-7. Encrypt `K_brief` under the recipient client's encryption key. Store in
+8. Encrypt `K_brief` under the recipient client's encryption key. Store in
    `seal.brief_recipients` keyed by the client's key fingerprint.
-8. Encrypt `K_enclosure` under the recipient client's encryption key. Store in
+9. Encrypt `K_enclosure` under the recipient client's encryption key. Store in
    `seal.enclosure_recipients` keyed by the client's key fingerprint.
-9. Compose the `postmark`, including `postmark.session_id`.
+10. Compose the `postmark`, including `postmark.session_id`.
 
-Steps 1 through 9 are performed by the sending client. The client then
+Steps 1 through 10 are performed by the sending client. The client then
 transmits the assembled envelope to its home server, which performs the
 remaining steps. The client does not hold the domain private key or the
 session key material required for seal computation.
 
-10. Compute the canonical envelope bytes (both `seal.signature` and
+11. Compute the canonical envelope bytes (both `seal.signature` and
     `seal.session_mac` set to `""`, `postmark.hop_count` omitted).
-11. Sign the canonical bytes with the sender's domain private key. Store in
+12. Sign the canonical bytes with the sender's domain private key. Store in
     `seal.signature`.
-12. Compute a MAC over the canonical bytes using `K_env_mac` from the active
+13. Compute a MAC over the canonical bytes using `K_env_mac` from the active
     session. Store in `seal.session_mac`.
 
 ### 7.2 Decryption Flow
@@ -539,12 +755,17 @@ Receiving an envelope follows this sequence:
    and decrypts its entry in `seal.enclosure_recipients` to obtain `K_enclosure`.
 9. Client decrypts `envelope.brief` using `K_brief` and `envelope.enclosure`
    using `K_enclosure`. Parse both.
-10. Client verifies attachment hashes against decrypted attachment content.
+10. Client verifies `enclosure.sender_signature` per section 6.5.3 against
+    the sender's identity key. The client MUST NOT render enclosure content
+    if verification fails.
+11. If `enclosure.forwarded_from` is non-null, the client performs the
+    forwarded-envelope verification chain per section 6.6.4.
+12. Client verifies attachment hashes against decrypted attachment content.
 
 Steps 1 through 4 MUST all pass before any further processing. Each failure
 MUST produce an immediate, explicit rejection with the appropriate reason code.
 Step 1 may be performed by any routing server. Steps 2 through 7 are performed
-by the receiving server only. Steps 8 through 10 are performed by the client.
+by the receiving server only. Steps 8 through 12 are performed by the client.
 
 If step 5 fails, the server cannot decrypt the brief and MUST return an explicit
 rejection to the sending server indicating delivery failure.
@@ -934,6 +1155,41 @@ published. The recipient server's domain key fingerprint is public,
 consistent with the server's visibility in the postmark and handshake. Implementations with strong recipient
 anonymity requirements for client keys SHOULD consult the key management
 specification for guidance on key publication strategies.
+
+### 10.8 Forwarding Provenance
+
+`enclosure.sender_signature` (section 6.5) and `enclosure.forwarded_from`
+(section 6.6) together provide the forwarding provenance model.
+
+Anti-forgery: a forwarder cannot fabricate a forward that appears to
+originate from a third party. The original sender's identity key signature
+on the enclosure plaintext travels with the content. A forger would need
+the original sender's identity private key to produce a verifiable
+`forwarded_from.original_enclosure_plaintext.sender_signature`.
+
+Anti-tampering: a forwarder cannot alter the original content while
+preserving its provenance. Any modification to
+`original_enclosure_plaintext` invalidates the inner sender signature.
+
+Limits of evidence: the new recipient cannot independently verify the
+original envelope's `seal.signature` because the original ciphertext is
+not preserved. `original_seal` and `original_postmark` in the forwarded
+block are advisory only. The cryptographic provenance is the identity-key
+signature on the plaintext, not the domain-key signature on the
+ciphertext.
+
+The forwarder is bound by `forwarder_attestation` (section 6.6.3),
+which signs the forwarded block including the claimed
+`original_sender_address` and `received_at`. A forwarder who falsifies
+these fields is making a verifiable, non-repudiable claim under their
+own identity key.
+
+Identity-key compromise: an attacker who obtains a user's identity
+private key can forge that user's authorship of arbitrary content,
+including content carried in forwards composed by others. This risk is
+the same as for any signature-based authorship system. Identity key
+rotation and revocation per `KEY.md` sections 7 and 8 limit the window
+in which a compromised key can be used.
 
 ---
 
