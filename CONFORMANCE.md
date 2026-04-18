@@ -376,6 +376,22 @@ A conformant server MUST:
   connection rate limits, DoS mitigation entries) as SEMP block list
   entries or as federation-visible policy signals.
   (`DELIVERY.md` §5.3.1, `DESIGN.md` §2.2.1)
+- Enforce the recipient's published first-contact policy on every
+  envelope addressed to a recipient on the server's domain.
+  (`DELIVERY.md` §6.4, `KEY.md` §3.2)
+- Issue first-contact `proof_of_work` challenges of identical
+  difficulty for non-existent and existent recipient addresses, on
+  identical code paths, with indistinguishable response shape, size,
+  and timing. (`DELIVERY.md` §6.4.3, `DESIGN.md` §2.7)
+- Not return any reason code that distinguishes per-address existence
+  from policy rejection. Use `policy_forbidden` for both.
+  (`ENVELOPE.md` §9.3, `DESIGN.md` §2.7)
+- Apply per-sender-domain rate limits on submissions to
+  non-known-correspondent recipients and switch to `silent`
+  acknowledgment when the threshold is exceeded.
+  (`DELIVERY.md` §6.5)
+- Count submissions to non-existent and existent recipient addresses
+  identically for rate-limit purposes. (`DELIVERY.md` §6.5.1)
 
 A conformant server MAY:
 
@@ -814,7 +830,15 @@ A conformant client MUST:
   submit, where the client is a delegated client. (`CLIENT.md` §6.6.3)
 - Surface which recipients received a multi-recipient message and which did
   not. Partial failure MUST NOT be suppressed or aggregated.
+  (`CLIENT.md` §7.3)
+- Present envelopes from senders that are not yet known correspondents in a
+  separate first-contact area distinct from the primary inbox.
   (`CLIENT.md` §7.2)
+- Treat a user reply to a first-contact envelope as implicit approval of
+  the sender, performing the approval actions before transmitting the
+  reply. (`CLIENT.md` §7.2.2)
+- Not auto-approve first-contact senders based on heuristics. Approval
+  MUST be the result of an explicit user action. (`CLIENT.md` §7.2.3)
 
 ### 5.7 Legacy Interoperability
 

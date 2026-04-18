@@ -251,9 +251,15 @@ and `HANDSHAKE.md` section 4.1 are treated as recoverable for retry purposes:
 - `quota_exceeded`
 
 All other reason codes, including `blocked`, `seal_invalid`,
-`session_mac_invalid`, `envelope_expired`, `no_such_user`, and
-`policy_forbidden`, MUST be treated as non-recoverable. The sending server MUST
-NOT retry envelopes that have received a non-recoverable rejection.
+`session_mac_invalid`, `envelope_expired`, and `policy_forbidden`, MUST be
+treated as non-recoverable. The sending server MUST NOT retry envelopes that
+have received a non-recoverable rejection.
+
+The protocol does not define a per-address existence reason code (such as
+`no_such_user`). A non-existent recipient address MUST be answered with the
+same generic `policy_forbidden` rejection as any other policy refusal, in
+conformance with the existence indistinguishability requirement defined in
+`DESIGN.md` section 2.7 and enforced in section 6.4 of this document.
 
 A `silent` outcome MUST be treated as non-terminal and subject to the retry
 schedule. The sending server cannot distinguish silence caused by transient
@@ -500,6 +506,8 @@ Envelope received
   ├─ Decrypt K_brief from seal.brief_recipients using server domain key
   ├─ Decrypt brief using K_brief
   ├─ Check user policy              → rejected or silent
+  ├─ Check first-contact policy     → rejected: policy_forbidden (section 6.4)
+  ├─ Check rate limit               → silent (section 6.5)
   └─ Deliver to client              → delivered
 ```
 
@@ -693,6 +701,108 @@ All privacy constraints from section 8 apply across partition boundaries. A
 per section 8.2. The sending partition server MUST NOT disclose to the sending
 client whether an envelope was blocked versus undeliverable for other reasons,
 beyond what the acknowledgment type and reason code convey.
+
+### 6.4 First-Contact Enforcement
+
+A recipient server MUST enforce the first-contact policy published per
+`KEY.md` section 3.2 for envelopes addressed to recipients on its domain.
+Enforcement occurs after `brief` decryption (section 3) so that the
+sender address is available, and before envelope delivery to the
+recipient client.
+
+#### 6.4.1 Known Correspondent Definition
+
+A sender `S` is a known correspondent of recipient `R` if any of the
+following conditions hold:
+
+1. `R` has previously sent at least one envelope to `S` (outbound history).
+2. `R` has previously replied to an envelope from `S` (where the reply
+   set `brief.in_reply_to` to a `message_id` of an envelope from `S`).
+3. `R` has explicitly added `S` to their accepted-senders list through
+   a client action.
+
+The recipient server MAY observe condition 1 from `brief.from` of
+outbound envelopes and condition 2 from `brief.in_reply_to` correlated
+with the originating envelope's stored metadata. Condition 3 requires a
+client-initiated update transmitted as a signed message in the same
+manner as block list sync messages (section 7.1).
+
+The recipient server MUST treat a sender as known correspondent at the
+domain granularity (`brief.from`'s domain) by default. Operators MAY
+configure narrower granularity (per-address known correspondents) at
+the cost of more frequent first-contact gating.
+
+#### 6.4.2 Enforcement Procedure
+
+For each delivered envelope, the recipient server:
+
+1. Determines whether the sender is a known correspondent of the
+   recipient per section 6.4.1.
+2. If the sender is a known correspondent, proceeds to standard delivery.
+3. If the sender is not a known correspondent and the recipient's
+   policy is `mode: open`, proceeds to standard delivery.
+4. If the sender is not a known correspondent and the recipient's
+   policy is `mode: pow`:
+   - If `seal.first_contact_token` is present and verifies per
+     `HANDSHAKE.md` section 2.2a.4, proceeds to standard delivery.
+   - Otherwise, rejects with `reason_code: "policy_forbidden"` and
+     includes a fresh `proof_of_work` challenge in the rejection
+     response, formatted per `HANDSHAKE.md` section 2.2a.3.
+5. If the recipient's policy is `mode: invite_only`:
+   - If a valid invite token is presented, proceeds to standard
+     delivery. Invite token format is out of scope for this revision.
+   - Otherwise, rejects with `reason_code: "policy_forbidden"` and
+     does not include a challenge body (no challenge can satisfy the
+     policy).
+
+#### 6.4.3 Indistinguishable Rejection
+
+The rejection response for steps 4 and 5 MUST be identical in shape,
+size, and timing for non-existent recipient addresses and for existing
+addresses whose policy is being enforced. A recipient server MUST issue
+a `proof_of_work` challenge for envelopes addressed to non-existent
+addresses on its domain when the operator's default policy is `pow`,
+even though no token will ever be accepted, in order to maintain
+indistinguishability per `DESIGN.md` section 2.7.
+
+The recipient server MUST NOT reduce the number of `proof_of_work`
+challenge issuance computations for non-existent addresses or use
+faster code paths for them. Implementations MUST issue indistinguishable
+responses on indistinguishable code paths.
+
+#### 6.4.4 Once-Approved Senders
+
+A sender that has successfully delivered at least one envelope under
+first-contact PoW MUST be treated as a known correspondent for purposes
+of subsequent envelopes from the same sender domain to the same
+recipient address, until the recipient explicitly revokes that status.
+Subsequent envelopes from the same sender within the binding window
+MAY also reuse the same first_contact_token per `HANDSHAKE.md`
+section 2.2a.3.
+
+### 6.5 Sender Rate Limiting
+
+A recipient server MUST apply per-sender-domain rate limits on envelope
+submissions to non-known-correspondent recipients on its domain.
+
+#### 6.5.1 Threshold and Action
+
+When a sender domain exceeds the rate threshold (operator-configured;
+RECOMMENDED default 100 unknown-correspondent envelope submissions per
+hour), the recipient server MUST switch all subsequent rejections to
+that sender domain to `silent` acknowledgment per section 1.3, for the
+duration of the throttling window. Throttling windows SHOULD be at
+least 1 hour and SHOULD NOT exceed 24 hours.
+
+The threshold MUST count submissions to non-existent and existent
+recipient addresses identically. A counter that distinguished them
+would be an existence oracle.
+
+#### 6.5.2 Pre-Threshold Behavior
+
+Below the threshold, the recipient server returns `policy_forbidden`
+rejections with challenge bodies per section 6.4.3. The throttling
+mechanism is layered atop, not in place of, first-contact enforcement.
 
 ---
 

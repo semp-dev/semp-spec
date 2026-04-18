@@ -1096,7 +1096,46 @@ status has been received, either in the submission response or in a subsequent
 delivery event. Clients MUST distinguish all states above in the UI presented
 to the user.
 
-### 7.2 Multi-Recipient Partial Failure
+### 7.2 First-Contact Inbox
+
+When the recipient client receives an envelope from a sender that is not
+yet a known correspondent (`DELIVERY.md` section 6.4.1), the client SHOULD
+present the envelope in a separate first-contact area of the user
+interface, distinct from the primary inbox. The user MAY then approve,
+ignore, or block the sender.
+
+The criteria the client uses to determine "known correspondent" SHOULD
+match the home server's criteria (`DELIVERY.md` section 6.4.1). Where the
+client's local view differs from the server's, the client SHOULD treat
+the union of the two as the known set, so that no envelope from an
+already-trusted sender is gated on either side.
+
+#### 7.2.1 Approval Action
+
+When the user approves a first-contact sender, the client MUST:
+
+1. Add the sender to its local known correspondents store.
+2. Transmit a signed accepted-senders update to the home server, in the
+   same authentication model as block list sync messages
+   (`DELIVERY.md` section 7.1).
+3. Move the envelope into the primary inbox.
+
+#### 7.2.2 Reply Implies Approval
+
+When the user replies to an envelope still in the first-contact area,
+the client MUST treat the reply as an implicit approval of the sender
+and MUST perform the actions in section 7.2.1 before transmitting the
+reply.
+
+#### 7.2.3 No Auto-Approval
+
+The client MUST NOT auto-approve first-contact senders based on
+heuristics (sender reputation, message content scoring, attachment
+absence, prior contact within the user's address book). Approval MUST
+be the result of an explicit user action: tap, click, keyboard
+shortcut, or reply.
+
+### 7.3 Multi-Recipient Partial Failure
 
 When delivery fails for a subset of recipients in a multi-recipient message,
 the client MUST surface which recipients received the message and which did not.

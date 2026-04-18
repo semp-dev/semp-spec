@@ -154,6 +154,33 @@ sender intends to communicate with a recipient.
 Where such leaks exist, the specification documents them explicitly, describes
 their severity, and provides mechanisms to mitigate them.
 
+### 2.7 Per-Address Existence Is Not Observable
+
+A SEMP server MUST NOT permit a sender to determine, from any
+protocol-defined response, whether a particular recipient address exists
+on the recipient domain. This applies to discovery responses, key fetch
+responses, envelope rejection reason codes, and rejection response
+timing.
+
+Concretely:
+
+- Per-address existence MUST NOT be encoded in any reason code returned
+  to the sender. Non-existent addresses and policy-rejected existing
+  addresses MUST receive the same `policy_forbidden` rejection.
+- Discovery responses are domain-scoped, not address-scoped, per
+  `DISCOVERY.md` section 1 and section 7.
+- Key fetch for an unknown address MUST return a response that is
+  indistinguishable in shape, size, and timing from a fetch for an
+  existing address whose owner has not published keys.
+- First-contact challenges, rate limits, and any other gating
+  mechanisms MUST be applied identically to existent and non-existent
+  recipient addresses, so that the gating itself does not constitute
+  an oracle.
+
+The address book of a domain is private. A sender's correspondence
+intent is observable only at the domain level absent a successful
+delivery.
+
 ---
 
 ## 3. Non-Goals
