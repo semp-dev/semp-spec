@@ -205,7 +205,7 @@ capabilities. Nothing in this message identifies the client.
     "party": "client",
     "version": "1.0.0",
     "nonce": "base64-random-32-bytes",
-    "transport": "websocket",
+    "transport": "ws",
     "client_ephemeral_key": {
         "algorithm": "pq-kyber768-x25519",
         "key": "base64-encoded-ephemeral-public-key",
@@ -217,13 +217,10 @@ capabilities. Nothing in this message identifies the client.
             "x25519-chacha20-poly1305"
         ],
         "compression": ["zstd", "gzip", "none"],
-        "features": [
-            "groups",
-            "threads",
-            "reactions",
-            "edit",
-            "expiry",
-            "horizon"
+        "extensions": [
+            "semp.dev/device-sync",
+            "semp.dev/read-receipts",
+            "semp.dev/message-expiry"
         ]
     },
     "extensions": {}
@@ -237,10 +234,10 @@ capabilities. Nothing in this message identifies the client.
 | `type`                 | `string` | Yes      | MUST be `"SEMP_HANDSHAKE"`                                |
 | `version`              | `string` | Yes      | SEMP protocol version (semver)                                 |
 | `nonce`                | `string` | Yes      | Cryptographically random value, base64-encoded, min 32 bytes. Used for replay prevention and key derivation. |
-| `transport`            | `string` | Yes      | Transport in use. One of: `websocket`, `http2`, `quic`         |
+| `transport`            | `string` | Yes      | Transport in use. One of the identifiers defined in `TRANSPORT.md` section 4 (`ws`, `h2`, `quic`) or an extended binding identifier per `TRANSPORT.md` section 7. |
 | `client_ephemeral_key` | `object` | Yes      | Ephemeral public key for this session only. MUST NOT be reused.|
-| `capabilities`         | `object` | Yes      | Supported algorithms, compression, and features.               |
-| `extensions`           | `object` | No       | Handshake-layer extensions.                                    |
+| `capabilities`         | `object` | Yes      | Supported algorithms, compression, and extension identifiers advertised for this session. The `capabilities.extensions` array lists extension identifiers the client supports, per `EXTENSIONS.md` section 6. |
+| `extensions`           | `object` | No       | Handshake-layer extension entries (distinct from `capabilities.extensions`, which advertises session-wide extension support). See `EXTENSIONS.md` section 1. |
 
 The init message is NOT signed. Signing would require a key identifier, which
 would link this message to a client identity. Integrity of the init is
@@ -464,7 +461,10 @@ the shared session secret.
     "negotiated": {
         "encryption_algorithm": "pq-kyber768-x25519",
         "compression": "zstd",
-        "features": ["groups", "threads", "reactions"],
+        "extensions": [
+            "semp.dev/device-sync",
+            "semp.dev/read-receipts"
+        ],
         "max_envelope_size": 26214400
     },
     "server_signature": "signature-over-entire-message",
@@ -919,8 +919,10 @@ applies to user identity does not apply here.
             "x25519-chacha20-poly1305"
         ],
         "compression": ["zstd", "gzip", "none"],
-        "features": [
-            "groups", "threads", "reactions", "edit", "expiry", "horizon"
+        "extensions": [
+            "semp.dev/device-sync",
+            "semp.dev/read-receipts",
+            "semp.dev/message-expiry"
         ],
         "max_envelope_size": 52428800,
         "max_batch_size": 1000
@@ -1031,7 +1033,10 @@ message 2 is sent.
     "negotiated": {
         "encryption_algorithm": "pq-kyber768-x25519",
         "compression": "zstd",
-        "features": ["groups", "threads", "reactions"],
+        "extensions": [
+            "semp.dev/device-sync",
+            "semp.dev/read-receipts"
+        ],
         "max_envelope_size": 26214400,
         "max_batch_size": 500
     },
@@ -1155,7 +1160,7 @@ The client-to-server handshake exposes the following to a passive observer:
 
 - A connection was made to a SEMP server at a specific domain
 - The protocol version and transport type
-- The set of features the client supports (from message 1 capabilities)
+- The set of extensions the client supports (from message 1 capabilities)
 
 It does not expose:
 
