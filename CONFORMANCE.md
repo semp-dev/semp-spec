@@ -337,6 +337,16 @@ A conformant server MUST:
   (`DELIVERY.md` §7.2)
 - Send a delivery event notification to the client when the outcome of a
   queued envelope is known. (`CLIENT.md` §6.5)
+- Reject block list entries whose `entity.type` is `ip`, whose entity
+  fields contain an IP-address-shaped value, or that identify a network
+  range, CIDR block, autonomous system number, or geographic region
+  derived from IP. Block lists are protocol-layer trust artifacts and
+  MUST be keyed by user, domain, or server identity.
+  (`DELIVERY.md` §4.3.1, `DESIGN.md` §2.2.1)
+- Not propagate transport-layer operational defenses (firewall rules,
+  connection rate limits, DoS mitigation entries) as SEMP block list
+  entries or as federation-visible policy signals.
+  (`DELIVERY.md` §4.3.1, `DESIGN.md` §2.2.1)
 
 A conformant server MAY:
 
@@ -380,6 +390,25 @@ A conformant server MUST:
 - Not reject messages from zero-reputation domains solely because they are
   unknown, without explicit operator configuration. (`REPUTATION.md` §8.1,
   `DESIGN.md` §5.4)
+- Key every reputation ledger entry and every published observation record
+  by domain identity, never by IP address, network range, or other
+  transport-layer artifact. (`DESIGN.md` §2.2.1, `REPUTATION.md` §1.3)
+- Preserve a domain's accumulated reputation across source-IP changes.
+  A domain that migrates hosting, adopts a CDN, or becomes Tor-only MUST
+  NOT lose its reputation history. (`REPUTATION.md` §1.3)
+- Start unrelated SEMP domains that share a single hosting IP at
+  independent zero reputation. One domain's behavior MUST NOT taint
+  another domain on the same IP. (`REPUTATION.md` §1.3)
+- Accept federation handshakes regardless of source IP, including from
+  Tor exit nodes and other anonymizing transports, subject only to
+  domain-level policy and transport-layer operational defenses.
+  (`DESIGN.md` §2.2.1, `REPUTATION.md` §1.3)
+- Not let IP-keyed signals, transport-layer observations, or network-level
+  reputation data influence protocol-layer trust decisions (delivery
+  policy, block list propagation, gossip observations, abuse reports, or
+  federation-visible rate-limit responses). Transport-layer operational
+  defenses (DoS protection, connection rate limits) MAY be IP-keyed but
+  MUST stay at the transport layer. (`DESIGN.md` §2.2.1)
 - Verify observation signatures before using them. Discard observations
   signed by unknown or untrusted keys. (`REPUTATION.md` §9.1)
 - Not fabricate or inflate observation metrics. (`REPUTATION.md` §4.5)

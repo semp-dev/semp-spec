@@ -76,6 +76,51 @@ IP address history. A new domain starts with zero reputation. Trust is earned
 through observed behavior over time and is observable, transferable, and
 cryptographically verifiable.
 
+#### 2.2.1 Transport vs Trust Separation
+
+IP addresses are visible to SEMP implementations at the transport layer
+because TCP/IP requires them. This visibility is unavoidable. However,
+IP addresses MUST NOT be used as inputs to protocol-layer trust
+decisions. The separation is:
+
+- **Transport-layer operational defenses** MAY be IP-keyed. SYN flood
+  protection, per-IP connection caps, TLS handshake rate limiting, and
+  network-level DDoS mitigation operate on traffic characteristics and
+  are legitimate uses of IP addresses.
+- **Protocol-layer trust decisions** MUST be domain-keyed. Reputation,
+  block lists, delivery policy, gossip observations, abuse reports, and
+  federation rate limits that feed into trust evaluation all anchor to
+  cryptographic domain identity, never to IP.
+
+An implementation that lets IP signals influence protocol-layer trust
+decisions is non-conformant. An operator defending against connection-
+level abuse at the transport layer is not thereby corrupting the trust
+model, provided the IP-keyed decision stays at the transport layer and
+never appears in federation-visible state (block list propagation,
+observation records, abuse reports, rate-limit responses carrying a
+SEMP reason code).
+
+This separation has operational consequences that the protocol embraces
+deliberately:
+
+- Multiple unrelated SEMP domains MAY share a single IP (shared HTTPS
+  hosting). One bad neighbor MUST NOT contaminate the reputation of the
+  others.
+- A SEMP domain MAY present many IPs (CDN, multi-region, failover). The
+  domain's accumulated reputation MUST persist across IP changes.
+- A SEMP domain MAY be reached exclusively over Tor via a `.onion`
+  address. The source IP of incoming federation traffic is a Tor
+  circuit exit, and the receiving server MUST NOT use that IP as a
+  trust signal.
+- A SEMP domain MAY rotate its hosting infrastructure (change IPs
+  entirely) without disturbing its reputation. Conversely, an IP
+  previously associated with an abusive SEMP domain MUST NOT
+  automatically taint a different SEMP domain now hosted on the same IP.
+
+Conformant servers MUST accept federation handshakes regardless of
+source IP, subject only to domain-level policy and transport-layer
+operational defenses.
+
 ### 2.3 Rejection Must Be Explicit
 
 When a SEMP server declines to accept a message, it MUST say so immediately and

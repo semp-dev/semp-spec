@@ -340,6 +340,30 @@ Entity matching MUST use cryptographically verified identifiers: domain names
 from the verified postmark, key fingerprints from verified handshake identity.
 Display names and unverified metadata MUST NOT be used for matching.
 
+#### 4.3.1 Prohibited Entity Types
+
+The following entity types are PROHIBITED at the protocol layer, in
+conformance with the transport-vs-trust separation in `DESIGN.md`
+section 2.2.1:
+
+- **IP addresses** (IPv4 or IPv6): a block entry with
+  `type: "ip"` or with an IP-address-shaped value in any `entity.*`
+  field MUST be rejected as malformed. Block lists are protocol-layer
+  trust artifacts; IP addresses are transport-layer artifacts.
+- **Network ranges** (CIDR blocks, autonomous system numbers, geographic
+  regions derived from IP): similarly prohibited.
+- **TLS certificate fingerprints of intermediate infrastructure** (load
+  balancers, reverse proxies): the certificate that authenticates the
+  SEMP server's domain is the appropriate trust anchor, not the
+  certificate of an intermediary.
+
+Operators that wish to apply transport-layer operational defenses
+(SYN flood protection, connection rate limits, network-level DoS
+mitigation) MAY do so at the firewall or network stack, but those
+defenses MUST NOT be expressed as SEMP block list entries, MUST NOT be
+propagated across federation, and MUST NOT influence reputation
+observations published per `REPUTATION.md` section 5.1.
+
 ### 4.4 Delivery Scope
 
 | `scope`  | Applies to                                                                 |
