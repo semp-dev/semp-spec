@@ -437,13 +437,13 @@ handshake exchange.
 Message 1 (init) canonical form:
 
 ```json
-{"capabilities":{"compression":["zstd","none"],"encryption_algorithms":["pq-kyber768-x25519","x25519-chacha20-poly1305"],"extensions":["semp.dev/device-sync","semp.dev/read-receipts"]},"client_ephemeral_key":{"algorithm":"pq-kyber768-x25519","key":"Y2xpZW50LWVwaGVtZXJhbC1rZXk=","key_id":"client-eph-fp"},"extensions":{},"nonce":"qqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqs=","party":"client","step":"init","transport":"ws","type":"SEMP_HANDSHAKE","version":"1.0.0"}
+{"capabilities":{"encryption_algorithms":["pq-kyber768-x25519","x25519-chacha20-poly1305"],"extensions":["semp.dev/device-sync","semp.dev/read-receipts"]},"client_ephemeral_key":{"algorithm":"pq-kyber768-x25519","key":"Y2xpZW50LWVwaGVtZXJhbC1rZXk=","key_id":"client-eph-fp"},"extensions":{},"nonce":"qqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqs=","party":"client","step":"init","transport":"ws","type":"SEMP_HANDSHAKE","version":"1.0.0"}
 ```
 
 Message 2 (response) canonical form:
 
 ```json
-{"client_nonce":"qqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqs=","extensions":{},"negotiated":{"compression":"zstd","encryption_algorithm":"pq-kyber768-x25519","extensions":["semp.dev/device-sync","semp.dev/read-receipts"]},"party":"server","server_ephemeral_key":{"algorithm":"pq-kyber768-x25519","key":"c2VydmVyLWVwaGVtZXJhbC1rZXk=","key_id":"server-eph-fp"},"server_identity_proof":{"domain":"example.com","key_id":"server-lt-fp","signature":"c2VydmVyLXNpZw=="},"server_nonce":"u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7s=","server_signature":"c2VydmVyLXNpZ25hdHVyZQ==","session_id":"01JTEST33333333333333333333","step":"response","type":"SEMP_HANDSHAKE","version":"1.0.0"}
+{"client_nonce":"qqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqs=","extensions":{},"negotiated":{"encryption_algorithm":"pq-kyber768-x25519","extensions":["semp.dev/device-sync","semp.dev/read-receipts"]},"party":"server","server_ephemeral_key":{"algorithm":"pq-kyber768-x25519","key":"c2VydmVyLWVwaGVtZXJhbC1rZXk=","key_id":"server-eph-fp"},"server_identity_proof":{"domain":"example.com","key_id":"server-lt-fp","signature":"c2VydmVyLXNpZw=="},"server_nonce":"u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7s=","server_signature":"c2VydmVyLXNpZ25hdHVyZQ==","session_id":"01JTEST33333333333333333333","step":"response","type":"SEMP_HANDSHAKE","version":"1.0.0"}
 ```
 
 **Procedure:**
