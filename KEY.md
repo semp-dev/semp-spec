@@ -234,7 +234,67 @@ request message:
 }
 ```
 
-### 3.2 DNS-Based User Key Publication (Future Consideration)
+### 3.2 First-Contact Policy
+
+The `SEMP_KEYS` response MAY include a `first_contact_policy` block per
+key record subject. The policy advises senders that have no prior
+correspondence with the subject what additional friction the recipient's
+home server will apply. Publication of the policy is opt-in; absent
+publication, senders MUST assume `mode: "open"`.
+
+```json
+{
+    "type": "SEMP_KEYS",
+    "step": "response",
+    "version": "1.0.0",
+    "id": "echoed-request-id",
+    "timestamp": "2025-06-10T19:56:34Z",
+    "keys": [ ],
+    "first_contact_policy": {
+        "mode": "pow",
+        "pow_difficulty": 22,
+        "invite_required": false
+    },
+    "signature": { }
+}
+```
+
+| Field             | Type      | Required | Description                                                                  |
+|-------------------|-----------|----------|------------------------------------------------------------------------------|
+| `mode`            | `string`  | Yes      | One of: `open`, `pow`, `invite_only`. See section 3.2.1.                     |
+| `pow_difficulty`  | `integer` | When `mode == pow` | Leading zero bits required for the first-contact challenge. MUST be in the range 0 to 28 inclusive, subject to the difficulty cap in `HANDSHAKE.md` section 2.2a.2. |
+| `invite_required` | `boolean` | When `mode == invite_only` | When `true`, the recipient accepts envelopes only from senders presenting a valid invite token. Invite token issuance and binding are out of scope for this revision. |
+
+#### 3.2.1 Modes
+
+| Mode          | Behavior                                                                                                              |
+|---------------|------------------------------------------------------------------------------------------------------------------------|
+| `open`        | No first-contact friction. All envelopes proceed through the standard delivery pipeline.                              |
+| `pow`         | First-contact envelopes from unknown sender domains MUST carry a valid `seal.first_contact_token` per `HANDSHAKE.md` section 2.2a.4. |
+| `invite_only` | Envelopes from unknown sender domains MUST carry a valid invite token. Invite tokens are out of scope for this revision. |
+
+A sender's home server fetching the recipient's key record MUST cache the
+`first_contact_policy` alongside the key record and MUST honor it when
+composing envelopes to that recipient.
+
+The recipient's home server MUST enforce the published policy regardless
+of what the sender's server caches. The published policy is advisory to
+senders; it is normative to the recipient server.
+
+#### 3.2.2 Indistinguishability
+
+A recipient server MUST publish the same `first_contact_policy` for all
+addresses on its domain that have published any policy at all, OR MUST
+publish no policy and apply a per-recipient policy internally. A
+per-address policy publication that varies by address would constitute
+an existence oracle. See `DESIGN.md` section 2.7.
+
+When a recipient has no published key record, the home server SHOULD
+behave as if the recipient's policy were `pow` with the operator's
+default difficulty, in order to prevent enumeration via missing-key
+inference.
+
+### 3.3 DNS-Based User Key Publication (Future Consideration)
 
 Whether user keys can be published directly in DNS (for example via CERT or
 URI resource records) is an open question. DNS-based user key publication

@@ -359,7 +359,83 @@ when operator policy anticipates clients on slow links. Initiators MUST
 accept any expiry at or above the floor and MUST NOT impose their own
 upper bound on `expires` beyond ordinary clock skew tolerance.
 
-#### 2.2a.3 Future Challenge Types
+#### 2.2a.3 First-Contact Proof of Work
+
+A `proof_of_work` challenge MAY be issued by a recipient server in response
+to an envelope submission, not only during a handshake, when the recipient's
+first-contact policy requires it (`KEY.md` section 3.5, `DELIVERY.md`
+section 6.4). The challenge format is identical to the in-handshake
+`proof_of_work` challenge defined in section 2.2a.2 and is delivered as a
+field of a `policy_forbidden` rejection response.
+
+The challenge is bound to a (sender_domain, recipient_address, hour_bucket)
+tuple by including those values in the `prefix` derivation. The exact
+binding is defined as:
+
+```
+prefix = base64( random_bytes(16) || H( sender_domain || recipient_address || hour_bucket ) )
+```
+
+Where `hour_bucket` is the integer hour-precision Unix timestamp at the
+time of issuance, `H` is SHA-256, and `||` denotes byte concatenation.
+
+The recipient server MUST NOT vary `difficulty` based on whether the
+recipient address exists. The same difficulty MUST be issued for
+non-existent and existent recipients, in conformance with the existence
+indistinguishability requirement in `DESIGN.md` section 2.7.
+
+The sender's server, on receiving a `policy_forbidden` rejection that
+carries a `challenge` body, MAY compute a solution and resubmit the
+envelope. The solved token is carried in `seal.first_contact_token` per
+section 2.2a.4.
+
+The recipient server MUST accept a valid `first_contact_token` for any
+envelope from the same sender_domain to the same recipient_address within
+the bound hour_bucket and the next hour_bucket (a two-hour acceptance
+window). Tokens older than two hour_buckets MUST be rejected as expired.
+
+#### 2.2a.4 first_contact_token Schema
+
+The `seal.first_contact_token` field on an envelope (`ENVELOPE.md` section
+4.2) carries a previously solved first-contact challenge:
+
+```json
+{
+    "challenge_id": "challenge-ulid-from-original-rejection",
+    "algorithm": "sha256",
+    "prefix": "base64-prefix-from-original-challenge",
+    "difficulty": 22,
+    "hour_bucket": 489657,
+    "nonce": "base64-solution-nonce",
+    "issued_by": "recipient.example.com"
+}
+```
+
+| Field          | Type      | Required | Description                                                                  |
+|----------------|-----------|----------|------------------------------------------------------------------------------|
+| `challenge_id` | `string`  | Yes      | The `challenge_id` of the rejection response that issued this challenge.     |
+| `algorithm`    | `string`  | Yes      | Hash algorithm. MUST be `sha256`.                                            |
+| `prefix`       | `string`  | Yes      | Base64-encoded prefix as issued by the recipient server.                     |
+| `difficulty`   | `integer` | Yes      | Leading zero bits required, as issued. Subject to the difficulty cap.        |
+| `hour_bucket`  | `integer` | Yes      | Hour-precision Unix timestamp from issuance.                                 |
+| `nonce`        | `string`  | Yes      | Base64-encoded nonce that satisfies the difficulty when hashed with prefix.  |
+| `issued_by`    | `string`  | Yes      | Hostname of the recipient server that issued the challenge.                  |
+
+A recipient server MUST verify that:
+
+1. `challenge_id` matches a challenge it previously issued.
+2. `prefix` matches the prefix recorded for that challenge.
+3. `H(prefix || nonce)` has at least `difficulty` leading zero bits.
+4. The challenge's `hour_bucket` is the current hour_bucket or the
+   immediately preceding one.
+
+If verification succeeds, the recipient server MUST treat the envelope as
+having satisfied the first-contact policy for the binding tuple. If
+verification fails, the recipient server MUST reject the envelope with
+`reason_code: "policy_forbidden"` per the indistinguishability requirement
+in `DESIGN.md` section 2.7; the rejection MAY include a fresh challenge.
+
+#### 2.2a.5 Future Challenge Types
 
 Additional challenge types MAY be defined in future revisions of this
 specification or via extensions using the standard namespacing convention

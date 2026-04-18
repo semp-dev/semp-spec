@@ -203,6 +203,7 @@ invalid `seal.session_mac` MUST reject the envelope with `reason_code:
         "enclosure_recipients": {
             "recipient-client-key-fingerprint": "base64-K_enclosure-encrypted-under-client-key"
         },
+        "first_contact_token": null,
         "extensions": {}
     }
 }
@@ -210,15 +211,16 @@ invalid `seal.session_mac` MUST reject the envelope with `reason_code:
 
 ### 4.2 Seal Fields
 
-| Field                  | Type     | Required | Description                                                        |
-|------------------------|----------|----------|--------------------------------------------------------------------|
-| `algorithm`            | `string` | Yes      | Algorithm used for signing and key encapsulation.                  |
-| `key_id`               | `string` | Yes      | Fingerprint of the sender domain key used to produce `seal.signature`. |
-| `signature`            | `string` | Yes      | Domain key signature over canonical envelope bytes. See section 4.3. |
-| `session_mac`          | `string` | Yes      | Session key MAC over canonical envelope bytes. See section 4.3.    |
-| `brief_recipients`     | `object` | Yes      | Map of key fingerprints to encrypted copies of `K_brief`. Includes both the recipient server's domain key and the recipient client's encryption key. See section 4.4. |
-| `enclosure_recipients` | `object` | Yes      | Map of key fingerprints to encrypted copies of `K_enclosure`. Includes only the recipient client's encryption key. See section 4.4. |
-| `extensions`           | `object` | No       | Seal-layer extensions.                                             |
+| Field                  | Type            | Required | Description                                                        |
+|------------------------|-----------------|----------|--------------------------------------------------------------------|
+| `algorithm`            | `string`        | Yes      | Algorithm used for signing and key encapsulation.                  |
+| `key_id`               | `string`        | Yes      | Fingerprint of the sender domain key used to produce `seal.signature`. |
+| `signature`            | `string`        | Yes      | Domain key signature over canonical envelope bytes. See section 4.3. |
+| `session_mac`          | `string`        | Yes      | Session key MAC over canonical envelope bytes. See section 4.3.    |
+| `brief_recipients`     | `object`        | Yes      | Map of key fingerprints to encrypted copies of `K_brief`. Includes both the recipient server's domain key and the recipient client's encryption key. See section 4.4. |
+| `enclosure_recipients` | `object`        | Yes      | Map of key fingerprints to encrypted copies of `K_enclosure`. Includes only the recipient client's encryption key. See section 4.4. |
+| `first_contact_token`  | `object\|null`  | Yes      | Proof-of-work token presented in response to a first-contact challenge. `null` when not required or not yet issued. See `DELIVERY.md` section 6.4 and `HANDSHAKE.md` section 2.2a.4. |
+| `extensions`           | `object`        | No       | Seal-layer extensions.                                             |
 
 ### 4.3 Signature Scope and Canonicalization
 
@@ -1044,15 +1046,16 @@ The following reason codes apply to envelope rejection. They are a subset of
 the reason codes defined in `HANDSHAKE.md` section 4.1, applied
 at the envelope layer:
 
-| Reason code         | Meaning                                                                  |
-|---------------------|--------------------------------------------------------------------------|
-| `blocked`           | The sender or their domain is blocked.                                   |
-| `handshake_invalid` | The session referenced by `postmark.session_id` has been invalidated.   |
-| `handshake_expired` | The session TTL has elapsed. Sender server should re-handshake and retry.|
-| `no_session`        | `postmark.session_id` is absent or does not reference a known session.   |
+| Reason code             | Meaning                                                                  |
+|-------------------------|--------------------------------------------------------------------------|
+| `blocked`               | The sender or their domain is blocked. MAY be returned only when the recipient's policy permits revealing the block. Otherwise `policy_forbidden` MUST be returned in its place. |
+| `handshake_invalid`     | The session referenced by `postmark.session_id` has been invalidated.   |
+| `handshake_expired`     | The session TTL has elapsed. Sender server should re-handshake and retry.|
+| `no_session`            | `postmark.session_id` is absent or does not reference a known session.   |
 | `seal_invalid`          | `seal.signature` domain key verification failed.                         |
 | `session_mac_invalid`   | `seal.session_mac` session key MAC verification failed.                  |
 | `envelope_expired`      | `postmark.expires` is in the past.                                       |
+| `policy_forbidden`      | Delivery refused for policy reasons. The protocol does not distinguish among the underlying causes through this code. The rejection response MAY include a `challenge` body inviting the sender to retry with proof of work. See `DELIVERY.md` section 6.4 and `DESIGN.md` section 2.7. |
 
 The sender server MUST handle `handshake_invalid`, `handshake_expired`, and
 `no_session` as recoverable conditions by establishing a new session and
