@@ -108,22 +108,29 @@ user partitioning via an additional TXT record:
 _semp-partition.example.com.  3600  IN  TXT  "v=semp1;strategy=hash;servers=8;algorithm=sha256"
 ```
 
-| Strategy | Description                                         |
-|----------|-----------------------------------------------------|
-| `alpha`  | Alphabetical ranges mapped to specific servers.     |
-| `hash`   | `hash(username) mod N` determines the server index. |
-| `lookup` | A partition server must be queried for the mapping. |
+| Strategy | Description                                         | Leaks Existence |
+|----------|-----------------------------------------------------|-----------------|
+| `hash`   | `hash(username) mod N` determines the server index. | No              |
+| `alpha`  | Alphabetical ranges mapped to specific servers.     | No              |
+| `lookup` | A partition server must be queried for the mapping. | Yes, unless authenticated. |
 
-#### Alpha Partitioning
+The `hash` strategy is RECOMMENDED. It is deterministically computable by
+any party from the address alone, so it leaks no information beyond what
+the address itself already carries.
 
-```
-_semp-partition-a-f.example.com.  3600  IN  SRV  10  10  443  semp-1.example.com.
-_semp-partition-g-m.example.com.  3600  IN  SRV  10  10  443  semp-2.example.com.
-_semp-partition-n-s.example.com.  3600  IN  SRV  10  10  443  semp-3.example.com.
-_semp-partition-t-z.example.com.  3600  IN  SRV  10  10  443  semp-4.example.com.
-```
+The `alpha` strategy is PERMITTED and leaks only the alphabetical bucket
+of the recipient, which is a weak signal roughly equivalent to the first
+letter of the username.
 
-#### Hash Partitioning
+The `lookup` strategy requires a partition server to resolve each address
+to a specific delivery server. A server that answers lookup queries
+reveals, by construction, whether a given address exists on the domain.
+This is an address harvesting surface. Operators SHOULD NOT use the
+`lookup` strategy. Operators that MUST use it (for deployments where
+neither hash nor alpha partitioning is operationally feasible) MUST
+follow the authenticated-lookup requirement in section 2.4.4.
+
+#### 2.4.1 Hash Partitioning
 
 The sending server computes:
 
@@ -134,7 +141,16 @@ server_index = SHA-256(username@domain) mod number_of_servers
 And maps the index to a server via additional SRV records published under
 `_semp-partition-<index>.example.com`.
 
-#### Lookup Partitioning
+#### 2.4.2 Alpha Partitioning
+
+```
+_semp-partition-a-f.example.com.  3600  IN  SRV  10  10  443  semp-1.example.com.
+_semp-partition-g-m.example.com.  3600  IN  SRV  10  10  443  semp-2.example.com.
+_semp-partition-n-s.example.com.  3600  IN  SRV  10  10  443  semp-3.example.com.
+_semp-partition-t-z.example.com.  3600  IN  SRV  10  10  443  semp-4.example.com.
+```
+
+#### 2.4.3 Lookup Partitioning
 
 When `strategy=lookup`, the sending server first queries a designated partition
 server to resolve which delivery server handles the target user. The partition
@@ -144,9 +160,33 @@ server address is published as a separate SRV record:
 _semp-partition-lookup.example.com.  3600  IN  SRV  10  10  443  partition.example.com.
 ```
 
-The lookup query is subject to the same anonymity constraints as protocol
-discovery: the querying server MUST NOT reveal the sender's identity in the
-partition lookup request.
+#### 2.4.4 Authenticated Lookup Requirement
+
+A partition server that implements the `lookup` strategy MUST require
+authenticated discovery per section 6.2 for every query. Anonymous lookup
+queries MUST be rejected with a generic response that is indistinguishable
+for valid and invalid addresses.
+
+A conformant partition server MUST:
+
+- Verify the `semp.dev/auth` signature on every lookup request before
+  returning per-address routing information.
+- Apply per-requester rate limits with per-domain reputation budgeting
+  per section 6.2.
+- Log every authenticated query with the requester domain, query
+  timestamp, and address count for audit purposes.
+- Return a generic negative response for addresses that do not exist,
+  indistinguishable in structure, size, and timing from responses for
+  existing addresses.
+
+A partition server MUST NOT return per-address routing information to
+anonymous requests. Operators that wish to serve anonymous requests
+MUST use `hash` or `alpha` partitioning instead.
+
+The lookup query is additionally subject to the anonymity constraints in
+section 1.2: the querying server MUST NOT reveal the sender's identity
+(the specific user on whose behalf the query is issued) in the partition
+lookup request, even when authenticating at the domain level.
 
 ---
 
@@ -514,14 +554,49 @@ SHOULD batch multiple pending lookups into a single request where possible.
 
 | Status          | Meaning                                                                           |
 |-----------------|-----------------------------------------------------------------------------------|
-| `semp`          | Address supports SEMP. Handshake and envelope delivery may proceed.               |
-| `legacy`        | No SEMP support found. MX records confirm SMTP is available. Client SMTP fallback is possible. |
-| `not_found`     | No SEMP support found and no MX records found. The domain cannot receive mail by any known method. Per-address existence is not checked. |
+| `semp`          | The recipient domain supports SEMP. Handshake and envelope delivery may proceed.  |
+| `legacy`        | The recipient domain does not support SEMP but has MX records. Client SMTP fallback is possible. |
+| `not_found`     | The recipient domain supports neither SEMP nor SMTP. The domain cannot receive mail by any known method. |
 
 These three statuses map directly to the submission response values in
 `CLIENT.md` section 6.3: `semp` → proceed with SEMP delivery; `legacy` →
 return `legacy_required` to client; `not_found` → return `recipient_not_found`
 to client.
+
+#### 4.6.1 Statuses Are Domain-Level
+
+The status values defined in this section describe the **recipient domain's
+capability**, not the existence of an individual address. Per-address
+existence MUST NOT be inferred from the response.
+
+A conformant server responding to `SEMP_DISCOVERY` MUST:
+
+- Return the same `status`, `transports`, and `features` values for every
+  address on the same recipient domain, regardless of whether the address
+  corresponds to a registered user. An address that does not exist on a
+  SEMP-supporting domain MUST still receive `status: "semp"`.
+- Return identical `ttl` values for every address on the same recipient
+  domain, to prevent timing-based enumeration across valid and invalid
+  addresses.
+- Return a `server` field that is either domain-level (the same hostname
+  for every address on the domain) or derivable by the requester without
+  server-side knowledge (for example, a hash-partitioned server index
+  computable from the address per section 2.4). Per-user server
+  assignments that require server-side lookup MUST NOT appear in
+  responses to anonymous requests; see section 2.4 and section 6.2 for
+  the authenticated-discovery requirement.
+- Not include `recipient_status`, mailbox existence flags, account
+  activity timestamps, or any other per-user signal in the result
+  object. The result object fields defined in section 4.5 are exhaustive
+  for anonymous discovery.
+
+The only address-dependent field in a response MAY be the `address` field
+itself, which echoes the queried address. Implementations MUST NOT use
+the response to distinguish "this user exists" from "this user does not
+exist."
+
+This rule exists to prevent discovery from becoming an address harvesting
+endpoint. Additional discussion appears in section 8.3.
 
 The response MUST be signed by the responding server's domain key. The querying
 server MUST verify this signature before caching or acting on the results.
@@ -761,26 +836,121 @@ Implementations SHOULD:
 
 ### 6.2 Authenticated Discovery
 
-When a server requires authenticated lookup requests (for example, to enforce
-stricter rate limits on known partners versus anonymous queries), authentication
-MAY be declared in `extensions`:
+#### 6.2.1 Purpose
+
+Authenticated discovery allows a querying server to cryptographically
+identify itself to the target server at the application layer. The
+querying server signs each request with its domain signing key; the
+target verifies the signature against the querying server's published
+domain key.
+
+Authentication is a rate-limiting, audit, and reputation tool. It is not
+an access control gate. With the exception of partition lookup queries
+(section 2.4.4), servers MUST NOT require authenticated discovery as a
+condition of SEMP interoperability. An anonymous request from an unknown
+domain MUST still receive a valid response, subject to the rate limits
+defined in section 6.2.4.
+
+#### 6.2.2 Request Signature Format
+
+Authenticated discovery is declared via a reserved extension in the
+`extensions` field of the `SEMP_DISCOVERY` request:
 
 ```json
 "extensions": {
     "semp.dev/auth": {
         "method": "domain_key",
-        "key_id": "querying-server-key-fingerprint",
-        "signature": "base64-signature-over-request-id-and-timestamp"
+        "key_id": "querying-server-domain-key-fingerprint",
+        "signature": "base64-signature-over-canonical-request"
     }
 }
 ```
 
-Servers MUST NOT require authenticated discovery as a condition of SEMP
-interoperability. Authentication in discovery is a rate-limiting and policy
-tool, not an access control gate. An unauthenticated request from an unknown
-domain MUST still receive a valid response, subject to rate limiting.
+| Field       | Type     | Required | Description                                                              |
+|-------------|----------|----------|--------------------------------------------------------------------------|
+| `method`    | `string` | Yes      | Authentication method. MUST be `"domain_key"` for this version.          |
+| `key_id`    | `string` | Yes      | SHA-256 fingerprint of the querying server's domain signing key.         |
+| `signature` | `string` | Yes      | Base64-encoded signature over the canonical form of the request.         |
 
-Servers MAY apply stricter rate limits to unauthenticated requests.
+The signature MUST cover the canonical JSON form of the request with the
+`signature` field excluded from the canonical form. The canonical form is
+computed per `ENVELOPE.md` section 4.3 (JCS-style canonicalization,
+sorted keys, no insignificant whitespace).
+
+#### 6.2.3 Verification
+
+A target server that receives an authenticated request MUST:
+
+1. Extract the `key_id` from `extensions["semp.dev/auth"]`.
+2. Resolve the querying server's domain (from the TLS connection or from
+   a domain supplied in the signature header, as operator policy
+   permits) to its configuration document.
+3. Fetch the domain keys from `endpoints.domain_keys` and locate the key
+   matching `key_id`.
+4. Recompute the canonical form of the request with the `signature`
+   field excluded.
+5. Verify the signature against the resolved public key.
+6. Reject the request if the signature is invalid, the key is unknown,
+   the domain key is revoked, or the `timestamp` is outside a small
+   clock-skew window (RECOMMENDED: five minutes).
+
+An authenticated request whose signature fails verification MUST be
+treated as if it were anonymous for the purpose of rate limiting and
+policy, and the verification failure MUST be logged. Target servers
+SHOULD NOT return signature-specific error codes; failed authentication
+reduces to "you are treated as anonymous" rather than producing a
+distinguishable error, so that authentication is never a side channel
+for probing the target's policy.
+
+#### 6.2.4 Rate Limiting Tiers
+
+A conformant server SHOULD apply different rate limits based on the
+requester's authentication status and reputation:
+
+| Requester class                                             | Recommended limit                                        |
+|-------------------------------------------------------------|----------------------------------------------------------|
+| Anonymous (no signature)                                    | Strict. RECOMMENDED ceiling: 10 lookup addresses per minute per source network prefix. |
+| Authenticated, zero reputation                              | Moderate. RECOMMENDED ceiling: 100 lookup addresses per minute per requester domain. |
+| Authenticated, established reputation                       | Operator-policy-driven. RECOMMENDED ceiling: 10,000 lookup addresses per minute per requester domain. |
+| Authenticated, `hostile` or throttled reputation            | Below the anonymous tier, or rejected with `rate_limited`. |
+
+Rate limits MUST be enforced per requester identity (domain for
+authenticated requests, network prefix for anonymous requests). A server
+that cannot accurately distinguish requesters (for example, behind a
+NAT) MUST apply the most restrictive applicable tier.
+
+Anonymous rate limit exhaustion MUST result in a response with
+`reason_code: "rate_limited"` or an equivalent soft-fail, not a silent
+drop. Silent drops defeat the explicit-rejection principle
+(`DESIGN.md` section 2.3).
+
+#### 6.2.5 Reputation Integration
+
+A target server MAY record authenticated discovery patterns per
+requester domain and publish observations under `protocol_abuse`
+(`REPUTATION.md` section 3.4) when a requester exhibits harvesting
+behavior. Patterns that justify an observation include:
+
+- Sustained query volume across a window broader than the requester's
+  plausible correspondence footprint.
+- High ratio of unique queried addresses to successful subsequent
+  envelope deliveries.
+- Queries that systematically probe common username patterns against
+  the target's address space.
+
+Authenticated discovery makes these patterns attributable. Anonymous
+discovery, even at its strict rate limit, cannot be attributed beyond
+the network layer and cannot feed into reputation observations about
+specific peer domains.
+
+#### 6.2.6 Authorization Scope
+
+Authentication identifies the querying **server domain**, not the user
+on whose behalf the query is made. A conformant server MUST NOT
+interpret authenticated discovery as an identification of an individual
+user. Queries remain anonymous at the user level even when
+authenticated at the server level, consistent with the privacy
+constraints in section 1.2.
 
 ---
 
@@ -879,14 +1049,79 @@ a rogue server. Mitigations:
 
 ### 8.3 Address Harvesting
 
-Unauthenticated lookup requests could be used to enumerate valid addresses on
-a domain. Mitigations:
+The discovery endpoint is a potential address harvesting surface. An abuser
+submits candidate addresses and observes which ones receive differential
+responses to enumerate the recipient domain's user base.
 
-- Rate limiting on unauthenticated requests
-- Servers MAY return identical TTLs for valid and invalid addresses to prevent
-  timing-based enumeration
-- Servers MAY return a generic negative result for addresses that do not exist,
-  without distinguishing between "unknown user" and "user exists but not SEMP"
+Hashing addresses at the wire layer does not prevent harvesting. The
+practical email address space is dictionary-attackable (names and common
+patterns cover most real addresses), and any response the target server
+can compute from plaintext addresses it can equally compute from hashed
+addresses. Hashing only reduces collateral exposure in operational logs,
+which is a separate concern addressed in section 8.3.4.
+
+The protocol-level defenses against harvesting are layered:
+
+#### 8.3.1 Domain-Level Statuses Are Mandatory
+
+The status values defined in section 4.6 describe the recipient domain's
+capability, not per-user existence. A conformant server MUST return
+identical responses for every address on the same domain regardless of
+whether the address corresponds to a registered user. This is the
+primary mechanical defense: if responses cannot differentiate existing
+from non-existing addresses, harvesting via the standard discovery
+endpoint is not possible.
+
+#### 8.3.2 Partition Lookup Requires Authentication
+
+The `lookup` partition strategy (section 2.4) resolves addresses to
+specific delivery servers and necessarily reveals address existence. A
+partition server MUST require authenticated discovery (section 6.2) for
+every lookup query and MUST return a generic response that is
+indistinguishable for valid and invalid addresses to anonymous queries.
+Authenticated queries are attributable to a specific requester domain,
+which enables reputation-based defenses against harvesting.
+
+Operators are strongly encouraged to use `hash` or `alpha` partitioning
+instead, both of which are deterministically computable by the requester
+without server-side lookup and therefore leak no information.
+
+#### 8.3.3 Rate Limiting and Reputation
+
+Anonymous discovery MUST be rate-limited per section 6.2.4. Authenticated
+discovery MUST be attributable to a requester domain and MUST feed into
+reputation observations per section 6.2.5. A requester that exhibits
+sustained harvesting patterns becomes subject to `protocol_abuse`
+observation records (`REPUTATION.md` section 3.4), which peers observe
+and can act on.
+
+Attribution is the practical constraint on harvesters. An abuser
+unwilling to burn a domain's reputation cannot sustain harvesting under
+authenticated discovery; an abuser willing to burn domains must do so
+one at a time, raising the per-harvested-address cost substantially
+above what anonymous probing offers.
+
+#### 8.3.4 Operational Log Hygiene
+
+Servers SHOULD hash plaintext addresses before writing them to access
+logs, audit logs, telemetry pipelines, or any other operational data
+that is not the protocol state itself. The hashing is for operational
+privacy, not enumeration resistance: it keeps personal data out of
+surfaces that are not always reviewed for disclosure risk (CDN logs,
+request traces, debugging captures, snapshot backups). The
+recommendation does not change the wire protocol.
+
+#### 8.3.5 What This Does Not Prevent
+
+The defenses above raise the cost of harvesting substantially but do not
+eliminate it. A motivated attacker with a wordlist, willing to
+authenticate and accept reputational cost, can still enumerate addresses
+on a lookup-partitioned domain. Operators who require stronger
+guarantees than the protocol provides should use hash or alpha
+partitioning (eliminating the lookup surface entirely) or deploy
+additional defenses at the operational layer (token-gated access,
+invitation-only user visibility, or similar application-level
+mechanisms).
 
 ### 8.4 Intent Leaking
 

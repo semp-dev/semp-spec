@@ -239,11 +239,61 @@ A conformant server MUST:
   (`DISCOVERY.md` §2.2)
 - Return a valid response to unauthenticated discovery requests from unknown
   domains, subject to rate limiting. (`DISCOVERY.md` §6.2)
+- Return identical `status`, `transports`, `features`, and `ttl` values for
+  every address on the same recipient domain, regardless of whether the
+  address corresponds to a registered user. Per-address existence MUST NOT
+  be inferable from the response. (`DISCOVERY.md` §4.6.1)
+- Not include per-user signals (mailbox existence, activity timestamps,
+  recipient status) in discovery result objects. The result object fields
+  defined in `DISCOVERY.md` §4.5 are exhaustive for anonymous discovery.
+  (`DISCOVERY.md` §4.6.1)
+- Rate-limit discovery requests by requester class: anonymous requests by
+  source network prefix, authenticated requests by requester domain, with
+  reputation-adjusted per-domain ceilings. (`DISCOVERY.md` §6.2.4)
+
+A conformant server implementing the `lookup` partition strategy MUST:
+
+- Require authenticated discovery for every lookup query and reject
+  anonymous lookups with a response indistinguishable for valid and
+  invalid addresses. (`DISCOVERY.md` §2.4.4)
+- Verify the `semp.dev/auth` signature on every lookup request before
+  returning per-address routing information.
+  (`DISCOVERY.md` §2.4.4, §6.2.3)
+- Log every authenticated lookup query with requester domain, timestamp,
+  and address count. (`DISCOVERY.md` §2.4.4)
+- Return a generic negative response for addresses that do not exist,
+  indistinguishable in structure, size, and timing from responses for
+  existing addresses. (`DISCOVERY.md` §2.4.4)
+
+A conformant server implementing authenticated discovery MUST:
+
+- Verify `semp.dev/auth` signatures against the requester's published
+  domain key before applying authenticated-tier policy.
+  (`DISCOVERY.md` §6.2.3)
+- Treat requests with invalid signatures as anonymous rather than
+  returning a distinguishable error response. (`DISCOVERY.md` §6.2.3)
+- Not interpret authenticated discovery as identification of an
+  individual user. The authentication identifies the server domain
+  only. (`DISCOVERY.md` §6.2.6)
 
 A conformant server MUST NOT:
 
-- Require authenticated discovery as a condition of SEMP interoperability.
+- Require authenticated discovery as a condition of SEMP interoperability,
+  except for partition lookup queries per `DISCOVERY.md` §2.4.4.
   (`DISCOVERY.md` §6.2)
+- Use the `lookup` partition strategy without implementing the
+  authenticated-lookup requirement in `DISCOVERY.md` §2.4.4.
+
+A conformant server SHOULD:
+
+- Prefer `hash` or `alpha` partitioning over `lookup` partitioning to
+  eliminate the address harvesting surface. (`DISCOVERY.md` §2.4)
+- Hash plaintext addresses before writing them to access logs, audit
+  logs, telemetry pipelines, or other operational data not part of the
+  protocol state itself. (`DISCOVERY.md` §8.3.4)
+- Publish `protocol_abuse` observation records against requester domains
+  that exhibit sustained address-harvesting patterns via authenticated
+  discovery. (`DISCOVERY.md` §6.2.5, `REPUTATION.md` §3.4)
 
 ### 4.5 Key Management (Server)
 
