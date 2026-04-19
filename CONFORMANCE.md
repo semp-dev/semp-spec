@@ -223,6 +223,25 @@ A conformant server MUST:
 - Invalidate cache entries on delivery failure and re-discover before retry.
   (`DISCOVERY.md` §6.1)
 - Not serve stale entries beyond their TTL. (`DISCOVERY.md` §6.1)
+- Include a monotonically non-decreasing `revision` and a `ttl_seconds`
+  field in every published configuration document. Increment `revision`
+  on any byte-level change and never decrement or reuse a prior value.
+  (`DISCOVERY.md` §3.5.1, §3.5.2)
+- Re-fetch a cached peer configuration when `ttl_seconds` elapses,
+  when a verified `SEMP_CONFIGURATION_UPDATE` with a greater revision
+  arrives on a federation session, when a federation handshake surfaces
+  a revision mismatch, or when an operation fails with a capability
+  error attributable to stale configuration.
+  (`DISCOVERY.md` §3.5.3)
+- Not accept a fetched configuration whose `revision` is less than the
+  revision already cached for that domain; treat such a response as
+  suspicious. (`DISCOVERY.md` §3.5.1)
+- Sign `SEMP_CONFIGURATION_UPDATE` notifications with the domain
+  signing key. Verify the signature before acting on a received
+  notification. (`DISCOVERY.md` §3.5.4)
+- Defer new operations against a peer whose configuration re-fetch has
+  failed until a successful re-fetch completes, for the duration of
+  the grace window defined by `ttl_seconds`. (`DISCOVERY.md` §3.5.7)
 - Verify the signature on lookup responses before caching or acting on
   results. Discard unsigned or unverifiable responses.
   (`DISCOVERY.md` §4.6, §8.1)
