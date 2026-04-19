@@ -1223,7 +1223,60 @@ failures. Implementers SHOULD:
 4. Generate additional test envelopes with edge cases: Unicode domain names,
    long base64 values, deeply nested extensions, and empty string values.
 
-### 16.3 Test Vector Limitations
+### 16.3 Coverage Gaps
+
+The following mechanisms are specified in normative documents but do not
+yet have dedicated vectors in this file. Implementers extending the
+vector set SHOULD contribute vectors for these areas. Listed in rough
+priority order:
+
+- **Sender identity signature on enclosure** (`ENVELOPE.md` §6.5):
+  canonical-form computation of the enclosure bytes for signing, a
+  valid signature case, and failure cases (modified body, modified
+  subject, wrong identity key).
+- **Forwarding primitive** (`ENVELOPE.md` §6.6): verified three-step
+  chain of original sender signature, forwarder attestation, outer
+  sender signature, plus a nested forward-of-a-forward case and
+  failure modes.
+- **Queuing, retry, and cancellation** (`DELIVERY.md` §2,
+  `CLIENT.md` §6.6): backoff schedule sanity, effective deadline
+  computation, cancellation race with in-flight delivery, terminal
+  state transitions.
+- **Session resumption** (`HANDSHAKE.md` §2.8): ticket round-trip,
+  resumption key derivation mixing `K_resumption` with fresh DH, and
+  `resumption_failed` fallback cases.
+- **First-contact enforcement** (`DELIVERY.md` §6.4,
+  `HANDSHAKE.md` §2.2a.3): token binding to
+  (sender_domain, recipient_address, hour_bucket), hour-bucket drift
+  edge cases, and indistinguishable rejection for non-existent
+  addresses.
+- **Configuration versioning** (`DISCOVERY.md` §3.5): revision
+  monotonicity enforcement, STH signature on `SEMP_CONFIGURATION_UPDATE`,
+  handshake revision mismatch handling.
+- **Clock tolerance** (`CONFORMANCE.md` §9.3.1): tiered
+  future-dated and expires-at boundary cases covering 0, 5, 15, and
+  30 minutes of skew.
+- **Account recovery** (`RECOVERY.md`): bundle encryption and
+  decryption round-trip, KDF output determinism given fixed inputs,
+  Shamir share reconstruction from M of N.
+- **Provider migration** (`MIGRATION.md`): migration record signature
+  chain verification (cooperative vs unilateral), local-part
+  reassignment rules, and key-bound carry-over semantics.
+- **Account closure** (`CLOSURE.md`): closure request authentication,
+  finalization effects, ingress response indistinguishability during
+  retention window.
+- **Key transparency** (`TRANSPARENCY.md`): Merkle tree leaf hashing,
+  inclusion proof verification, consistency proof verification,
+  equivocation observation structure.
+- **Large attachment extension** (`ATTACHMENTS.md`): HKDF derivation
+  of `K_attachment` from `K_enclosure`, AEAD with bound
+  additional-data, ciphertext hash verification.
+
+These gaps do not block implementation; each mechanism's normative
+document defines its behavior exhaustively. Vectors accelerate
+implementer testing but are not a substitute for the normative text.
+
+### 16.4 Test Vector Limitations
 
 These vectors test deterministic operations only. The following operations
 require round-trip testing between two independent implementations rather

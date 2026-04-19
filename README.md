@@ -64,21 +64,52 @@ explicit user consent. No flag day required.
 
 ## Specification Documents
 
+### Core Specification
+
+Every SEMP implementation must conform to these documents.
+
 | Document | Description |
 |---|---|
-| [DESIGN.md](DESIGN.md) | Philosophy, principles, and non-goals. |
-| [ENVELOPE.md](ENVELOPE.md) | The envelope model and field specifications. |
-| [HANDSHAKE.md](HANDSHAKE.md) | Session establishment protocol. |
-| [DISCOVERY.md](DISCOVERY.md) | Server and protocol discovery mechanisms. |
-| [KEY.md](KEY.md) | Key management, publication, rotation, and revocation. |
-| [SESSION.md](SESSION.md) | Forward secrecy, session key lifecycle, and rekeying. |
-| [DELIVERY.md](DELIVERY.md) | Blocking, rejection, and delivery acknowledgment. |
-| [CLIENT.md](CLIENT.md) | Client obligations, envelope submission, and legacy interop. |
-| [REPUTATION.md](REPUTATION.md) | Trust signals, gossip protocol, and domain transfer. |
-| [TRANSPORT.md](TRANSPORT.md) | Transport requirements, bindings, and negotiation. |
-| [ERRORS.md](ERRORS.md) | Error codes registry and status values. |
+| [DESIGN.md](DESIGN.md) | Philosophy, principles, non-goals, and document index. |
+| [ENVELOPE.md](ENVELOPE.md) | Envelope structure, seal, enclosure, sender signature, and forwarding. |
+| [HANDSHAKE.md](HANDSHAKE.md) | Session establishment, federation handshake, resumption, and reason codes. |
+| [SESSION.md](SESSION.md) | Forward secrecy, session key lifecycle, rekeying, and resumption tickets. |
+| [DISCOVERY.md](DISCOVERY.md) | Server discovery, configuration document, and versioning. |
+| [KEY.md](KEY.md) | Key management, publication, rotation, revocation, and scoped device certificates. |
+| [DELIVERY.md](DELIVERY.md) | Acknowledgment types, queuing and retry, staged delivery, block list, and first-contact enforcement. |
+| [CLIENT.md](CLIENT.md) | Client obligations, envelope composition and receipt, device sync, and legacy interop. |
+| [REPUTATION.md](REPUTATION.md) | Trust signals, abuse reporting, gossip observations, and trust transfer. |
+| [TRANSPORT.md](TRANSPORT.md) | Transport requirements and bindings (WebSocket, HTTP/2, QUIC; optional gRPC). |
+| [EXTENSIONS.md](EXTENSIONS.md) | Wire-level extension framework, registry, and anti-fragmentation governance. |
+| [ERRORS.md](ERRORS.md) | Error code registry and status values. |
+| [MIME.md](MIME.md) | MIME compatibility and mapping rules. |
 | [CONFORMANCE.md](CONFORMANCE.md) | Conformance requirements for implementations. |
 | [VECTORS.md](VECTORS.md) | Test vectors for implementers. |
+
+### Optional Core Modules
+
+Recommended optional modules. Implementations that claim a module's functionality must conform; absence is permitted. Advertisement is through discovery endpoints.
+
+| Document | Description |
+|---|---|
+| [RECOVERY.md](RECOVERY.md) | Account recovery: server-assisted encrypted backup and Shamir device-split backup. |
+| [MIGRATION.md](MIGRATION.md) | Provider migration across domains with key continuity and forwarding. |
+| [CLOSURE.md](CLOSURE.md) | Account closure with grace period and retention window. |
+| [TRANSPARENCY.md](TRANSPARENCY.md) | Key transparency via Merkle-tree log and observation-based gossip. |
+
+### Wire-Level Extensions
+
+Defined extensions registered under the `semp.dev/` namespace. Wire-level extensions live inside existing message structures and are governed by [EXTENSIONS.md](EXTENSIONS.md).
+
+| Document | Description |
+|---|---|
+| [ATTACHMENTS.md](ATTACHMENTS.md) | `semp.dev/large-attachment`: external-storage attachments with HKDF-derived per-attachment keys. |
+
+### Non-Normative
+
+| Document | Description |
+|---|---|
+| [FAQ.md](FAQ.md) | Frequently asked questions about SEMP. |
 
 ## How It Works
 
