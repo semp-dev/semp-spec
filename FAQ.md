@@ -2,7 +2,7 @@
 
 **Sealed Envelope Messaging Protocol**  
 Status: Companion Document  
-Version: 0.1.0  
+Version: 0.2.0-draft  
 Related: All SEMP specifications
 
 ---

@@ -2,7 +2,7 @@
 
 **Sealed Envelope Messaging Protocol**  
 Status: Internet-Draft  
-Version: 0.1.0  
+Version: 0.2.0-draft  
 Related: `HANDSHAKE.md`, `ENVELOPE.md`, `DELIVERY.md`, `CLIENT.md`,
 `DISCOVERY.md`, `KEY.md`, `SESSION.md`, `REPUTATION.md`, `TRANSPORT.md`
 
