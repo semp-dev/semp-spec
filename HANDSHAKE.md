@@ -978,7 +978,6 @@ applies to user identity does not apply here.
     "nonce": "base64-random-32-bytes",
     "server_id": "originating-server-ulid",
     "server_domain": "example.com",
-    "federation_type": "full",
     "server_ephemeral_key": {
         "algorithm": "pq-kyber768-x25519",
         "key": "base64-encoded-ephemeral-public-key",
@@ -1010,13 +1009,25 @@ applies to user identity does not apply here.
 }
 ```
 
-#### 5.2.1 Federation Types
+#### 5.2.1 Federation Is Single-Mode with Per-Peer Policy
 
-| Value     | Meaning                                                              |
-|-----------|----------------------------------------------------------------------|
-| `full`    | Full federation: relay, delivery, and user discovery permitted       |
-| `relay`   | Relay only: message forwarding permitted, no user discovery          |
-| `limited` | Operator-defined restrictions negotiated via federation policy       |
+SEMP defines a single federation mode. The protocol does not encode
+named federation types such as "full" or "relay" at the handshake
+layer. Every federation session grants the same baseline: establish a
+session and exchange envelopes subject to the standard delivery
+pipeline (`DELIVERY.md` section 3).
+
+Operators express per-peer restrictions through local policy rather
+than through a wire-level federation-type field. Typical policies
+include accept from specific domains only, reject envelopes matching
+specific patterns, rate-limit submissions, or require additional
+challenges. These are local-policy decisions made by each operator
+independently; they are not negotiated in the handshake.
+
+Capability differences (supported algorithms, supported extensions,
+maximum envelope size) continue to be negotiated via the
+`capabilities` object in this section. Capability negotiation is
+distinct from policy and remains on the wire.
 
 ### 5.3 Domain Key Bootstrap
 
