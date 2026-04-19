@@ -740,35 +740,32 @@ For each delivered envelope, the recipient server:
    recipient per section 6.4.1.
 2. If the sender is a known correspondent, proceeds to standard delivery.
 3. If the sender is not a known correspondent and the recipient's
-   policy is `mode: open`, proceeds to standard delivery.
+   policy is `mode: "open"`, proceeds to standard delivery.
 4. If the sender is not a known correspondent and the recipient's
-   policy is `mode: pow`:
+   policy is `mode: "challenge"`:
    - If `seal.first_contact_token` is present and verifies per
-     `HANDSHAKE.md` section 2.2a.4, proceeds to standard delivery.
+     `HANDSHAKE.md` section 2.2a.4 against the policy's
+     `challenge_type` and `parameters`, proceeds to standard delivery.
    - Otherwise, rejects with `reason_code: "policy_forbidden"` and
-     includes a fresh `proof_of_work` challenge in the rejection
-     response, formatted per `HANDSHAKE.md` section 2.2a.3.
-5. If the recipient's policy is `mode: invite_only`:
-   - If a valid invite token is presented, proceeds to standard
-     delivery. Invite token format is out of scope for this revision.
-   - Otherwise, rejects with `reason_code: "policy_forbidden"` and
-     does not include a challenge body (no challenge can satisfy the
-     policy).
+     includes a fresh challenge of the announced `challenge_type` in
+     the rejection response. For `challenge_type: "proof_of_work"`,
+     the challenge is formatted per `HANDSHAKE.md` section 2.2a.3.
 
 #### 6.4.3 Indistinguishable Rejection
 
-The rejection response for steps 4 and 5 MUST be identical in shape,
-size, and timing for non-existent recipient addresses and for existing
-addresses whose policy is being enforced. A recipient server MUST issue
-a `proof_of_work` challenge for envelopes addressed to non-existent
-addresses on its domain when the operator's default policy is `pow`,
-even though no token will ever be accepted, in order to maintain
-indistinguishability per `DESIGN.md` section 2.7.
+The rejection response for step 4 MUST be identical in shape, size, and
+timing for non-existent recipient addresses and for existing addresses
+whose policy is being enforced. A recipient server MUST issue a
+challenge of the operator's default `challenge_type` for envelopes
+addressed to non-existent addresses on its domain whenever the operator's
+default policy is `mode: "challenge"`, even though no token will ever be
+accepted, in order to maintain indistinguishability per `DESIGN.md`
+section 2.7.
 
-The recipient server MUST NOT reduce the number of `proof_of_work`
-challenge issuance computations for non-existent addresses or use
-faster code paths for them. Implementations MUST issue indistinguishable
-responses on indistinguishable code paths.
+The recipient server MUST NOT reduce the number of challenge issuance
+computations for non-existent addresses or use faster code paths for
+them. Implementations MUST issue indistinguishable responses on
+indistinguishable code paths.
 
 #### 6.4.4 Once-Approved Senders
 

@@ -251,27 +251,53 @@ publication, senders MUST assume `mode: "open"`.
     "timestamp": "2025-06-10T19:56:34Z",
     "keys": [ ],
     "first_contact_policy": {
-        "mode": "pow",
-        "pow_difficulty": 22,
-        "invite_required": false
+        "mode": "challenge",
+        "challenge_type": "proof_of_work",
+        "parameters": {
+            "algorithm": "sha256",
+            "difficulty": 22
+        }
     },
     "signature": { }
 }
 ```
 
-| Field             | Type      | Required | Description                                                                  |
-|-------------------|-----------|----------|------------------------------------------------------------------------------|
-| `mode`            | `string`  | Yes      | One of: `open`, `pow`, `invite_only`. See section 3.2.1.                     |
-| `pow_difficulty`  | `integer` | When `mode == pow` | Leading zero bits required for the first-contact challenge. MUST be in the range 0 to 28 inclusive, subject to the difficulty cap in `HANDSHAKE.md` section 2.2a.2. |
-| `invite_required` | `boolean` | When `mode == invite_only` | When `true`, the recipient accepts envelopes only from senders presenting a valid invite token. Invite token issuance and binding are out of scope for this revision. |
+| Field            | Type              | Required               | Description                                                                  |
+|------------------|-------------------|------------------------|------------------------------------------------------------------------------|
+| `mode`           | `string`          | Yes                    | One of: `open`, `challenge`. See section 3.2.1.                              |
+| `challenge_type` | `string`          | When `mode == challenge` | Identifier of the challenge type the recipient's home server will apply on first contact. See section 3.2.2. |
+| `parameters`     | `object`          | When `mode == challenge` | Challenge-type-specific parameters. Schema is defined per challenge type.    |
 
 #### 3.2.1 Modes
 
-| Mode          | Behavior                                                                                                              |
-|---------------|------------------------------------------------------------------------------------------------------------------------|
-| `open`        | No first-contact friction. All envelopes proceed through the standard delivery pipeline.                              |
-| `pow`         | First-contact envelopes from unknown sender domains MUST carry a valid `seal.first_contact_token` per `HANDSHAKE.md` section 2.2a.4. |
-| `invite_only` | Envelopes from unknown sender domains MUST carry a valid invite token. Invite tokens are out of scope for this revision. |
+| Mode        | Behavior                                                                                                    |
+|-------------|-------------------------------------------------------------------------------------------------------------|
+| `open`      | No first-contact friction. All envelopes proceed through the standard delivery pipeline.                    |
+| `challenge` | First-contact envelopes from unknown sender domains MUST satisfy the challenge identified by `challenge_type`. Satisfaction evidence is carried in `seal.first_contact_token` per `HANDSHAKE.md` section 2.2a.4. |
+
+#### 3.2.2 Challenge Types
+
+The set of defined `challenge_type` values extends over time. This
+revision defines one:
+
+| `challenge_type`   | Status | Defined in                           | Parameters                                    |
+|--------------------|--------|--------------------------------------|-----------------------------------------------|
+| `proof_of_work`    | Core   | `HANDSHAKE.md` section 2.2a.2        | `algorithm` (string), `difficulty` (integer). |
+
+A sender's home server encountering a `challenge_type` it does not
+recognize MUST treat the policy as non-satisfiable by that sender and
+MUST surface the envelope as undeliverable, not silently downgrade to
+`open`. Future challenge types (such as `invite_token`, human
+verification, or third-party identity proof) MAY be added by subsequent
+revisions or by published extensions using the standard namespacing
+convention in `EXTENSIONS.md`.
+
+A recipient server MUST NOT announce a `challenge_type` it is not
+prepared to verify. A sender server that satisfies the challenge MUST
+expect the recipient server to validate the token per the rules of the
+challenge type.
+
+#### 3.2.3 Caching and Enforcement
 
 A sender's home server fetching the recipient's key record MUST cache the
 `first_contact_policy` alongside the key record and MUST honor it when
@@ -281,7 +307,7 @@ The recipient's home server MUST enforce the published policy regardless
 of what the sender's server caches. The published policy is advisory to
 senders; it is normative to the recipient server.
 
-#### 3.2.2 Indistinguishability
+#### 3.2.4 Indistinguishability
 
 A recipient server MUST publish the same `first_contact_policy` for all
 addresses on its domain that have published any policy at all, OR MUST
@@ -290,9 +316,9 @@ per-address policy publication that varies by address would constitute
 an existence oracle. See `DESIGN.md` section 2.7.
 
 When a recipient has no published key record, the home server SHOULD
-behave as if the recipient's policy were `pow` with the operator's
-default difficulty, in order to prevent enumeration via missing-key
-inference.
+behave as if the recipient's policy were `mode: "challenge"` with
+`challenge_type: "proof_of_work"` at the operator's default difficulty,
+in order to prevent enumeration via missing-key inference.
 
 ### 3.3 DNS-Based User Key Publication (Future Consideration)
 

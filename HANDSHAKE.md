@@ -363,10 +363,15 @@ upper bound on `expires` beyond ordinary clock skew tolerance.
 
 A `proof_of_work` challenge MAY be issued by a recipient server in response
 to an envelope submission, not only during a handshake, when the recipient's
-first-contact policy requires it (`KEY.md` section 3.5, `DELIVERY.md`
+first-contact policy announces `mode: "challenge"` with
+`challenge_type: "proof_of_work"` (`KEY.md` section 3.2, `DELIVERY.md`
 section 6.4). The challenge format is identical to the in-handshake
 `proof_of_work` challenge defined in section 2.2a.2 and is delivered as a
 field of a `policy_forbidden` rejection response.
+
+`proof_of_work` is the first defined first-contact challenge type. Future
+challenge types MAY be defined per `KEY.md` section 3.2.2 and this section
+MAY be extended with analogous first-contact binding rules for them.
 
 The challenge is bound to a (sender_domain, recipient_address, hour_bucket)
 tuple by including those values in the `prefix` derivation. The exact
