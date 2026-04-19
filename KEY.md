@@ -652,21 +652,19 @@ the on-device representation of private key material.
 }
 ```
 
-### 9.3 Key Backup
+### 9.3 Key Backup and Recovery
 
-SEMP supports multiple backup strategies. Operators and users choose based on
-their threat model:
+Account recovery (restoration of identity and encryption keys after loss of
+all devices) is specified in `RECOVERY.md` as a RECOMMENDED core extension.
+Two mechanisms are defined there: server-assisted encrypted backup and
+Shamir device-split backup. Clients and servers claiming recovery support
+MUST comply with `RECOVERY.md`.
 
-| Strategy             | Description                                                        |
-|----------------------|--------------------------------------------------------------------|
-| Secret sharing       | Key material split using Shamir's Secret Sharing across M-of-N trusted parties. |
-| Threshold encryption | Recovery requires cooperation of M-of-N trusted devices or contacts. |
-| Server-assisted      | Private key encrypted under a recovery key and stored on the home server. |
-| Paper backup         | Key material encoded as a QR code or word sequence for offline storage. |
-
-Loss of all backup copies means permanent loss of the trust history associated
-with the key. SEMP does not provide a recovery path that bypasses key
-possession.
+Loss of all backup copies, including the recovery secret and the required
+threshold of Shamir device shares, means permanent loss of the account's
+private key material. SEMP does not provide a recovery path that bypasses
+user-held recovery material. A server operator MUST NOT possess, broker,
+or gate recovery secrets.
 
 ---
 

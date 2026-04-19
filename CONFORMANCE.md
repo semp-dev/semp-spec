@@ -925,7 +925,33 @@ synchronization, classification results, and similar). Lack of support for
 a specific sync extension MUST NOT cause the device sync marker itself to
 be rejected. (`CLIENT.md` §4.5.7)
 
-### 5.12 Content Security
+### 5.12 Account Recovery
+
+Account recovery is a RECOMMENDED core extension specified in `RECOVERY.md`.
+A client claiming recovery support MUST comply with `RECOVERY.md` section 10.1.
+
+A server claiming recovery support MUST comply with `RECOVERY.md` section
+10.2, and in particular:
+
+- Advertise the `backup` endpoint in its discovery configuration.
+  (`RECOVERY.md` §1.2, `DISCOVERY.md` §3.1.1)
+- Verify bundle `signature` against the user's current identity key on
+  upload. (`RECOVERY.md` §4.2)
+- Serve bundle downloads without requiring an authenticated session and
+  apply per-user and per-IP rate limits. (`RECOVERY.md` §4.3)
+- Retain superseded bundles for at least 30 days. (`RECOVERY.md` §4.4)
+- Expose `recovery_verify_pk` in the user's historical key record.
+  (`RECOVERY.md` §7.5)
+- Not decrypt or examine `encrypted_payload`. (`RECOVERY.md` §4.2, §8.3)
+- Not possess, broker, or gate recovery secrets. (`RECOVERY.md` §1.1, §8.3)
+
+A third-party domain choosing to honor successor records MUST verify all
+three signatures (`recovery_signature`, `new_key_signature`,
+`domain_signature`) and the timing constraint. (`RECOVERY.md` §7.5)
+A third-party domain choosing not to honor successor records MUST treat
+the new identity key as a fresh identity. (`RECOVERY.md` §7.6)
+
+### 5.13 Content Security
 
 A conformant client MUST:
 

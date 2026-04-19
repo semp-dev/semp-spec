@@ -274,6 +274,7 @@ endpoints (which are plain HTTPS) are flat.
 | `reputation_references` | `string` | No  | URL for the domain's self-published reputation references document, listing third-party observers that have published observations about this domain. Absence indicates the domain does not self-publish references. See `REPUTATION.md` section 5.6. |
 | `verify`           | `string` | No       | Base URL for domain-ownership verification tokens used during federation handshakes. Append the verification token to retrieve the ownership proof. Absence indicates the server does not support well-known URI verification and relies on certificate or DNS TXT verification instead. See `HANDSHAKE.md` section 5.3. |
 | `reputation_transfer` | `string` | No    | Base URL for trust-transfer records published when a domain changes ownership. Append `out` or `in` to retrieve the outgoing or incoming transfer record. Absence indicates the domain does not publish transfer records. See `REPUTATION.md` section 11. |
+| `backup`           | `string` | No       | Base URL for server-assisted account recovery backups. Append the URL-encoded user address to address a specific account. Accepts `POST` (upload), `GET` (download), and `DELETE`. Absence indicates the server does not host recovery backups. See `RECOVERY.md` section 4.1. |
 
 All URL values are implementation-chosen. The protocol does not mandate URL path
 structure. The transport identifiers in `client` and `federation` are defined in
