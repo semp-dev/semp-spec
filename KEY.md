@@ -731,7 +731,341 @@ The authorization proof in step 2 MUST be a signature from an existing trusted
 device over the new device's public key. A device registration without a valid
 authorization proof MUST be rejected by the home server.
 
-### 10.3 Key Usage Transparency
+### 10.3 Scoped Device Certificates
+
+A scoped device certificate authorizes a delegated device to act on
+behalf of a user within a restricted permission scope. Delegated
+devices include mailing list clients, spam filter clients, vacation
+autoresponders, read-only viewers, and any other program that holds
+its own device key and requires less than full-account authority.
+
+The certificate is issued by a full-access device of the account (the
+primary device). It binds the delegated device's public key to a
+permission scope and a validity window. The home server enforces the
+scope at envelope submission and at inbound delivery.
+
+A full-access device is any device registered for the account that has
+no scoped device certificate. Full-access devices have the implicit
+authority to compose, receive, manage keys, manage block lists, and
+register further devices.
+
+#### 10.3.1 Certificate Schema and Signing
+
+```json
+{
+    "type": "SEMP_DEVICE_CERTIFICATE",
+    "version": "1.0.0",
+    "device_id": "01JDELEGATE0000000000000000",
+    "device_public_key": "base64-delegated-device-public-key",
+    "account": "user@example.com",
+    "issued_by": "01JPRIMARY00000000000000000",
+    "issued_at": "2025-06-15T10:00:00Z",
+    "expires_at": "2025-12-15T10:00:00Z",
+    "scope": {
+        "send": {
+            "mode": "restricted",
+            "allow": [
+                { "type": "user", "address": "subscriber1@example.com" },
+                { "type": "domain", "domain": "company.example" }
+            ]
+        },
+        "receive": false,
+        "manage_keys": false,
+        "manage_blocks": false,
+        "manage_devices": false
+    },
+    "signature": {
+        "algorithm": "ed25519",
+        "key_id": "primary-device-key-fingerprint",
+        "value": "base64-signature"
+    }
+}
+```
+
+The certificate MUST be signed by the device key of a full-access
+device (the issuer), identified in `issued_by`. The issuer MUST hold
+a registered, non-revoked device key for the account at the time of
+signing. The signature is computed over the canonical UTF-8 JSON
+encoding of the certificate with `signature.value` set to `""`, per
+the canonicalization rules in `ENVELOPE.md` section 4.3.
+
+#### 10.3.2 Certificate Fields
+
+| Field               | Type      | Required | Description                                                                                     |
+|---------------------|-----------|----------|-------------------------------------------------------------------------------------------------|
+| `type`              | `string`  | Yes      | MUST be `"SEMP_DEVICE_CERTIFICATE"`.                                                            |
+| `version`           | `string`  | Yes      | Certificate format version (semver).                                                            |
+| `device_id`         | `string`  | Yes      | Stable identifier of the delegated device. ULID RECOMMENDED.                                    |
+| `device_public_key` | `string`  | Yes      | Base64-encoded public key of the delegated device.                                              |
+| `account`           | `string`  | Yes      | Full SEMP address the delegated device is bound to.                                             |
+| `issued_by`         | `string`  | Yes      | `device_id` of the issuing full-access device.                                                  |
+| `issued_at`         | `string`  | Yes      | ISO 8601 UTC issuance timestamp.                                                                |
+| `expires_at`        | `string`  | Yes      | ISO 8601 UTC expiry timestamp. Subject to the lifetime bounds in section 10.3.8.                |
+| `scope`             | `object`  | Yes      | Permission scope. See section 10.3.3.                                                           |
+| `signature`         | `object`  | Yes      | Issuer's signature over the canonical certificate bytes.                                        |
+
+#### 10.3.3 Scope Object
+
+```json
+{
+    "send": {
+        "mode": "restricted",
+        "allow": [ { "type": "user", "address": "..." } ]
+    },
+    "receive": true,
+    "manage_keys": false,
+    "manage_blocks": false,
+    "manage_devices": false
+}
+```
+
+| Field             | Type      | Required | Description                                                                                                 |
+|-------------------|-----------|----------|-------------------------------------------------------------------------------------------------------------|
+| `send.mode`       | `string`  | Yes      | One of: `unrestricted`, `restricted`, `none`. See section 10.3.4.                                           |
+| `send.allow`      | `array`   | When `send.mode == restricted` | Entity matchers authorizing specific recipients. Same entity types as `DELIVERY.md` section 5.3: `user`, `domain`, `server`. |
+| `receive`         | `boolean` | Yes      | Whether the home server delivers inbound envelopes to this device.                                          |
+| `manage_keys`     | `boolean` | Yes      | Whether the device may publish or rotate user keys via `CLIENT.md` section 2.2.                             |
+| `manage_blocks`   | `boolean` | Yes      | Whether the device may issue block list sync messages per `DELIVERY.md` section 7.                          |
+| `manage_devices`  | `boolean` | Yes      | Whether the device may register additional devices. See section 10.3.9 for the nested-delegation rule.      |
+
+Every scope field above is REQUIRED. A certificate missing any field
+MUST be rejected at issuance.
+
+#### 10.3.4 Scope Enforcement and `allow` Limits
+
+The home server enforces the scope at every relevant operation:
+
+- **Send (`scope.send`).** The home server evaluates the recipient
+  list of every envelope submitted by the delegated device, per
+  `CLIENT.md` section 2.4. If `send.mode` is `unrestricted`, all
+  recipients are permitted. If `send.mode` is `restricted`, every
+  recipient MUST match an entry in `send.allow`. If `send.mode` is
+  `none`, every submission MUST be rejected with reason code
+  `scope_exceeded`.
+- **Receive (`scope.receive`).** When `false`, the home server MUST
+  NOT deliver inbound envelopes to this device. The server MUST NOT
+  wrap session material to this device's enclosure key for envelopes
+  the user did not explicitly address to this device.
+- **Manage keys, blocks, devices.** When any of these fields is
+  `false`, the home server MUST reject the corresponding management
+  operation from this device with reason code `scope_exceeded`.
+
+The `send.allow` array MUST contain at most 10,000 entries. A
+certificate with a larger `allow` list MUST be rejected at issuance
+with `reason_code: "scope_invalid"`. This cap prevents a single
+certificate from encoding an unbounded address book.
+
+Scope enforcement uses the current certificate at the time of each
+operation, not the certificate that was active when the session was
+established. A certificate update by the primary device takes effect
+immediately on the next submission within an existing session.
+
+#### 10.3.5 Issuance Flow
+
+1. The delegated device generates its device key pair locally.
+2. The delegated device conveys its public key to the primary device
+   through an out-of-band channel (QR code, secure paste, API
+   integration). The primary device is the source of truth for the
+   account; the delegated public key is trusted only through this
+   primary-device mediation.
+3. The primary device composes the `SEMP_DEVICE_CERTIFICATE` with the
+   desired scope and the computed `expires_at`.
+4. The primary device signs the certificate with its own device
+   private key.
+5. The primary device submits the certificate to the home server via
+   the standard device registration flow (`DISCOVERY.md` endpoint
+   `device_register`).
+6. The home server verifies: signature against the issuer's
+   registered device key, issuer is a full-access device of the
+   account, issuer is not revoked, all required fields are present,
+   `allow` list is within limits, `expires_at` is within the bounds
+   of section 10.3.8.
+7. On successful verification, the home server stores the certificate
+   and associates it with `device_id`.
+8. The delegated device connects using its own device key via the
+   standard handshake (`HANDSHAKE.md` section 2). The home server
+   looks up the certificate by `device_id` and applies the scope to
+   every operation on the resulting session.
+
+A certificate submission that fails verification MUST be rejected
+with a specific reason code from `ERRORS.md`. The home server MUST
+NOT store a certificate whose signature or scope does not validate.
+
+#### 10.3.6 Certificate Update
+
+A primary device MAY issue a new certificate for an existing
+delegated `device_id` to change scope or extend `expires_at`. The
+home server stores the new certificate and enforces its scope on the
+next operation after acceptance.
+
+An active session held by the delegated device MUST NOT be
+invalidated by certificate update alone. The session continues, and
+the updated scope applies to the next operation within it. This
+permits instantaneous scope changes without requiring the delegated
+device to reconnect.
+
+The home server MUST preserve the delegated device's existing session
+through certificate update. Rotating or revoking the delegated device
+key (not the certificate) invalidates sessions per section 10.3.7.
+
+#### 10.3.7 Revocation
+
+Revocation of a scoped certificate is accomplished either by revoking
+the delegated device key itself (a device revocation record) or by
+publishing a certificate revocation record that supersedes the
+current certificate without rotating the device key.
+
+##### 10.3.7.1 Revocation Record
+
+```json
+{
+    "type": "SEMP_DEVICE_CERTIFICATE_REVOCATION",
+    "version": "1.0.0",
+    "account": "user@example.com",
+    "device_id": "01JDELEGATE0000000000000000",
+    "revoked_at": "2025-08-01T12:00:00Z",
+    "reason": "delegated_role_ended",
+    "issued_by": "01JPRIMARY00000000000000000",
+    "signature": {
+        "algorithm": "ed25519",
+        "key_id": "primary-device-key-fingerprint",
+        "value": "base64-signature"
+    }
+}
+```
+
+##### 10.3.7.2 Revocation Reasons
+
+| Reason                     | Meaning                                                                                        |
+|----------------------------|------------------------------------------------------------------------------------------------|
+| `delegated_role_ended`     | The delegation is no longer needed. Non-security motive. Routine shutdown of a delegated service. |
+| `suspected_compromise`     | The delegated device or its operator is believed compromised. Session termination is urgent.   |
+| `scope_change`             | Scope is being changed. The revocation is paired with issuance of a new certificate.           |
+| `policy`                   | Revoked for account policy reasons. The primary device MAY elaborate in a separate channel.    |
+
+Implementations MUST NOT define additional reason codes without
+registration.
+
+##### 10.3.7.3 Effects
+
+On acceptance of a revocation record, the home server MUST:
+
+1. Terminate the delegated device's active session immediately.
+2. Reject any subsequent handshake from `device_id` using the
+   associated device key, with `reason_code: "revoked"` per
+   `HANDSHAKE.md` section 4.1.
+3. Stop delivering inbound envelopes to `device_id` even if the
+   `scope.receive` field had been `true`.
+4. Publish the revocation record alongside the user's key history
+   so that third-party domains can observe the revocation.
+
+A revocation record MUST be signed by a full-access device of the
+account. A revocation record signed by a device that is not the
+original issuer MAY still be accepted if signed by any current
+full-access device of the account. Revocation is an account-level
+authority, not an issuer-specific authority.
+
+#### 10.3.8 Lifetime
+
+The `expires_at` value MUST satisfy:
+
+```
+issued_at < expires_at <= issued_at + 365 days
+```
+
+RECOMMENDED lifetime is 180 days from issuance. Shorter lifetimes
+limit the blast radius of an undetected compromise; longer lifetimes
+reduce the frequency with which a primary device must be online to
+renew. The cap of 365 days prevents certificates from outliving the
+user's operational context.
+
+A certificate whose `expires_at` has passed MUST be treated by the
+home server as invalid. All submissions from the delegated device
+MUST be rejected with `reason_code: "certificate_expired"`. The
+delegated device's existing session MUST be terminated on expiry.
+
+Renewal is performed by the primary device issuing a new certificate
+for the same `device_id` per section 10.3.6.
+
+#### 10.3.9 Nested Delegation
+
+A delegated device MUST NOT issue a `SEMP_DEVICE_CERTIFICATE`. Only
+a full-access device of the account may issue certificates.
+
+The `scope.manage_devices` field, when set to `true`, authorizes the
+device to **register its own additional delegated devices via the
+issuance flow, acting on behalf of the primary device**, but the
+certificate of any resulting device MUST still be signed by a
+full-access device. This is enforced by the home server verifying
+that `issued_by` refers to a device without a scoped certificate.
+
+The purpose of keeping delegation shallow is auditability: every
+certificate traces to a full-access device in one hop. Deeper chains
+create ambiguity about which party authorized which action and
+complicate revocation.
+
+#### 10.3.10 Common Delegation Patterns (Informative)
+
+This section is informative. It shows example scope configurations
+for three common delegated-client roles.
+
+**Mailing list client.** Accepts envelopes addressed to the user's
+list address, redistributes to subscribers.
+
+```json
+{
+    "send": {
+        "mode": "restricted",
+        "allow": [
+            { "type": "user", "address": "subscriber1@example.com" },
+            { "type": "user", "address": "subscriber2@example.com" }
+        ]
+    },
+    "receive": true,
+    "manage_keys": false,
+    "manage_blocks": false,
+    "manage_devices": false
+}
+```
+
+**Spam filter client.** Receives every inbound envelope, does not
+send, can manage the user's block list based on classification.
+
+```json
+{
+    "send": { "mode": "none", "allow": [] },
+    "receive": true,
+    "manage_keys": false,
+    "manage_blocks": true,
+    "manage_devices": false
+}
+```
+
+**Vacation autoresponder.** Receives envelopes to generate replies,
+sends only to the original senders (the `allow` list is updated
+dynamically by the primary device as correspondents appear).
+
+```json
+{
+    "send": {
+        "mode": "restricted",
+        "allow": [ { "type": "user", "address": "correspondent@example.com" } ]
+    },
+    "receive": true,
+    "manage_keys": false,
+    "manage_blocks": false,
+    "manage_devices": false
+}
+```
+
+These examples are not exhaustive. Other plausible roles include
+archive exporters (receive true, send none, manage_* false),
+read-only mobile viewers (receive true, send restricted to the user's
+own address for status updates, manage_* false), and
+per-correspondent proxies. Implementers select the minimum scope
+sufficient for the role.
+
+### 10.4 Key Usage Transparency
 
 To detect unauthorized key use, all key operations SHOULD be logged locally
 on each registered device. Usage records include the key ID, device ID,
