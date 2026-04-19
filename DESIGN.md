@@ -402,6 +402,7 @@ rest of the stack as-is.
 | `EXTENSIONS.md` | Wire-level extension framework, registry, lifecycle, and anti-fragmentation governance. |
 | `RECOVERY.md` | Optional core module: account recovery. Server-assisted and Shamir device-split backup, restore flow, successor records. RECOMMENDED. |
 | `MIGRATION.md` | Optional core module: provider migration. Cross-domain address change with key continuity, forwarding, and local-part reassignment rules. RECOMMENDED. |
+| `ATTACHMENTS.md` | Wire-level extension `semp.dev/large-attachment`: external-storage attachments with HKDF-derived per-attachment keys and ciphertext hashes. |
 
 ---
 
