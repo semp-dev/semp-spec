@@ -212,6 +212,12 @@ The response is signed by the serving domain's key. Recipients MUST verify
 this signature using the domain's published domain key before trusting the
 user keys.
 
+Domains supporting key transparency augment each key in the response
+with an inclusion proof and a current signed tree head, enabling
+recipients to verify that the returned key is present in the domain's
+public key log. See `TRANSPARENCY.md` section 4.1 for the augmented
+response shape and section 4.2 for client verification obligations.
+
 For batch requests, the request is a `POST` to the `endpoints.keys` base URL
 with no address suffix. A server that supports batch fetch MUST accept a
 `POST` at `<endpoints.keys>`. A server that does not support batch fetch

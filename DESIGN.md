@@ -404,6 +404,7 @@ rest of the stack as-is.
 | `MIGRATION.md` | Optional core module: provider migration. Cross-domain address change with key continuity, forwarding, and local-part reassignment rules. RECOMMENDED. |
 | `ATTACHMENTS.md` | Wire-level extension `semp.dev/large-attachment`: external-storage attachments with HKDF-derived per-attachment keys and ciphertext hashes. |
 | `CLOSURE.md` | Optional core module: account closure. User-driven closure with grace period, key revocation under existing mechanisms, retention window, and local-part reassignment rules. RECOMMENDED. |
+| `TRANSPARENCY.md` | Optional core module: key transparency. Append-only Merkle-tree log of key events, inclusion proofs on key fetch, equivocation detection via observation gossip. RECOMMENDED. |
 
 ---
 
