@@ -43,9 +43,9 @@ This separation provides three practical advantages:
 3. **Deployment flexibility.** Different operators can select transports that
    match their infrastructure. A privacy-focused provider uses WebSocket
    because it blends with normal web traffic. An enterprise uses gRPC because
-   they already have gRPC infrastructure. A high-throughput provider uses an
-   internal message bus for envelope routing between processing nodes. The
-   envelope is the same in every case.
+   they already have gRPC infrastructure. An operator running over an
+   unreliable link uses QUIC to absorb packet loss without head-of-line
+   blocking. The envelope is the same in every case.
 
 ---
 
@@ -506,12 +506,13 @@ on a single failure.
 
 ---
 
-## 6. Extended Transport Bindings
+## 6. Optional Transport Bindings
 
-Beyond the three core transports, SEMP can operate over additional transports
-where the minimum requirements of section 2 are satisfied. This section
-defines bindings for transports that are suitable for specific deployment
-scenarios.
+Beyond the three core transports, SEMP MAY operate over additional
+transports where the minimum requirements of section 2 are satisfied.
+Optional bindings are non-core: conformant servers and clients are not
+required to support them, and interoperability between independent
+operators MUST rely on the core bindings in section 4.
 
 ### 6.1 gRPC (grpc)
 
@@ -525,7 +526,16 @@ scenarios.
 | Bidirectional         | Native bidirectional streaming                  |
 | Specification         | gRPC over HTTP/2 (grpc.io)                     |
 
-#### 6.1.1 Service Definition
+#### 6.1.1 Status
+
+gRPC is an OPTIONAL transport binding. Operators with existing gRPC
+infrastructure MAY use it for client sessions and for federation
+sessions with peers that also advertise `grpc`. Operators MUST NOT
+assume federation peers support gRPC. At least one core transport
+(section 4) MUST be advertised alongside `grpc` in the discovery
+configuration so that peers without gRPC support can still federate.
+
+#### 6.1.2 Service Definition
 
 The gRPC binding defines a SEMP service with the following RPC methods:
 
@@ -553,104 +563,11 @@ Implementations MAY define a protobuf-native encoding of SEMP messages as a
 future optimization, but the JSON encoding MUST be supported for
 interoperability.
 
-#### 6.1.2 Handshake Mapping
+#### 6.1.3 Handshake Mapping
 
 The handshake uses a bidirectional stream. The client sends `init`, reads
 `response` (or `challenge`), sends `challenge_response` or `confirm`, and reads
 `accepted` or `rejected`. The stream is closed after the handshake completes.
-
-#### 6.1.3 Considerations
-
-gRPC is RECOMMENDED for environments with existing gRPC infrastructure,
-particularly enterprise deployments and microservice architectures. The
-bidirectional streaming model maps cleanly to the SEMP handshake. The main
-consideration is that gRPC adds a dependency on HTTP/2 and typically on
-Protocol Buffers tooling, which increases the implementation surface relative
-to plain WebSocket.
-
-### 6.2 AMQP 1.0 (amqp)
-
-| Property              | Value                                          |
-|-----------------------|------------------------------------------------|
-| Transport identifier  | `amqp`                                         |
-| Default port          | 5671 (AMQPS)                                   |
-| Profile               | Asynchronous only                              |
-| TLS requirement       | Required (AMQPS)                               |
-| Framing               | AMQP 1.0 message framing                      |
-| Bidirectional         | Via paired links                               |
-| Specification         | ISO 19464, OASIS AMQP 1.0                     |
-
-#### 6.2.1 Scope Limitation
-
-AMQP satisfies the asynchronous profile but does not naturally satisfy the
-synchronous profile. The request-response pattern required for handshakes,
-discovery, and key exchange is achievable via AMQP's request-reply pattern
-(using `reply-to` addresses and correlation IDs) but introduces latency and
-complexity that make it unsuitable as a primary federation transport.
-
-AMQP is appropriate as an **internal transport**, within a provider's
-infrastructure between edge servers, queue processors, and storage nodes. It
-is NOT RECOMMENDED as a federation transport between independent domains.
-
-#### 6.2.2 Envelope Delivery Mapping
-
-For internal use, envelope delivery maps to AMQP messages on domain-specific
-queues:
-
-- Queue per recipient domain: `semp.delivery.<domain>`
-- The SEMP envelope JSON is the AMQP message body.
-- The AMQP `correlation-id` property carries the `postmark.id`.
-- Delivery acknowledgment maps to AMQP disposition (accepted, rejected).
-
-#### 6.2.3 Companion Channel Requirement
-
-Deployments using AMQP for envelope delivery MUST use a synchronous-profile
-transport (WebSocket, HTTP/2, QUIC, or gRPC) for handshakes, discovery, and
-key exchange. The AMQP transport identifier MUST NOT appear in the `transport`
-field of a handshake init message.
-
-### 6.3 Kafka (kafka)
-
-| Property              | Value                                          |
-|-----------------------|------------------------------------------------|
-| Transport identifier  | `kafka`                                        |
-| Default port          | 9093 (Kafka TLS)                               |
-| Profile               | Asynchronous only                              |
-| TLS requirement       | Required                                       |
-| Framing               | Kafka record framing                           |
-| Bidirectional         | Not native (topic-per-direction)               |
-| Specification         | Apache Kafka protocol                          |
-
-#### 6.3.1 Scope Limitation
-
-Kafka is a log-based publish-subscribe system. It does not provide native
-bidirectional communication between two specific parties. The request-response
-pattern required for SEMP handshakes is a poor fit for Kafka's producer-consumer
-model.
-
-Kafka is appropriate as an **internal transport** for envelope routing within
-a provider's infrastructure, particularly in high-throughput deployments where
-durability, backpressure, and horizontal scaling are priorities. It is NOT
-RECOMMENDED as a federation transport between independent domains.
-
-#### 6.3.2 Envelope Routing Mapping
-
-For internal use, envelope routing maps to Kafka topics:
-
-- Topic per recipient domain: `semp.outbound.<domain>`
-- Partitioning by recipient address hash for ordered per-recipient delivery.
-- The SEMP envelope JSON is the Kafka record value.
-- The `postmark.id` is the Kafka record key.
-
-Delivery acknowledgment requires a separate response topic:
-`semp.ack.<sending-domain>`. Edge servers consume acknowledgments and map them
-to SEMP delivery event notifications.
-
-#### 6.3.3 Companion Channel Requirement
-
-Same as AMQP (section 6.2.3). Kafka MUST NOT be used for synchronous SEMP
-operations. Deployments using Kafka for internal envelope routing MUST use a
-synchronous-profile transport for all external federation communication.
 
 ---
 
@@ -670,8 +587,9 @@ specify how it is achieved.
 The binding MUST define a unique transport identifier string for use in
 discovery records and handshake init messages. Identifiers for custom
 bindings MUST use the SEMP extension namespacing convention:
-`"vendor.example.com/transport-name"`. The core identifiers `ws`, `h2`,
-`quic`, `grpc`, `amqp`, and `kafka` are reserved.
+`"vendor.example.com/transport-name"`. The identifiers `ws`, `h2`, `quic`,
+and `grpc` are reserved for the core and optional bindings in sections 4
+and 6.
 
 ### 7.3 Framing
 
