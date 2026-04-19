@@ -952,7 +952,7 @@ certificates.
                 { "period_seconds": 86400, "amount_allowed": 2000 }
             ]
         },
-        "receive": { "mode": "none", "rate_limits": [] },
+        "receive": { "mode": "none", "rate_limits": [], "delivery_stage": 1 },
         "blocklist": { "read": false, "write": false, "rate_limits": [] },
         "keys":      { "read": false, "write": false, "rate_limits": [] },
         "devices":   { "read": false, "write": false, "rate_limits": [] }
@@ -1078,12 +1078,65 @@ Given a delegated device with:
 | Primary client revokes delegated device key      | Session invalidated         | Delegated client cannot re-handshake       |
 | Certificate expires                              | Session continues           | All submissions rejected until new certificate issued |
 
-### 14.6 Vector: Receive Scope
+### 14.6 Vector: Staged Delivery
 
-| `scope.receive` | Expected behavior                                              |
-|------------------|----------------------------------------------------------------|
-| `true`           | Server delivers inbound envelopes to this device               |
-| `false`          | Server does not deliver inbound envelopes to this device       |
+Given an account with two devices:
+
+| Device         | `scope.receive`                                                                 |
+|----------------|---------------------------------------------------------------------------------|
+| Filter (delegated) | `{ "mode": "unrestricted", "rate_limits": [], "delivery_stage": 1 }`       |
+| Main (full-access) | No certificate (implicit stage 2)                                          |
+
+An inbound envelope arrives. Expected server behavior:
+
+| Step | Trigger                                                                                   | Server action                                                                                  |
+|------|-------------------------------------------------------------------------------------------|------------------------------------------------------------------------------------------------|
+| 1    | Envelope passes the ordinary delivery pipeline                                            | Partition devices by stage. Deliver to Filter (stage 1). Hold for Main (stage 2) in queue.     |
+| 2a   | Filter emits `delivery-disposition` with `disposition: "advance"`                         | Release envelope from queue; deliver to Main.                                                  |
+| 2b   | Filter emits `delivery-disposition` with `disposition: "suppress"`                        | Drop envelope from queue; Main does not receive.                                               |
+| 2c   | Filter is offline; stage timeout elapses (RECOMMENDED 30 seconds)                         | Advance to stage 2 (fail open); deliver to Main.                                               |
+
+With three filters at stage 1 (A, B, C):
+
+| Dispositions received before timeout                                   | Aggregated outcome |
+|------------------------------------------------------------------------|--------------------|
+| A: advance, B: advance, C: advance                                     | Advance to stage 2 |
+| A: advance, B: advance, C: suppress                                    | Suppress (any suppress wins) |
+| A: advance, B: (no response), C: (no response); timeout                | Advance to stage 2 |
+| A: (no response), B: (no response), C: (no response); timeout          | Advance to stage 2 (fail open) |
+
+Delivery-disposition envelope shape:
+
+```json
+{
+    "brief": {
+        "from": "alice@example.com",
+        "to":   "alice@example.com",
+        "extensions": {
+            "semp.dev/device-sync": {
+                "required": true,
+                "data": {
+                    "kind": "delivery-disposition",
+                    "source_envelope_id": "01HF3X7M8N9P0Q1R2S3T4U5V6W",
+                    "disposition": "suppress",
+                    "reason": "spam",
+                    "device_id": "filter-device-ulid"
+                }
+            }
+        }
+    }
+}
+```
+
+Expected verification:
+
+| Condition                                                                                           | Expected behavior                             |
+|-----------------------------------------------------------------------------------------------------|-----------------------------------------------|
+| `data.device_id` matches authenticated session's device id                                          | Proceed                                       |
+| `data.device_id` does not match authenticated session's device id                                   | Reject envelope                               |
+| `source_envelope_id` references an envelope held for this account at the submitter's stage or earlier | Apply disposition                             |
+| `source_envelope_id` does not reference any held envelope                                           | Discard disposition silently                  |
+| Envelope carries brief-layer sync fields other than `semp.dev/device-sync`                          | Reject: `extension_unsupported`               |
 
 ---
 

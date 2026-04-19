@@ -553,6 +553,103 @@ Federation sessions support automatic in-session rekeying at 80% of the
 session TTL per `SESSION.md` section 3.1, keeping long-lived federation hops
 alive without repeated handshakes.
 
+### 3.2 Staged Delivery Across Account Devices
+
+When a user's account has delegated devices whose
+`scope.receive.delivery_stage` differs from the full-access devices'
+implicit stage (`KEY.md` section 10.3.3.1), the home server MUST
+deliver inbound envelopes in stage order rather than in a single
+fan-out.
+
+#### 3.2.1 Stage Partition
+
+For each inbound envelope addressed to an account, the home server
+partitions the account's devices whose keys appear in
+`seal.enclosure_recipients` by stage:
+
+- For each delegated device, the stage is read from the current
+  scoped certificate's `scope.receive.delivery_stage`.
+- For each full-access device, the stage is the implicit value
+  `max(delegated_stages) + 1` defined in `KEY.md` section 10.3.3.1,
+  where the maximum is taken across all delegated devices of the
+  account with `scope.receive.mode != "none"`. If no such delegate
+  exists, full-access devices are at stage 1 and staging is a no-op.
+
+Devices whose `scope.receive` rejects the envelope (by `mode`,
+matcher, or rate limit) are excluded from the partition entirely.
+Their stage does not appear in subsequent stage transitions for this
+envelope.
+
+#### 3.2.2 Delivery Sequencing
+
+The home server delivers to the lowest remaining stage and holds the
+envelope for higher stages in a staged-delivery queue keyed by
+`postmark.id`. The held entries contain pointers to the device keys
+that would have been targeted at each higher stage; the server does
+not store additional copies of the envelope.
+
+After delivering to stage N, the server waits for delivery-disposition
+sync messages (`CLIENT.md` section 4.5.7) from any device at stage N
+addressing the held envelope. The wait terminates when:
+
+- All devices at stage N that received the envelope have emitted a
+  disposition, or
+- The stage timeout elapses. The RECOMMENDED timeout is 30 seconds
+  per stage; operators MAY configure longer windows for filters with
+  known high latency. Individual stages MAY declare a timeout in a
+  future extension; absent that, operator defaults apply.
+
+#### 3.2.3 Disposition Aggregation
+
+When the wait terminates, the server aggregates dispositions for the
+stage:
+
+- If any disposition at the stage is `"suppress"`, the held envelope
+  is suppressed: all higher-stage entries are removed from the queue
+  and the envelope is dropped without further delivery.
+- Otherwise, if any disposition at the stage is `"advance"`, or if
+  the stage timeout elapsed without a `"suppress"` disposition, the
+  envelope advances: the server delivers to devices at the next
+  stage and repeats the wait-and-aggregate cycle.
+
+Aggregation is conservative: `"suppress"` by any stage-N device wins
+over `"advance"` by any other stage-N device. This matches the
+common case of spam filtering where any filter concluding the
+envelope is abuse suffices to drop it.
+
+#### 3.2.4 Fail-Open on Timeout
+
+If the stage timeout elapses with no disposition at all, the server
+MUST advance the envelope to the next stage. Fail-open on timeout
+ensures that an unresponsive filter does not block delivery
+indefinitely. Operators who require fail-closed behavior for a
+specific delegate SHOULD achieve it by issuing a certificate with
+`scope.receive.rate_limits` that caps the delegate's receive rate;
+genuine filter unavailability then surfaces as a missed envelope
+rather than a blocked queue.
+
+#### 3.2.5 Disposition Authentication
+
+A delivery-disposition sync message MUST originate from a device at
+the same stage as the held envelope's current pending stage, or from
+an earlier stage. The server MUST verify that the submitting
+device's session belongs to the `device_id` claimed in the
+disposition marker's `data.device_id` field. Dispositions from
+devices at a later stage are not on the decision path and MUST be
+discarded.
+
+#### 3.2.6 Replacement of Certificate During Staging
+
+If a delegated device's certificate is updated or revoked while an
+envelope is held in the staged queue waiting for that device's
+disposition, the server MUST re-evaluate the partition for that
+envelope using the current certificate state. A device whose receive
+policy no longer permits the envelope MUST be dropped from the
+current stage's pending set. A device whose `delivery_stage` has
+changed MUST be moved to the new stage's pending set. If no devices
+remain at the current stage after re-evaluation, the envelope
+advances to the next stage immediately.
+
 ---
 
 ## 4. Sender Policy and Blocking

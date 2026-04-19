@@ -580,21 +580,51 @@ Clients MUST recognize the marker. A client that decrypts a brief carrying
 a mailbox view or any equivalent user interface element. The client MAY
 surface the sync message in a diagnostic or developer view.
 
-#### 4.5.3 Sync Payload
+#### 4.5.3 Field Placement
 
-The sync payload MUST be placed in `enclosure.extensions` under a
-namespaced identifier specific to the sync kind. The payload is visible
-only to the target device, consistent with the enclosure trust scope
-defined in `ENVELOPE.md` section 8. Sync payloads MUST NOT be placed in the
-brief or in public-layer extensions.
+Each sync kind specifies the placement of its fields according to the
+layered privacy model in `ENVELOPE.md` section 8. A sync kind's
+definition MUST declare the placement for every field it carries.
 
-When a sync envelope carries no human-readable content, the enclosure body
-MAY be empty. The enclosure extensions field remains subject to the size
-limits defined in `EXTENSIONS.md` section 4.1.
+- **Content fields** (body-equivalent semantic data exchanged between
+  the user's devices, hidden from the home server) MUST be placed in
+  `enclosure.extensions` under a namespaced identifier specific to the
+  kind. Examples: the body of a draft sync, the plaintext of a
+  rewrapped historical envelope, classification labels attached to a
+  correspondence envelope.
+- **Server-actionable fields** (kinds that require the home server to
+  read and act on the sync) MUST be placed in `brief.extensions`,
+  either inside the `semp.dev/device-sync` marker's `data` object or
+  in a sibling brief-layer extension namespaced to the kind. The home
+  server MUST NOT act on sync fields unless the sync kind's
+  specification explicitly requires it.
+- **Public metadata** MUST NOT appear in `postmark.extensions` or
+  `seal.extensions` unless the kind's specification explicitly
+  requires routing-server visibility, which is unusual for sync.
 
-Example enclosure payload for a classification sync message:
+This placement rule makes the home server's role in each sync kind
+explicit. A kind that is purely client-to-client places nothing the
+server can read beyond the marker itself. A kind that asks for server
+action places that ask in a layer the server can read.
+
+When a sync envelope carries no human-readable content, the enclosure
+body MAY be empty. When a sync kind carries no content fields, the
+`seal.enclosure_recipients` map MAY also be empty, since no client key
+wrapping is required.
+
+Example of a client-to-client sync kind (classification) with its
+content field in the enclosure:
 
 ```json
+"brief": {
+    "extensions": {
+        "semp.dev/device-sync": {
+            "required": true,
+            "data": { "kind": "classification" }
+        }
+    }
+}
+
 "enclosure": {
     "extensions": {
         "semp.dev/classification-result": {
@@ -609,12 +639,34 @@ Example enclosure payload for a classification sync message:
 }
 ```
 
-The specific sync extensions (new device onboarding, historical mail
-rewrap, read-state, draft state, classification results, and similar) are
-registered independently per `EXTENSIONS.md` section 5. Each such extension
-MUST declare the brief marker `kind` value it uses so that receiving
-devices can route the sync message to the correct handler without
-decrypting the enclosure speculatively.
+Example of a server-actionable sync kind (delivery-disposition) with
+its fields in the marker's `data` object:
+
+```json
+"brief": {
+    "extensions": {
+        "semp.dev/device-sync": {
+            "required": true,
+            "data": {
+                "kind": "delivery-disposition",
+                "source_envelope_id": "01HF3X7M8N9P0Q1R2S3T4U5V6W",
+                "disposition": "suppress",
+                "reason": "spam",
+                "device_id": "filter-device-ulid"
+            }
+        }
+    }
+}
+```
+
+Specific sync extensions (new device onboarding, historical mail
+rewrap, read-state, draft state, classification results,
+delivery-disposition, and similar) are registered independently per
+`EXTENSIONS.md` section 5. Each such extension MUST declare the `kind`
+value it uses and the placement of each of its fields so that
+receiving parties (server for server-actionable kinds, devices for
+client-to-client kinds) can route and handle the sync without
+speculative decryption.
 
 #### 4.5.4 Home Server Obligations
 
@@ -638,7 +690,14 @@ a delegated filter device, or historical mail rewrap during new device
 onboarding) can exceed ordinary correspondence rates by a significant
 margin.
 
-The server MUST NOT read or act on the contents of `enclosure.extensions`.
+The server MUST NOT act on any field under `enclosure.extensions`,
+since it cannot read that layer. The server MUST act on brief-layer
+fields of a sync kind only when the kind's specification explicitly
+defines that action (see section 4.5.3 and the staged-delivery
+handling in section 4.5.8). Unknown brief-layer sync fields MUST be
+ignored per the `required` criticality rules in `EXTENSIONS.md`
+section 3.
+
 The server MUST NOT log, cache, or transmit the enclosure plaintext.
 
 #### 4.5.5 Delegated Client Authorization
@@ -664,13 +723,85 @@ device. The home server applies the resulting seal entries to stored
 envelopes as described in section 4.4.1 without learning the plaintext
 keys.
 
-#### 4.5.7 Conformance
+#### 4.5.7 Staged Delivery and the `delivery-disposition` Kind
+
+A user MAY place a delegated device at a lower receive stage than
+their full-access devices, so that the delegate (for example a spam
+filter or virus scanner) processes inbound envelopes before
+full-access devices see them. Stage is declared per device in
+`scope.receive.delivery_stage` per `KEY.md` section 10.3.3.1. Server
+handling of staged delivery is defined in `DELIVERY.md` section 3.2.
+
+The `delivery-disposition` sync kind is the control signal by which a
+staged device tells the home server whether the held envelope should
+advance to the next stage or be suppressed. It is a server-actionable
+kind with all fields in the marker's `data` object:
+
+```json
+"brief": {
+    "from": "alice@example.com",
+    "to":   "alice@example.com",
+    "extensions": {
+        "semp.dev/device-sync": {
+            "required": true,
+            "data": {
+                "kind": "delivery-disposition",
+                "source_envelope_id": "01HF3X7M8N9P0Q1R2S3T4U5V6W",
+                "disposition": "advance",
+                "reason": "accepted",
+                "device_id": "filter-device-ulid"
+            }
+        }
+    }
+}
+```
+
+| Field                | Type     | Required | Description                                                                                   |
+|----------------------|----------|----------|-----------------------------------------------------------------------------------------------|
+| `kind`               | `string` | Yes      | MUST be `"delivery-disposition"`.                                                             |
+| `source_envelope_id` | `string` | Yes      | `postmark.id` of the held envelope this disposition addresses.                                |
+| `disposition`        | `string` | Yes      | One of: `"advance"`, `"suppress"`.                                                            |
+| `reason`             | `string` | No       | Operator-defined reason tag. RECOMMENDED values: `spam`, `accepted`, `policy`, `other`.       |
+| `device_id`          | `string` | Yes      | Identifier of the device issuing the disposition. MUST match the authenticated device's id.   |
+
+A delivery-disposition envelope is composed as a normal self-addressed
+envelope under the device's current session. The enclosure MAY be
+empty. `seal.enclosure_recipients` MAY be empty. `seal.brief_recipients`
+MUST contain the home server's domain key entry so that the server can
+decrypt the brief and read the disposition.
+
+On receipt, the home server MUST:
+
+1. Verify the envelope's seal per the ordinary delivery pipeline.
+2. Verify that `from` and `to` resolve to the same user and that the
+   authenticated session belongs to the device identified by
+   `device_id`.
+3. Look up the held envelope by `source_envelope_id` in the
+   staged-delivery queue (`DELIVERY.md` section 3.2). If no such held
+   envelope exists for this account at this device's stage or an
+   earlier stage, the disposition MUST be discarded.
+4. Record the disposition against the held envelope and apply the
+   aggregation rules in `DELIVERY.md` section 3.2.
+
+A delivery-disposition envelope's brief MUST NOT carry any sync fields
+other than the `semp.dev/device-sync` marker. A server that receives a
+disposition envelope with additional sync fields MUST reject the
+envelope with `reason_code: "extension_unsupported"`. This keeps the
+dispatch path unambiguous.
+
+A delivery-disposition envelope MUST NOT itself trigger staged
+delivery. The home server delivers the disposition envelope directly
+(it is server-acted, not user-visible), without placing it into the
+staged queue.
+
+#### 4.5.8 Conformance
 
 The device sync marker is a core extension. A conformant SEMP client MUST
 recognize `semp.dev/device-sync` and MUST implement the user-interface
 obligations in section 4.5.2 regardless of which specific sync extensions
 it supports. A conformant SEMP server MUST implement the home server
-obligations in section 4.5.4.
+obligations in section 4.5.4 and, when it supports staged delivery, the
+`delivery-disposition` handling in section 4.5.7.
 
 Support for individual sync extensions (new device onboarding, historical
 mail rewrap, read-state synchronization, draft synchronization,
