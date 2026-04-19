@@ -697,9 +697,17 @@ A new server earns access to the trust network by participating in it. Per
 
 ## 7. Trust Transfer
 
-When a domain changes ownership, the trust history associated with that domain
-MAY be transferred from seller to buyer through a cryptographic handshake
-requiring both parties' private keys. This implements `DESIGN.md` section 5.3.
+When a domain changes ownership or rotates its domain key, the trust
+history associated with the prior domain key MAY be transferred to the
+new key through a cryptographic handshake requiring both parties'
+private keys. This implements `DESIGN.md` section 5.3.
+
+Trust transfer is the mechanism by which SEMP handles legitimate
+domain transitions (sales, mergers, key rotations) without leaking
+trust to the wrong operator and without forcing legitimate new
+operators to start from zero. Both directions matter: a buyer of a
+reputable domain cannot fully inherit its trust, and a buyer of a
+disreputable domain cannot launder away its history.
 
 ### 7.1 Transfer Record Schema
 
@@ -709,7 +717,7 @@ requiring both parties' private keys. This implements `DESIGN.md` section 5.3.
     "version": "1.0.0",
     "id": "transfer-ulid",
     "domain": "transferred-domain.com",
-    "transfer_type": "ownership_change",
+    "reason": "sold",
     "from": {
         "domain_key_id": "seller-domain-key-fingerprint",
         "signature": "base64-seller-signature-over-transfer",
@@ -727,92 +735,205 @@ requiring both parties' private keys. This implements `DESIGN.md` section 5.3.
 
 ### 7.2 Transfer Record Fields
 
-| Field           | Type     | Required | Description                                                       |
-|-----------------|----------|----------|-------------------------------------------------------------------|
-| `type`          | `string` | Yes      | MUST be `"SEMP_TRUST_TRANSFER"`                                   |
-| `version`       | `string` | Yes      | SEMP protocol version (semver)                                    |
-| `id`            | `string` | Yes      | Unique transfer identifier. ULID RECOMMENDED.                     |
-| `domain`        | `string` | Yes      | The domain being transferred.                                     |
-| `transfer_type` | `string` | Yes      | One of: `ownership_change`, `key_rotation`. See section 7.3.      |
-| `from`          | `object` | Yes      | Seller/previous owner's signed attestation.                       |
-| `to`            | `object` | Yes      | Buyer/new owner's signed acceptance.                              |
-| `effective_at`  | `string` | Yes      | ISO 8601 UTC timestamp when the transfer takes effect.            |
-| `extensions`    | `object` | No       | Transfer-related metadata.                                        |
+| Field          | Type     | Required | Description                                                       |
+|----------------|----------|----------|-------------------------------------------------------------------|
+| `type`         | `string` | Yes      | MUST be `"SEMP_TRUST_TRANSFER"`.                                  |
+| `version`      | `string` | Yes      | SEMP protocol version (semver).                                   |
+| `id`           | `string` | Yes      | Unique transfer identifier. ULID RECOMMENDED.                     |
+| `domain`       | `string` | Yes      | The domain being transferred.                                     |
+| `reason`       | `string` | Yes      | One of the enum values in section 7.3.                            |
+| `from`         | `object` | Yes      | Prior key holder's signed attestation.                            |
+| `to`           | `object` | Yes      | New key holder's signed acceptance.                               |
+| `effective_at` | `string` | Yes      | ISO 8601 UTC timestamp when the transfer takes effect.            |
+| `extensions`   | `object` | No       | Transfer-related metadata.                                        |
 
-### 7.3 Transfer Types
+### 7.3 Transfer Reasons
 
-| Type               | Description                                                           |
-|--------------------|-----------------------------------------------------------------------|
-| `ownership_change` | Domain sold or transferred to a new operator. Full trust history transfers. |
-| `key_rotation`     | Same operator, new domain key. Trust history is preserved under the new key. |
+| `reason`                    | Meaning                                                                                          | Default carry-over class |
+|-----------------------------|--------------------------------------------------------------------------------------------------|--------------------------|
+| `key_rotation`              | Same operator, new domain key. No change in control. Operator is rotating per `KEY.md` §7.       | Full                     |
+| `sold`                      | Ownership transferred to a new operator via commercial sale.                                     | Asymmetric (section 7.6) |
+| `merged`                    | Organizational merger: the new operator subsumes the prior operator's infrastructure.            | Asymmetric (section 7.6) |
+| `corporate_reorganization`  | Same corporate entity, legal restructure (spin-off, reincorporation, name change).               | Full                     |
+| `inherited`                 | Ownership transferred due to dissolution, bankruptcy, or death of the prior operator.            | Asymmetric (section 7.6) |
+| `other`                     | Reason outside the enum. Observers MAY treat as `sold` for policy purposes.                      | Asymmetric (section 7.6) |
 
-`key_rotation` is the routine case: the operator is rotating their domain key
-per the schedule in `KEY.md` section 7.1. The transfer record binds
-the old key's trust history to the new key. This is distinct from key revocation:
-a rotation with transfer preserves continuity, while a revocation without
-transfer severs it.
+`key_rotation` is the routine case: the operator is rotating their
+domain key per the schedule in `KEY.md` section 7.1. The transfer
+record binds the prior key's trust history to the new key. This is
+distinct from key revocation: a rotation with transfer preserves
+continuity; a revocation without transfer severs it.
+
+Operators whose transfer does not fit the enum SHOULD use `other`
+with an optional `extensions["semp.dev/transfer-reason-note"]`
+human-readable note. Observer policy defaults to treating `other`
+conservatively.
 
 ### 7.4 Transfer Publication
 
-The transfer record MUST be published on both domains through the
-`reputation_transfer` endpoint advertised in each domain's configuration
-document (`DISCOVERY.md` section 3.1.1). The endpoint is a base URL; the
-outgoing and incoming records are retrieved by appending `out` and `in`
-respectively:
+The transfer record MUST be published through the `reputation_transfer`
+endpoint advertised in the publishing domain's configuration document
+(`DISCOVERY.md` section 3.1.1). The endpoint is a base URL; the
+outgoing and incoming records are retrieved by appending `out` and
+`in` respectively:
 
-**Old domain (seller/previous key):**
+**Prior-key publisher:**
 
 ```
 GET <endpoints.reputation_transfer>out
 ```
 
-**New domain (buyer/new key):**
+**New-key publisher:**
 
 ```
 GET <endpoints.reputation_transfer>in
 ```
 
-A domain that does not advertise `reputation_transfer` does not publish
-transfer records. For `ownership_change` and `key_rotation`, the
-publishing domain MUST advertise the endpoint for the duration that
-transfer continuity is relevant.
+For `sold`, `merged`, and `inherited`, the transfer is cross-domain
+(or cross-operator on the same domain). Both the prior and new
+publishers MUST advertise and serve their respective record for at
+least **2 years** after `effective_at`. This retention window is the
+minimum period during which an observer newly encountering the
+domain is expected to discover the transition.
 
-For `ownership_change`, the old domain's record persists so that servers with
-cached reputation for the old key can discover the transfer. The new domain's
-record contains the old domain's signed transfer-out as proof of the chain.
+For `key_rotation` and `corporate_reorganization`, both records are
+published on the same domain under the respective keys. The same
+2-year retention applies.
 
-For `key_rotation`, both records are published on the same domain under the
-respective keys.
+A domain that does not advertise `reputation_transfer` does not
+publish transfer records. Absence of a transfer record at the
+advertised endpoint MUST NOT be interpreted as evidence that a
+transfer did not occur; it is evidence that no transfer record is
+available for observers at that endpoint.
 
 ### 7.5 Transfer Verification
 
-Any server that encounters a transfer record can verify the chain:
+Any server that encounters a transfer record MUST verify the chain:
 
-1. Verify `from.signature` against the old domain key (fetched from the domain's
-   published key history or DNS).
+1. Verify `from.signature` against the prior domain key, fetched from
+   the domain's published key history or DNS.
 2. Verify `to.signature` against the new domain key.
-3. Confirm both signatures cover the same transfer `id` and `domain`.
+3. Confirm both signatures cover the same transfer `id`, `domain`,
+   and `reason`.
+4. Confirm `from.signed_at <= to.signed_at <= effective_at`.
+5. Confirm `effective_at` is not in the future per the clock tolerance
+   in `CONFORMANCE.md` section 9.3.1.
 
-If either signature fails, the transfer is invalid. Servers MUST NOT honor an
-unverifiable transfer.
+If any check fails, the transfer is invalid. Servers MUST NOT honor
+an unverifiable transfer and MUST record no continuity between the
+two keys.
 
-### 7.6 Transfer Policy
+### 7.6 Asymmetric Carry-Over
 
-Whether a server honors a trust transfer is a policy decision. The protocol
-makes the transfer verifiable. Operators decide whether to carry forward the
-previous reputation, discount it, or ignore it entirely.
+Transfer records have different default carry-over behavior depending
+on `reason` (section 7.3). The following rules are normative defaults;
+operators MAY adjust them via policy, subject to the constraints in
+section 7.7.
 
-Servers MAY apply a decay factor to transferred reputation. For example,
-honoring 80% of the previous trust score immediately after transfer and
-requiring the new operator to earn the remainder through observed behavior.
-This is policy, not protocol.
+**Negative observations always carry at full weight.** Any abuse
+reports, gossip observations, or policy signals produced about the
+prior key during its active period MUST continue to apply to the
+domain's reputation after transfer, at full weight, regardless of
+`reason`. Negative history does not decay under transfer.
 
-### 7.7 Loss of Private Key
+**Positive observations carry with discount for asymmetric reasons.**
+For `sold`, `merged`, `inherited`, and `other`, observers SHOULD
+discount transferred positive reputation by at least 50% for the
+90-day cooldown period following `effective_at`. After the cooldown,
+observers MAY restore full weight based on post-transfer observed
+behavior.
 
-Loss of the domain private key without a transfer record means permanent loss
-of the associated trust history. There is no recovery path. Per `DESIGN.md`
-section 5.3 and `KEY.md` section 11, trust cannot be forged, reassigned
-unilaterally, or reconstructed from backup by an unauthorized party.
+**Full carry-over for continuity reasons.** For `key_rotation` and
+`corporate_reorganization`, both positive and negative observations
+carry at full weight with no cooldown discount. These reasons assert
+no change of operator; the transfer is an administrative act.
+
+The 90-day cooldown is the RECOMMENDED default. Operators that prefer
+faster onboarding MAY apply shorter cooldowns but MUST NOT treat
+newly-transferred positive reputation as if no transfer had occurred.
+Operators that prefer more conservative onboarding MAY extend the
+cooldown or refuse to honor the transfer entirely.
+
+### 7.7 Immutability of Pre-Transfer Observations
+
+Observations published before `effective_at` about the prior key's
+activity MUST NOT be retracted, hidden, modified, or otherwise
+altered as a consequence of a transfer. A transfer is a continuity
+claim; it is not a redaction mechanism.
+
+Publishers of observations MUST continue to serve their prior
+observation records after a transfer of the subject domain through
+the window defined in section 4.4. Observers fetching observations
+about a domain whose key has been transferred MUST retain
+pre-transfer observations at their original timestamps.
+
+A publisher who retracts or amends a prior observation in response
+to a transfer MUST treat the retraction as a new observation with
+the retraction timestamp. The original observation is preserved in
+the publisher's ledger.
+
+### 7.8 Observer Fetch Policy
+
+A conformant server that federates with a domain for the first time,
+or that encounters a domain key it does not recognize on an already
+federated domain, MUST fetch the `reputation_transfer` records at
+that domain proactively and cache them. The cache SHOULD be
+refreshed on expiry of the cached entry, and MUST be re-fetched if
+the server receives a `SEMP_TRUST_TRANSFER` reference it does not
+yet have.
+
+Proactive fetch ensures that observers are aware of a continuity
+claim before they make delivery decisions, rather than discovering
+it only when they encounter stale cached reputation.
+
+### 7.9 Fail-Open on Fetch Failure
+
+If a server cannot fetch a transfer record (network failure, 404,
+timeout, signature verification failure), it MUST treat the domain
+as if no transfer occurred. An inability to fetch MUST NOT be
+interpreted as evidence that a transfer happened.
+
+This rule prevents network partitions, denial-of-service attacks on
+the publishing endpoint, or deliberate endpoint suppression from
+creating phantom transfers that would otherwise let a new operator
+inherit reputation they did not sign for.
+
+### 7.10 Security Considerations
+
+**Inherited abuse immunity.** An operator cannot clean up a
+disreputable domain by purchasing and transferring it. Negative
+observations from the prior key carry at full weight. The new
+operator starts with the prior domain's negative history intact and
+must earn clean status through observed behavior post-transfer.
+
+**Reputation laundering across owned domains.** An operator that
+controls multiple domains can issue transfers between their own
+keys. The protocol cannot distinguish this from a genuine
+third-party sale. Observers MAY weigh transfers with suspicion when
+the prior and new keys share infrastructure, registrant, or other
+correlatable signals. This weighting is policy.
+
+**Fraudulent transfer claims.** A transfer record MUST be signed by
+both the prior and new keys. A unilateral transfer is
+cryptographically impossible. If the prior key is compromised, an
+attacker holding it can co-sign a transfer to a key they control,
+but the transfer is still publicly visible and subject to observer
+policy. Prompt revocation of a compromised prior key (per `KEY.md`
+section 8) supersedes any transfer the attacker might have
+published.
+
+**Observer disagreement.** Observers are not required to honor any
+transfer. A domain that depends on its trust being honored across
+the network SHOULD prepare for divergent observer policies and
+SHOULD NOT assume universal continuity.
+
+### 7.11 Loss of Private Key
+
+Loss of the domain private key without a transfer record means
+permanent loss of the associated trust history. There is no recovery
+path. Per `DESIGN.md` section 5.3 and `KEY.md` section 11, trust
+cannot be forged, reassigned unilaterally, or reconstructed from
+backup by an unauthorized party.
 
 ---
 
