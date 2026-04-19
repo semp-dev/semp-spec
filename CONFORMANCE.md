@@ -621,8 +621,9 @@ A conformant server MUST:
   code `scope_exceeded`. (`CLIENT.md` §2.4, `KEY.md` §10.3.4)
 - Reject envelope submissions from devices with `scope.send.mode` set to
   `none`. (`KEY.md` §10.3.4)
-- Not deliver inbound envelopes to devices with `scope.receive` set to
-  `false`. (`CLIENT.md` §2.4)
+- Not deliver inbound envelopes to a delegated device whose
+  `scope.receive` matcher rejects the sender address in `brief.from`.
+  (`CLIENT.md` §2.4, `KEY.md` §10.3.4)
 - Accept certificate updates from the primary device without invalidating
   the delegated device's active session. (`KEY.md` §10.3.6)
 - Terminate sessions and reject further handshakes when a device key is
@@ -875,8 +876,20 @@ A conformant client MUST:
 A conformant primary client that issues scoped device certificates MUST:
 
 - Sign the certificate with its own device key. (`KEY.md` §10.3.1)
-- Include all required scope fields: `send`, `receive`, `manage_keys`,
-  `manage_blocks`, `manage_devices`. (`KEY.md` §10.3.3)
+- Include all five scope fields (`send`, `receive`, `blocklist`,
+  `keys`, `devices`), each with its uniform object shape including a
+  `rate_limits` array (possibly empty).
+  (`KEY.md` §10.3.3)
+- Use matcher mode `unrestricted`, `restricted`, `denylist`, or `none`
+  for `send` and `receive`, with `allow` or `deny` populated as the
+  mode requires. (`KEY.md` §10.3.3.1)
+- Not mix `allow` and `deny` in a single matcher.
+  (`KEY.md` §10.3.3.1)
+- Use separate `read` and `write` boolean flags on `blocklist`,
+  `keys`, and `devices`. (`KEY.md` §10.3.3.2)
+- Populate `rate_limits` as an array of zero or more tiers, each with
+  integer `period_seconds >= 1` and integer `amount_allowed >= 0`,
+  with no more than 16 tiers per array. (`KEY.md` §10.3.3.3)
 - Set `expires_at` within the range `issued_at < expires_at <= issued_at + 365 days`.
   (`KEY.md` §10.3.8)
 - Submit the certificate to the home server via the standard device
@@ -901,12 +914,36 @@ A conformant home server MUST:
 - Reject certificate registrations whose signature does not verify, whose
   issuer is not a registered full-access device of the account, or whose
   issuer is revoked. (`KEY.md` §10.3.5)
-- Reject certificates with malformed or oversized scope with reason code
-  `scope_invalid`. (`KEY.md` §10.3.4, `ERRORS.md`)
+- Reject certificates with malformed or oversized scope (combined
+  `allow` and `deny` exceeding 10,000 entries in any single matcher,
+  or more than 16 rate-limit tiers in a single `rate_limits` array,
+  or `period_seconds < 1` or `amount_allowed < 0` in any tier) with
+  `reason_code: "scope_invalid"`.
+  (`KEY.md` §10.3.3.1, §10.3.3.3, `ERRORS.md`)
+- Reject certificates that mix `allow` and `deny` within a single
+  matcher with `reason_code: "scope_invalid"`. (`KEY.md` §10.3.3.1)
+- Reject certificates that omit `rate_limits` on any scope field with
+  `reason_code: "scope_invalid"`. (`KEY.md` §10.3.3)
 - Reject certificates whose `expires_at` exceeds `issued_at + 365 days`
-  with reason code `scope_invalid`. (`KEY.md` §10.3.8)
+  with `reason_code: "scope_invalid"`. (`KEY.md` §10.3.8)
 - Apply the current certificate on every operation, not the certificate
   active at session establishment. (`KEY.md` §10.3.4)
+- Evaluate the `receive` matcher against `brief.from` before delivering
+  an inbound envelope to the delegated device's session, and not wrap
+  session material to this device for envelopes the matcher rejects.
+  (`KEY.md` §10.3.4)
+- For operations on `blocklist`, `keys`, or `devices`, dispatch on
+  read vs write, reject with `reason_code: "scope_exceeded"` when the
+  corresponding flag is `false`, and reject nested delegation attempts
+  (an `issued_by` pointing at a delegated device) with
+  `reason_code: "scope_invalid"`. (`KEY.md` §10.3.3.2, §10.3.4, §10.3.9)
+- Evaluate every tier in every scope field's `rate_limits` array on
+  each operation that passes the matcher or read/write check, reject
+  with `reason_code: "rate_limited"` when any tier would be exceeded,
+  and not record the operation against the counters.
+  (`KEY.md` §10.3.3.3, §10.3.4)
+- Expose current per-tier rate-limit counters to the owning account's
+  authenticated clients. (`KEY.md` §10.3.3.3)
 - Preserve the delegated device's active session across certificate
   update. Session invalidation is triggered only by device-key rotation
   or explicit revocation. (`KEY.md` §10.3.6)

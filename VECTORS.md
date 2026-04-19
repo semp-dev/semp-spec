@@ -946,12 +946,16 @@ certificates.
             "allow": [
                 { "type": "user", "address": "subscriber1@example.com" },
                 { "type": "domain", "domain": "company.example" }
+            ],
+            "rate_limits": [
+                { "period_seconds": 3600,  "amount_allowed": 200 },
+                { "period_seconds": 86400, "amount_allowed": 2000 }
             ]
         },
-        "receive": false,
-        "manage_keys": false,
-        "manage_blocks": false,
-        "manage_devices": false
+        "receive": { "mode": "none", "rate_limits": [] },
+        "blocklist": { "read": false, "write": false, "rate_limits": [] },
+        "keys":      { "read": false, "write": false, "rate_limits": [] },
+        "devices":   { "read": false, "write": false, "rate_limits": [] }
     },
     "signature": {
         "algorithm": "ed25519",
@@ -979,9 +983,12 @@ certificates.
 | `issued_by` device is not registered for account | Reject registration                      |
 | `issued_by` device has been revoked          | Reject registration                          |
 | `expires_at` is in the past                  | Reject registration                          |
-| `allow` list exceeds 10,000 entries          | Reject registration                          |
-| `scope.send.mode` is `restricted` but `allow` is missing | Reject registration            |
-| Required scope fields missing                | Reject registration                          |
+| Combined `allow`+`deny` in a matcher exceeds 10,000 entries | Reject: `scope_invalid`       |
+| Matcher contains both `allow` and `deny`     | Reject: `scope_invalid`                      |
+| `scope.send.mode` is `restricted` but `allow` is missing | Reject: `scope_invalid`         |
+| `scope.send.mode` is `denylist` but `deny` is missing | Reject: `scope_invalid`              |
+| Required scope fields missing (including `limits`) | Reject: `scope_invalid`                |
+| `expires_at` exceeds `issued_at + 365 days`  | Reject: `scope_invalid`                      |
 
 ### 14.3 Vector: Scope Enforcement at Submission
 
@@ -1001,7 +1008,66 @@ Given a delegated device with the certificate from section 14.1:
 | `unrestricted`     | Any address                | Submission accepted           |
 | `restricted`       | Address in `allow` list    | Submission accepted           |
 | `restricted`       | Address not in `allow`     | Rejected: `scope_exceeded`    |
+| `denylist`         | Address in `deny` list     | Rejected: `scope_exceeded`    |
+| `denylist`         | Address not in `deny` list | Submission accepted           |
 | `none`             | Any address                | Rejected: `scope_exceeded`    |
+
+### 14.4.1 Vector: Receive Matcher Enforcement
+
+Given two delegated devices on the same account:
+
+| Device | `scope.receive`                                                  | Inbound sender             | Expected behavior                        |
+|--------|------------------------------------------------------------------|----------------------------|------------------------------------------|
+| A      | `{ "mode": "unrestricted" }`                                     | any                        | Delivered to device A                    |
+| B      | `{ "mode": "restricted", "allow": [ {"type":"domain","domain":"trusted.example"} ] }` | `alice@trusted.example`    | Delivered to device B                    |
+| B      | same as above                                                    | `mallory@other.example`    | Not delivered to device B (device A still receives) |
+| C      | `{ "mode": "none" }`                                             | any                        | Not delivered to device C                |
+
+### 14.4.2 Vector: Rate Limit Enforcement
+
+Given a delegated device with `scope.send.rate_limits` containing one
+tier `{ "period_seconds": 3600, "amount_allowed": 100 }`:
+
+| Submissions in rolling hour | Expected behavior                                                 |
+|-----------------------------|-------------------------------------------------------------------|
+| 1 to 100                    | Accepted                                                          |
+| 101st                       | Rejected: `rate_limited`. Counters MUST NOT record the rejected attempt. Rolling window advance permits next send. |
+
+Given a delegated device with `scope.send.rate_limits` containing two
+tiers `{ "period_seconds": 3600, "amount_allowed": 100 }` and
+`{ "period_seconds": 86400, "amount_allowed": 500 }`:
+
+| State                                                          | Expected behavior                    |
+|----------------------------------------------------------------|--------------------------------------|
+| 100 sends in the last hour, 300 in the last day                | Hourly tier at cap: reject           |
+| 50 sends in the last hour, 500 in the last day                 | Daily tier at cap: reject            |
+| 50 sends in the last hour, 300 in the last day                 | Accept                               |
+
+Given a delegated device with `scope.blocklist.rate_limits = []`:
+
+| Update count | Expected behavior                                        |
+|--------------|----------------------------------------------------------|
+| any          | Protocol imposes no cap; operator policy MAY still apply. |
+
+### 14.4.3 Vector: Resource Read/Write Enforcement
+
+Given a delegated device with:
+
+```json
+"blocklist": { "read": true, "write": false, "rate_limits": [] },
+"keys":      { "read": false, "write": false, "rate_limits": [] },
+"devices":   { "read": true, "write": true, "rate_limits": [] }
+```
+
+| Operation                                             | Expected behavior                     |
+|-------------------------------------------------------|---------------------------------------|
+| GET block list                                        | Accepted                              |
+| POST block entry                                      | Rejected: `scope_exceeded`            |
+| GET key rotation history                              | Rejected: `scope_exceeded`            |
+| POST key rotation                                     | Rejected: `scope_exceeded`            |
+| GET devices list                                      | Accepted                              |
+| POST new delegated device whose `issued_by` is a full-access device | Accepted (with issuer-signature requirement) |
+| POST new delegated device whose `issued_by` is this delegated device | Rejected: `scope_invalid` (nested delegation) |
 
 ### 14.5 Vector: Certificate Lifecycle Operations
 
