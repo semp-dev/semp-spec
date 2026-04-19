@@ -1089,7 +1089,40 @@ In particular:
   key, regardless of whether the change is due to migration or
   reassignment. (`CLIENT.md` §3.3, `MIGRATION.md` §11.1)
 
-### 5.14 Large Attachments
+### 5.14 Account Closure
+
+Account closure is a RECOMMENDED optional core module specified in
+`CLOSURE.md`. A client claiming closure support MUST comply with
+`CLOSURE.md` section 10.1. A server claiming closure support MUST
+comply with section 10.2, in particular:
+
+- Verify closure requests against a current full-access device key
+  and reject requests signed by delegated devices with
+  `reason_code: "scope_invalid"`. (`CLOSURE.md` §2.3, §10.2)
+- Enforce `grace_period_seconds` bounds: min 7 days, max 90 days.
+  (`CLOSURE.md` §3.1)
+- Finalize at `requested_at + grace_period_seconds` and not before.
+  (`CLOSURE.md` §4.1)
+- Revoke keys with reason `superseded` on finalization, not a
+  closure-specific reason. (`CLOSURE.md` §4.2, §9.1)
+- Delete the recovery bundle at finalization. (`CLOSURE.md` §4.2, §7)
+- Not publish a closure record, closure reason code, or
+  closure-specific discovery artifact. (`CLOSURE.md` §4.3)
+- Respond to ingress for a closed account during the retention
+  window with `policy_forbidden` or `silent`, identical to the
+  response given to non-existent addresses.
+  (`CLOSURE.md` §5.1, `DELIVERY.md` §6.4)
+- Not reassign the local-part before the retention window ends
+  (RECOMMENDED 365 days, MINIMUM 180 days). Treat reassignment as
+  a fresh registration with no inherited trust.
+  (`CLOSURE.md` §6)
+
+A conformant client MUST NOT describe a post-closure delivery
+failure as account closure in the user interface, since the protocol
+does not publish closure as an observable event.
+(`CLOSURE.md` §10.1)
+
+### 5.15 Large Attachments
 
 The `semp.dev/large-attachment` wire extension is specified in
 `ATTACHMENTS.md`. A client claiming support MUST comply with
@@ -1113,7 +1146,7 @@ A server operator who hosts blob storage MUST advertise the
 `attachment_storage` endpoint in discovery and MUST NOT decrypt, scan,
 or inspect ciphertext content. (`ATTACHMENTS.md` §4.3, §10.2)
 
-### 5.15 Content Security
+### 5.16 Content Security
 
 A conformant client MUST:
 

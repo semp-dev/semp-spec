@@ -403,6 +403,7 @@ rest of the stack as-is.
 | `RECOVERY.md` | Optional core module: account recovery. Server-assisted and Shamir device-split backup, restore flow, successor records. RECOMMENDED. |
 | `MIGRATION.md` | Optional core module: provider migration. Cross-domain address change with key continuity, forwarding, and local-part reassignment rules. RECOMMENDED. |
 | `ATTACHMENTS.md` | Wire-level extension `semp.dev/large-attachment`: external-storage attachments with HKDF-derived per-attachment keys and ciphertext hashes. |
+| `CLOSURE.md` | Optional core module: account closure. User-driven closure with grace period, key revocation under existing mechanisms, retention window, and local-part reassignment rules. RECOMMENDED. |
 
 ---
 
