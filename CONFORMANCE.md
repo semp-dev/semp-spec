@@ -1193,7 +1193,49 @@ A server operator who hosts blob storage MUST advertise the
 `attachment_storage` endpoint in discovery and MUST NOT decrypt, scan,
 or inspect ciphertext content. (`ATTACHMENTS.md` §4.3, §10.2)
 
-### 5.16 Content Security
+### 5.16 Key Transparency
+
+Key transparency is a RECOMMENDED optional core module specified in
+`TRANSPARENCY.md`. A server claiming support MUST comply with
+`TRANSPARENCY.md` section 9.1, in particular:
+
+- Maintain an append-only Merkle-tree log of every user identity and
+  encryption key event. (`TRANSPARENCY.md` §2)
+- Publish a fresh signed tree head at least hourly, signed by the
+  domain signing key. (`TRANSPARENCY.md` §2.3)
+- Serve the `transparency_log` endpoint with inclusion proofs,
+  consistency proofs, STHs, and leaf ranges.
+  (`TRANSPARENCY.md` §2.4, `DISCOVERY.md` §3.1.1)
+- Augment every `SEMP_KEYS` response with per-key `transparency`
+  containing an inclusion proof and a current STH.
+  (`TRANSPARENCY.md` §4.1)
+- Never remove or modify a leaf and never sign two STHs with the
+  same `log_size` and different `root_hash`. (`TRANSPARENCY.md` §9.1)
+- Continue serving the log for at least 2 years after withdrawing
+  transparency support. (`TRANSPARENCY.md` §2.5)
+
+A client that accepts keys from transparency-supporting domains MUST:
+
+- Verify the STH signature and freshness (within 1 hour per
+  `CONFORMANCE.md` §9.3.1) before accepting any key.
+  (`TRANSPARENCY.md` §4.2, §4.3)
+- Verify the inclusion proof against the STH and confirm the proven
+  leaf matches the returned key. (`TRANSPARENCY.md` §4.2)
+- Refuse to use a key whose transparency verification fails, and
+  surface the failure to the user as a security warning.
+  (`TRANSPARENCY.md` §4.2, §9.2)
+- Verify every STH signature in consumed `key_transparency`
+  observations. For `verification` observations, re-verify the
+  contained consistency proof. For `equivocation` observations,
+  verify that both STHs are signed by the subject domain and have
+  the same `log_size` with different `root_hash`.
+  (`TRANSPARENCY.md` §5.3, §9.2)
+- Treat a verified `equivocation` observation, or a client-observed
+  inconsistency between its own key-fetch STH and gossiped STHs,
+  as strong evidence that the subject domain is misbehaving.
+  (`TRANSPARENCY.md` §5.3)
+
+### 5.17 Content Security
 
 A conformant client MUST:
 

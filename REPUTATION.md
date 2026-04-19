@@ -418,6 +418,21 @@ own policy interpretation; a `suspicious` assessment from a server with a
 history of aggressive classification may carry different weight than one from
 a conservative observer.
 
+### 4.7 Observation Kinds
+
+Observations carry a `kind` field distinguishing what the observation
+is about. The following kinds are defined:
+
+| Kind                | Subject                                                                       | Defined in                 |
+|---------------------|-------------------------------------------------------------------------------|----------------------------|
+| `abuse_rate`        | Volume and severity of abuse reports attributed to the subject domain.        | Section 4 of this document.|
+| `delivery_outcomes` | Delivery success and rejection ratios observed by the publishing server.      | Section 4 of this document.|
+| `key_transparency`  | Observations of the subject domain's key transparency log (STH snapshots, consistency verifications, equivocation reports). | `TRANSPARENCY.md` section 5. |
+
+Additional kinds MAY be defined by future revisions or extensions.
+Observation record consumers MUST ignore unknown kinds rather than
+rejecting the containing record.
+
 ---
 
 ## 5. Trust Gossip Publication and Fetching
