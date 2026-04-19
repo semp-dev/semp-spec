@@ -877,8 +877,13 @@ A conformant primary client that issues scoped device certificates MUST:
 - Sign the certificate with its own device key. (`KEY.md` §10.3.1)
 - Include all required scope fields: `send`, `receive`, `manage_keys`,
   `manage_blocks`, `manage_devices`. (`KEY.md` §10.3.3)
+- Set `expires_at` within the range `issued_at < expires_at <= issued_at + 365 days`.
+  (`KEY.md` §10.3.8)
 - Submit the certificate to the home server via the standard device
   registration flow. (`CLIENT.md` §2.3)
+- Issue revocation records using the `SEMP_DEVICE_CERTIFICATE_REVOCATION`
+  schema with a defined reason code when terminating a delegation.
+  (`KEY.md` §10.3.7)
 
 A conformant delegated client MUST:
 
@@ -888,6 +893,29 @@ A conformant delegated client MUST:
 - Not attempt operations outside its certificate scope (registering devices,
   modifying block lists, managing keys) if the scope does not permit them.
   (`CLIENT.md` §2.5)
+- Not issue `SEMP_DEVICE_CERTIFICATE` records under any scope. Nested
+  delegation is prohibited. (`KEY.md` §10.3.9)
+
+A conformant home server MUST:
+
+- Reject certificate registrations whose signature does not verify, whose
+  issuer is not a registered full-access device of the account, or whose
+  issuer is revoked. (`KEY.md` §10.3.5)
+- Reject certificates with malformed or oversized scope with reason code
+  `scope_invalid`. (`KEY.md` §10.3.4, `ERRORS.md`)
+- Reject certificates whose `expires_at` exceeds `issued_at + 365 days`
+  with reason code `scope_invalid`. (`KEY.md` §10.3.8)
+- Apply the current certificate on every operation, not the certificate
+  active at session establishment. (`KEY.md` §10.3.4)
+- Preserve the delegated device's active session across certificate
+  update. Session invalidation is triggered only by device-key rotation
+  or explicit revocation. (`KEY.md` §10.3.6)
+- Terminate the delegated device's session immediately on acceptance of
+  a revocation record and reject subsequent handshakes with
+  `reason_code: "revoked"`. (`KEY.md` §10.3.7.3)
+- Reject operations from a delegated device whose certificate has
+  expired with `reason_code: "certificate_expired"`.
+  (`KEY.md` §10.3.8, `ERRORS.md`)
 
 ### 5.10 Message History Sync
 
