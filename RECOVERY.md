@@ -48,10 +48,15 @@ Not in scope:
 
 ### 1.2 Conformance Status
 
-This specification is a RECOMMENDED core extension. A SEMP server or
-client MAY omit support; a conformant implementation that claims recovery
-support MUST comply with every requirement in this document for the
-mechanisms it supports.
+This specification is a RECOMMENDED optional core module. A SEMP server
+or client MAY omit support; a conformant implementation that claims
+recovery support MUST comply with every requirement in this document
+for the mechanisms it supports.
+
+Optional core modules are full protocol modules that live alongside the
+base SEMP specification. They define their own wire types and endpoints
+and do not use the wire-level extension framework in `EXTENSIONS.md`.
+See `EXTENSIONS.md` section 1 for the distinction.
 
 A SEMP server advertises recovery support via the `backup` endpoint in
 its discovery configuration (`DISCOVERY.md` section 3.1.1). Absence of
@@ -766,7 +771,7 @@ the new identity key as a fresh identity per section 7.6.
 | `CLIENT.md`      | New key publication after restore uses the key registration protocol in section 2.2.                     |
 | `DISCOVERY.md`   | The `backup` endpoint is advertised in the discovery configuration (section 3.1.1).                      |
 | `CONFORMANCE.md` | This document's conformance requirements are referenced from `CONFORMANCE.md`.                           |
-| `EXTENSIONS.md`  | Account recovery is a RECOMMENDED core extension, published as a normative separate document.            |
+| `EXTENSIONS.md`  | Account recovery is a RECOMMENDED optional core module, not a wire-level extension. It does not appear in any `extensions` field and does not use the `semp.dev/<name>` extension namespace. |
 
 ---
 

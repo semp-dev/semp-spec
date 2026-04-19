@@ -399,9 +399,9 @@ rest of the stack as-is.
 | `SESSION.md` | Forward secrecy, session key lifecycle, and rekeying. |
 | `TRANSPORT.md` | Transport requirements, bindings, and negotiation. |
 | `ERRORS.md` | Error codes registry and status values. |
-| `EXTENSIONS.md` | Extension framework, registry, lifecycle, and anti-fragmentation governance. |
-| `RECOVERY.md` | Account recovery extension. Server-assisted and Shamir device-split backup, restore flow, successor records. RECOMMENDED. |
-| `MIGRATION.md` | Provider migration extension. Cross-domain address change with key continuity, forwarding, and local-part reassignment rules. RECOMMENDED. |
+| `EXTENSIONS.md` | Wire-level extension framework, registry, lifecycle, and anti-fragmentation governance. |
+| `RECOVERY.md` | Optional core module: account recovery. Server-assisted and Shamir device-split backup, restore flow, successor records. RECOMMENDED. |
+| `MIGRATION.md` | Optional core module: provider migration. Cross-domain address change with key continuity, forwarding, and local-part reassignment rules. RECOMMENDED. |
 
 ---
 
