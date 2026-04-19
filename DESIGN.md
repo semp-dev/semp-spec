@@ -400,6 +400,7 @@ rest of the stack as-is.
 | `TRANSPORT.md` | Transport requirements, bindings, and negotiation. |
 | `ERRORS.md` | Error codes registry and status values. |
 | `EXTENSIONS.md` | Extension framework, registry, lifecycle, and anti-fragmentation governance. |
+| `RECOVERY.md` | Account recovery extension. Server-assisted and Shamir device-split backup, restore flow, successor records. RECOMMENDED. |
 
 ---
 
