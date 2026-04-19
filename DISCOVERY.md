@@ -897,8 +897,8 @@ A target server that receives an authenticated request MUST:
    field excluded.
 5. Verify the signature against the resolved public key.
 6. Reject the request if the signature is invalid, the key is unknown,
-   the domain key is revoked, or the `timestamp` is outside a small
-   clock-skew window (RECOMMENDED: five minutes).
+   the domain key is revoked, or the `timestamp` is outside the clock
+   tolerance defined in `CONFORMANCE.md` section 9.3.1.
 
 An authenticated request whose signature fails verification MUST be
 treated as if it were anonymous for the purpose of rate limiting and
