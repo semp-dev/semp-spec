@@ -387,24 +387,49 @@ rest of the stack as-is.
 ## 10. Document Structure
 
 | Document | Description |
+The specification is organized into three architectural tiers plus
+supporting material.
+
+**Core Specification.** Normative for every SEMP implementation.
+
+| Document | Description |
 |---|---|
-| `DESIGN.md` | This document. Philosophy, principles, and non-goals. |
-| `ENVELOPE.md` | The envelope model and field specifications. |
-| `HANDSHAKE.md` | The handshake protocol for session establishment. |
-| `DISCOVERY.md` | Protocol and server discovery mechanisms. |
-| `KEY.md` | Key management, discovery, rotation, and revocation. |
-| `REPUTATION.md` | Trust signals, gossip protocol, and transfer. |
-| `DELIVERY.md` | Blocking, rejection, and invalidation protocol. |
-| `CLIENT.md` | Client protocol obligations, envelope submission, and legacy interoperability. |
-| `SESSION.md` | Forward secrecy, session key lifecycle, and rekeying. |
-| `TRANSPORT.md` | Transport requirements, bindings, and negotiation. |
-| `ERRORS.md` | Error codes registry and status values. |
+| `DESIGN.md` | This document. Philosophy, principles, non-goals, and document index. |
+| `ENVELOPE.md` | Envelope structure: postmark, seal, brief, enclosure. Sender identity signature and forwarding primitive. |
+| `HANDSHAKE.md` | Session establishment, federation handshake, resumption, and session reason codes. |
+| `SESSION.md` | Forward secrecy, session key lifecycle, rekeying, and resumption tickets. |
+| `DISCOVERY.md` | Server discovery, configuration document, versioning and update notifications. |
+| `KEY.md` | Key management: publication, rotation, revocation, and scoped device certificates. |
+| `DELIVERY.md` | Acknowledgment types, queuing and retry, staged delivery, block list, and first-contact enforcement. |
+| `CLIENT.md` | Client obligations: composition, receipt, device sync, legacy interop. |
+| `REPUTATION.md` | Trust signals, abuse reporting, gossip observations, and trust transfer. |
+| `TRANSPORT.md` | Transport requirements and bindings. |
 | `EXTENSIONS.md` | Wire-level extension framework, registry, lifecycle, and anti-fragmentation governance. |
-| `RECOVERY.md` | Optional core module: account recovery. Server-assisted and Shamir device-split backup, restore flow, successor records. RECOMMENDED. |
-| `MIGRATION.md` | Optional core module: provider migration. Cross-domain address change with key continuity, forwarding, and local-part reassignment rules. RECOMMENDED. |
-| `ATTACHMENTS.md` | Wire-level extension `semp.dev/large-attachment`: external-storage attachments with HKDF-derived per-attachment keys and ciphertext hashes. |
-| `CLOSURE.md` | Optional core module: account closure. User-driven closure with grace period, key revocation under existing mechanisms, retention window, and local-part reassignment rules. RECOMMENDED. |
-| `TRANSPARENCY.md` | Optional core module: key transparency. Append-only Merkle-tree log of key events, inclusion proofs on key fetch, equivocation detection via observation gossip. RECOMMENDED. |
+| `ERRORS.md` | Error code registry and status values. |
+| `MIME.md` | MIME compatibility and mapping rules. |
+| `CONFORMANCE.md` | Conformance requirements for every role. |
+| `VECTORS.md` | Test vectors. |
+
+**Optional Core Modules.** Recommended but optional. An implementation that claims a module's functionality must conform to that module.
+
+| Document | Description |
+|---|---|
+| `RECOVERY.md` | Account recovery: server-assisted encrypted backup and Shamir device-split backup, restore flow, successor records. |
+| `MIGRATION.md` | Provider migration across domains with key continuity, forwarding, and local-part reassignment rules. |
+| `CLOSURE.md` | Account closure with grace period, key revocation under existing mechanisms, retention window, and local-part reassignment rules. |
+| `TRANSPARENCY.md` | Key transparency: append-only Merkle-tree log of key events, inclusion proofs on key fetch, equivocation detection via observation gossip. |
+
+**Wire-Level Extensions.** Defined extensions registered under `semp.dev/`, living inside existing message structures per `EXTENSIONS.md`.
+
+| Document | Description |
+|---|---|
+| `ATTACHMENTS.md` | `semp.dev/large-attachment`: external-storage attachments with HKDF-derived per-attachment keys. |
+
+**Non-Normative.**
+
+| Document | Description |
+|---|---|
+| `FAQ.md` | Frequently asked questions. |
 
 ---
 

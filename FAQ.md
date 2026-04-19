@@ -151,12 +151,20 @@ want automated processing.
 DSN functionality is core to SEMP. Every delivery attempt produces an explicit
 acknowledgment: `delivered`, `rejected`, or `silent`. The sender knows the
 outcome immediately with a machine-readable reason code, rather than waiting
-for a bounce message that may or may not arrive. This is strictly better than
-SMTP's DSN mechanism.
+for a bounce message that may or may not arrive. `DELIVERY.md` section 2
+extends this with sender-side queuing state visible to the submitting client
+(attempt counts, next attempt time, effective deadline, terminal state).
+This is strictly better than SMTP's DSN mechanism.
 
-Read receipts (MDN) are a candidate extension listed in `EXTENSIONS.md`
-section 9. They will be defined as an extension in `brief.extensions` or
-`enclosure.extensions` because read status is a client-layer concern.
+Read receipts (MDN) are not defined by SEMP. They are privacy-hostile by
+design, because they compel the recipient's device to reveal that the
+recipient has seen a message and when, to a sender who has no independent
+claim on that information. Most privacy-respecting email clients disable
+or strip MDN today. Writing a normative SEMP spec for a feature that
+privacy-respecting implementations should decline runs counter to the
+protocol's posture. Vendors who genuinely need read confirmation for a
+specific application domain MAY define a vendor extension under their own
+namespace per `EXTENSIONS.md` section 5.3.
 
 ### 1.7 Where is relay and smarthost support?
 
@@ -530,8 +538,10 @@ servers or hides routing hints from them.
 
 Per-layer extensions allow each extension to be placed at the appropriate
 visibility level. A priority hint belongs in `postmark.extensions` where routing
-servers can see it. A read receipt flag belongs in `enclosure.extensions` where
-only the recipient client sees it. This is a direct consequence of the layered
+servers can see it. A large-attachment reference belongs in `enclosure.extensions`
+where only the recipient client sees it (`ATTACHMENTS.md`). A delivery-disposition
+signal belongs in `brief.extensions` where the home server can read and act on it
+(`CLIENT.md` §4.5.7). This layered placement is a direct consequence of the
 encryption model and would not be possible without it.
 
 ### 5.8 Why bake delegation scopes into device certificates?
