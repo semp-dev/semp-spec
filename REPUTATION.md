@@ -984,8 +984,8 @@ request a new challenge.
 
 Each challenge MUST be single-use. The receiving server MUST record used
 challenge IDs and reject duplicate submissions. Challenge IDs MAY be pruned
-after their expiry time plus a reasonable clock-skew buffer (RECOMMENDED: 5
-minutes).
+after their expiry time plus the clock skew tolerance defined in
+`CONFORMANCE.md` section 9.3.1.
 
 #### 8.3.5 PoW and Reputation
 

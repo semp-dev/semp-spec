@@ -1218,9 +1218,9 @@ weaker algorithm when a stronger one is available is a policy violation.
 
 ### 6.5 Clock Synchronization
 
-Timestamp validation requires reasonably synchronized clocks. Implementations
-SHOULD reject messages with timestamps more than five minutes from the current
-time. NTP or equivalent time synchronization is RECOMMENDED.
+Timestamp validation in handshake messages, challenge expiry, and
+session lifetime is subject to the clock tolerance, authority, and
+fail-closed rules in `CONFORMANCE.md` section 9.3.
 
 ### 6.6 Handshake Timeout
 

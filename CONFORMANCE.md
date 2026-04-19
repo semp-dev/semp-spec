@@ -1221,9 +1221,128 @@ in `TRANSPORT.md`.
 
 ### 9.3 Clock Synchronization
 
-Implementations SHOULD reject messages with timestamps more than five minutes
-from the current time. NTP or equivalent time synchronization is RECOMMENDED.
-(`HANDSHAKE.md` §6.5)
+SEMP relies on timestamp-bearing fields throughout the protocol:
+`postmark.expires`, handshake challenge `expires`, session `expires_at`,
+block list and status sync `timestamp`, queue state records, backup
+bundle `created_at`, migration `migrated_at`, forwarder attestations,
+and delegated certificate lifetimes. Every implementation MUST enforce
+a consistent clock tolerance for every such field.
+
+#### 9.3.1 Tolerance
+
+Let `now` be the implementation's current wall-clock UTC time and let
+`T` be a timestamp value being validated.
+
+**Future-dated timestamps** (`T > now`, meaning the record claims to
+have been produced after the current time):
+
+- Implementations MUST reject the record if `T - now > 15 minutes`.
+- Implementations SHOULD reject the record if `T - now > 5 minutes`.
+- Records with `T - now` in the range 0 to 5 minutes MUST be accepted.
+
+**Expired timestamps** (`expires_at` fields, where validity ends at
+`T`):
+
+- Implementations MUST reject as expired when `now > T + 15 minutes`.
+- Implementations SHOULD reject as expired at `now > T`.
+- Implementations MAY apply up to 5 minutes of grace
+  (`T < now <= T + 5 minutes`) for a more forgiving profile.
+
+Senders MUST NOT rely on grace windows. Senders MUST set `expires_at`
+values with at least 15 minutes of headroom beyond the worst-case
+expected delivery delay for the record, so that receivers applying
+zero grace continue to accept on-time records.
+
+#### 9.3.2 Time Source
+
+Implementations MUST maintain clocks within the tolerance bounds in
+section 9.3.1. Network Time Protocol (RFC 5905), Precision Time
+Protocol (IEEE 1588), or a provider-supplied equivalent is RECOMMENDED.
+
+SEMP does not mandate a specific time-synchronization mechanism.
+Implementations that drift beyond the tolerance will produce visible
+rejection errors, which is the operational signal to fix the clock.
+No separate conformance check on the mechanism is required.
+
+#### 9.3.3 Clock Authority
+
+When a record carries a timestamp produced by a specific party:
+
+- **Sender-produced timestamps** (for example, `postmark.expires` set
+  by the sending client, enclosure-layer timestamps set by the sender
+  client): the sender's clock is authoritative at the moment of
+  composition. The receiver validates against its own clock applying
+  the tolerance in section 9.3.1.
+- **Server-produced timestamps** (for example, handshake challenge
+  `expires`, session `expires_at`, delivery acknowledgment
+  `timestamp`, queue state `last_attempt_at`, `next_attempt_at`,
+  `deadline`): the server's clock is authoritative at the moment of
+  production. Peers validating these timestamps apply the same
+  tolerance.
+
+When two parties disagree on a timestamp, the producing party's clock
+prevails provided the receiver accepts under section 9.3.1. A record
+whose producer-claimed timestamp falls outside the receiver's
+tolerance MUST be rejected even if other cryptographic checks pass.
+
+#### 9.3.4 Monotonic Clock for Internal TTL
+
+Servers SHOULD track internal session TTLs (handshake session lifetime,
+queue retry scheduling, rate-limit throttling windows) against a
+monotonic clock rather than the wall clock. This avoids spurious
+expiry or prolongation when the wall clock is adjusted by NTP.
+
+Cross-party timestamps (timestamps written into records exchanged with
+other parties or other servers) MUST continue to use wall clock
+values in UTC per ISO 8601, since monotonic clock values are not
+comparable across processes.
+
+#### 9.3.5 Fail-Closed on Undetectable Clock State
+
+If an implementation cannot determine its own clock state with
+confidence (for example, NTP is unreachable at boot and no other
+time source is available, or the hardware clock is detected as
+stopped or faulty), it MUST NOT process operations that require
+timestamp validation. Specifically:
+
+- A server MUST NOT accept new handshakes.
+- A server MUST NOT accept envelope submissions.
+- A server MUST NOT issue acknowledgments with timestamp fields.
+- A server SHOULD surface the clock-state error to operators through
+  its operational alerting channel.
+
+Silent proceeding on an unknown clock state expands replay windows,
+makes expiry checks vacuous, and is incompatible with the fail-closed
+posture required elsewhere in this specification.
+
+A client that cannot determine its own clock state SHOULD surface the
+error to the user rather than compose envelopes with uncertain
+timestamps. Clients MAY proceed in a degraded mode that refuses to
+set `postmark.expires` shorter than operator defaults.
+
+#### 9.3.6 Scope
+
+The tolerance rules in this section apply uniformly to every
+timestamp validation in the protocol, including but not limited to:
+
+- `postmark.expires` in `ENVELOPE.md`.
+- `expires` in handshake challenges (`HANDSHAKE.md` section 2.2a).
+- `expires_at` in session records (`SESSION.md` section 2).
+- `timestamp` in block list sync messages (`DELIVERY.md` section 7).
+- Queue state timestamps (`DELIVERY.md` section 2.5).
+- `created_at` and `expires` in user and domain key records
+  (`KEY.md`).
+- `issued_at` and `expires_at` in scoped device certificates
+  (`KEY.md` section 10.3).
+- `created_at` and `supersedes` relations in recovery bundles
+  (`RECOVERY.md`).
+- `migrated_at` and `forwarding_window_until` in migration records
+  (`MIGRATION.md`).
+- `received_at` in forwarder attestations (`ENVELOPE.md` section 6.6).
+
+Any specification introducing a new timestamp field inherits the
+tolerance rules defined here unless the new specification explicitly
+tightens or loosens them with a documented rationale.
 
 ### 9.4 Encoding
 
