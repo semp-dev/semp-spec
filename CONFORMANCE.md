@@ -890,6 +890,8 @@ A conformant primary client that issues scoped device certificates MUST:
 - Populate `rate_limits` as an array of zero or more tiers, each with
   integer `period_seconds >= 1` and integer `amount_allowed >= 0`,
   with no more than 16 tiers per array. (`KEY.md` §10.3.3.3)
+- Include `delivery_stage: integer >= 1` on the `receive` matcher
+  and omit it from `send`. (`KEY.md` §10.3.3.1)
 - Set `expires_at` within the range `issued_at < expires_at <= issued_at + 365 days`.
   (`KEY.md` §10.3.8)
 - Submit the certificate to the home server via the standard device
@@ -932,6 +934,24 @@ A conformant home server MUST:
   an inbound envelope to the delegated device's session, and not wrap
   session material to this device for envelopes the matcher rejects.
   (`KEY.md` §10.3.4)
+- Honor the `scope.receive.delivery_stage` of each delegated device
+  when fanning out inbound envelopes to the account, delivering in
+  stage order and holding higher-stage devices in a staged-delivery
+  queue pending disposition per `DELIVERY.md` §3.2.
+- Treat full-access devices as implicitly positioned at
+  `max(delegated_stages) + 1` for staged delivery. (`KEY.md` §10.3.3.1,
+  `DELIVERY.md` §3.2.1)
+- Aggregate dispositions received at a stage with the suppress-wins
+  rule and fail-open to the next stage on timeout.
+  (`DELIVERY.md` §3.2.3, §3.2.4)
+- Re-evaluate staged-delivery partitions when a certificate is
+  updated or revoked while an envelope is held. (`DELIVERY.md` §3.2.6)
+- Recognize `kind: "delivery-disposition"` on brief-layer
+  `semp.dev/device-sync` markers, verify the submitting session
+  against the claimed `device_id`, and apply the disposition to the
+  matching held envelope. Discard dispositions whose `source_envelope_id`
+  does not match any held envelope for the account at the submitting
+  device's stage or earlier. (`CLIENT.md` §4.5.7)
 - For operations on `blocklist`, `keys`, or `devices`, dispatch on
   read vs write, reject with `reason_code: "scope_exceeded"` when the
   corresponding flag is `false`, and reject nested delegation attempts
@@ -988,7 +1008,7 @@ A conformant client MAY support individual sync extensions (new device
 onboarding, historical mail rewrap, read-state synchronization, draft
 synchronization, classification results, and similar). Lack of support for
 a specific sync extension MUST NOT cause the device sync marker itself to
-be rejected. (`CLIENT.md` §4.5.7)
+be rejected. (`CLIENT.md` §4.5.8)
 
 ### 5.12 Account Recovery
 

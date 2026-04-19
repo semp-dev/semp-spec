@@ -773,7 +773,7 @@ register further devices.
                 { "period_seconds": 86400, "amount_allowed": 2000 }
             ]
         },
-        "receive": { "mode": "none", "rate_limits": [] },
+        "receive": { "mode": "none", "rate_limits": [], "delivery_stage": 1 },
         "blocklist": { "read": false, "write": false, "rate_limits": [] },
         "keys":      { "read": false, "write": false, "rate_limits": [] },
         "devices":   { "read": false, "write": false, "rate_limits": [] }
@@ -827,7 +827,8 @@ shape. `blocklist`, `keys`, and `devices` use the resource shape.
     },
     "receive": {
         "mode": "unrestricted",
-        "rate_limits": []
+        "rate_limits": [],
+        "delivery_stage": 1
     },
     "blocklist": {
         "read": true,
@@ -871,7 +872,8 @@ field missing its `rate_limits`, MUST be rejected at issuance with
     "mode": "restricted" | "unrestricted" | "denylist" | "none",
     "allow": [ { "type": "...", "..." } ],
     "deny":  [ { "type": "...", "..." } ],
-    "rate_limits": [ { "period_seconds": N, "amount_allowed": N } ]
+    "rate_limits": [ { "period_seconds": N, "amount_allowed": N } ],
+    "delivery_stage": 1
 }
 ```
 
@@ -898,6 +900,24 @@ Peer semantics depend on the side:
 The combined size of `allow` and `deny` in a single matcher MUST NOT
 exceed 10,000 entries. A certificate violating this cap MUST be
 rejected at issuance with `reason_code: "scope_invalid"`.
+
+The `delivery_stage` field is present only on the `receive` matcher.
+It MUST be omitted from the `send` matcher; a certificate that places
+`delivery_stage` on `send` MUST be rejected with
+`reason_code: "scope_invalid"`. `delivery_stage` is a positive integer
+(`>= 1`) declaring this device's position in the staged-delivery
+ordering enforced by the home server (`DELIVERY.md` section 3.2).
+Lower stages receive inbound envelopes first and decide via
+`delivery-disposition` sync messages (`CLIENT.md` section 4.5.7)
+whether the envelope advances to higher stages.
+
+Full-access devices have no certificate and therefore no declared
+`delivery_stage`. The home server treats full-access devices as
+implicitly positioned at `max(delegated_stages) + 1`, where the
+maximum is taken over all delegated devices of the account that have
+a `receive` matcher whose `mode` is not `none`. When no such delegated
+device exists, full-access devices are at stage 1 and no staging
+applies.
 
 ##### 10.3.3.2 Resource Shape
 
@@ -1191,7 +1211,8 @@ list address, redistributes to subscribers.
     "receive": {
         "mode": "restricted",
         "allow": [ { "type": "user", "address": "list-owner@example.com" } ],
-        "rate_limits": []
+        "rate_limits": [],
+        "delivery_stage": 1
     },
     "blocklist": { "read": false, "write": false, "rate_limits": [] },
     "keys":      { "read": false, "write": false, "rate_limits": [] },
@@ -1199,13 +1220,14 @@ list address, redistributes to subscribers.
 }
 ```
 
-**Spam filter client.** Receives every inbound envelope, does not
-send, can manage the user's block list based on classification.
+**Spam filter client.** Receives every inbound envelope first
+(stage 1), does not send, can manage the user's block list based on
+classification. Full-access devices implicitly receive at stage 2.
 
 ```json
 {
     "send":    { "mode": "none", "rate_limits": [] },
-    "receive": { "mode": "unrestricted", "rate_limits": [] },
+    "receive": { "mode": "unrestricted", "rate_limits": [], "delivery_stage": 1 },
     "blocklist": {
         "read": true,
         "write": true,
@@ -1222,6 +1244,7 @@ send, can manage the user's block list based on classification.
 **Vacation autoresponder.** Receives envelopes to generate replies,
 sends only to the original senders (the `allow` list is updated
 dynamically by the primary device as correspondents appear).
+Autoresponder receives alongside full-access devices (same stage):
 
 ```json
 {
@@ -1233,7 +1256,7 @@ dynamically by the primary device as correspondents appear).
             { "period_seconds": 86400, "amount_allowed": 500 }
         ]
     },
-    "receive":   { "mode": "unrestricted", "rate_limits": [] },
+    "receive":   { "mode": "unrestricted", "rate_limits": [], "delivery_stage": 1 },
     "blocklist": { "read": false, "write": false, "rate_limits": [] },
     "keys":      { "read": false, "write": false, "rate_limits": [] },
     "devices":   { "read": false, "write": false, "rate_limits": [] }
@@ -1254,7 +1277,8 @@ sensitive correspondents, never sends, reads only.
         ],
         "rate_limits": [
             { "period_seconds": 3600, "amount_allowed": 5000 }
-        ]
+        ],
+        "delivery_stage": 1
     },
     "blocklist": { "read": false, "write": false, "rate_limits": [] },
     "keys":      { "read": false, "write": false, "rate_limits": [] },
@@ -1269,7 +1293,7 @@ tooling. Does not send, receive, or modify anything.
 ```json
 {
     "send":    { "mode": "none", "rate_limits": [] },
-    "receive": { "mode": "none", "rate_limits": [] },
+    "receive": { "mode": "none", "rate_limits": [], "delivery_stage": 1 },
     "blocklist": { "read": false, "write": false, "rate_limits": [] },
     "keys":      { "read": true,  "write": false, "rate_limits": [] },
     "devices":   {
