@@ -978,6 +978,7 @@ applies to user identity does not apply here.
     "nonce": "base64-random-32-bytes",
     "server_id": "originating-server-ulid",
     "server_domain": "example.com",
+    "peer_configuration_revision": 17,
     "server_ephemeral_key": {
         "algorithm": "pq-kyber768-x25519",
         "key": "base64-encoded-ephemeral-public-key",
@@ -1009,7 +1010,43 @@ applies to user identity does not apply here.
 }
 ```
 
-#### 5.2.1 Federation Is Single-Mode with Per-Peer Policy
+#### 5.2.1 Peer Configuration Revision
+
+The `peer_configuration_revision` field carries the initiator's
+cached revision of the responding peer's configuration document per
+`DISCOVERY.md` section 3.5.1. On handshake processing the responder
+compares the received value against its own current configuration
+`revision`:
+
+- If the values match, the initiator's cache is current; the handshake
+  proceeds normally.
+- If the initiator's value is less than the responder's current
+  revision, the initiator's cache is stale. The responder MUST still
+  accept the handshake but SHOULD emit a `SEMP_CONFIGURATION_UPDATE`
+  message over the established session at first opportunity
+  (`DISCOVERY.md` section 3.5.4). The initiator, on observing the
+  mismatch in its own message 2 processing (the responder echoes its
+  own current revision in the response), MUST re-fetch the
+  configuration before relying on any cached endpoint or capability
+  of the responder for subsequent operations.
+- If the initiator's value is greater than the responder's current
+  revision, one of the two peers has a broken cache. The responder
+  MUST NOT roll its own revision forward on the basis of an
+  initiator's claim; revision is owned by the publishing operator.
+  The responder MUST proceed with the handshake under its own
+  revision and MAY log the anomaly.
+
+The initiator MAY omit `peer_configuration_revision` (value `null` or
+field absent) when it has no cached configuration for the responder,
+for example during first-ever federation. A responder that receives
+no revision hint treats the initiator's cache as empty and
+unambiguously current.
+
+Response messages (section 5.5) echo the responder's current
+`revision` in a `server_configuration_revision` field so the
+initiator can detect staleness symmetrically.
+
+#### 5.2.2 Federation Is Single-Mode with Per-Peer Policy
 
 SEMP defines a single federation mode. The protocol does not encode
 named federation types such as "full" or "relay" at the handshake
@@ -1106,6 +1143,7 @@ message 2 is sent.
     "server_nonce": "base64-random-32-bytes",
     "server_id": "responding-server-ulid",
     "server_domain": "otherdomain.com",
+    "server_configuration_revision": 42,
     "server_ephemeral_key": {
         "algorithm": "pq-kyber768-x25519",
         "key": "base64-encoded-ephemeral-public-key",

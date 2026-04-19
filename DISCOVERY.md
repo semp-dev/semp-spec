@@ -213,6 +213,8 @@ All URL values inside the document are implementation-chosen.
     "type": "SEMP_CONFIGURATION",
     "version": "1.0.0",
     "domain": "example.com",
+    "revision": 17,
+    "ttl_seconds": 3600,
     "endpoints": {
         "client": {
             "h2": "https://semp.example.com/v1/h2",
@@ -242,15 +244,17 @@ All URL values inside the document are implementation-chosen.
 
 ### 3.1 Configuration Document Fields
 
-| Field        | Type     | Required | Description                                        |
-|--------------|----------|----------|----------------------------------------------------|
-| `type`       | `string` | Yes      | MUST be `"SEMP_CONFIGURATION"`.                    |
-| `version`    | `string` | Yes      | SEMP protocol version supported (semver).          |
-| `domain`     | `string` | Yes      | The email domain this server operates for.         |
-| `endpoints`  | `object` | Yes      | All discoverable endpoints. See section 3.1.1.     |
-| `suites`     | `array`  | Yes      | Cryptographic suite identifiers in preference order. See section 3.1.2. |
-| `limits`     | `object` | Yes      | Operational limits. See section 3.1.3.             |
-| `extensions` | `array`  | No       | Supported extensions. See section 3.1.4.           |
+| Field         | Type      | Required | Description                                                                  |
+|---------------|-----------|----------|------------------------------------------------------------------------------|
+| `type`        | `string`  | Yes      | MUST be `"SEMP_CONFIGURATION"`.                                              |
+| `version`     | `string`  | Yes      | SEMP protocol version supported (semver).                                    |
+| `domain`      | `string`  | Yes      | The email domain this server operates for.                                   |
+| `revision`    | `integer` | Yes      | Monotonically non-decreasing revision number. See section 3.5.               |
+| `ttl_seconds` | `integer` | Yes      | Operator-advised cache lifetime for this document in seconds. See section 3.5.|
+| `endpoints`   | `object`  | Yes      | All discoverable endpoints. See section 3.1.1.                               |
+| `suites`      | `array`   | Yes      | Cryptographic suite identifiers in preference order. See section 3.1.2.      |
+| `limits`      | `object`  | Yes      | Operational limits. See section 3.1.3.                                       |
+| `extensions`  | `array`   | No       | Supported extensions. See section 3.1.4.                                     |
 
 Implementations MUST ignore unknown fields rather than failing, consistent with
 the extensibility principle.
@@ -443,6 +447,159 @@ fetch URL for a given user is the base URL with the user's address appended:
 The endpoint MUST be served over HTTPS. The response is a JSON document
 containing the user's identity and encryption public keys. See `KEY.md`
 section 3 for the response format and verification requirements.
+
+### 3.5 Configuration Versioning and Updates
+
+A SEMP configuration document changes over time: endpoints move,
+cryptographic suites are added or deprecated, limits are adjusted,
+extensions are added or withdrawn. Peers and clients that cache the
+configuration need a reliable way to detect change, know when to
+re-fetch, and recognize out-of-order or rolled-back revisions.
+
+#### 3.5.1 Revision Field
+
+The configuration document's `revision` field is a monotonically
+non-decreasing integer. Operators MUST increment `revision` on any
+byte-level change to the configuration document they publish.
+Operators MUST NOT decrement `revision`, MUST NOT reuse a previously
+published `revision` value for a different document, and MUST NOT
+reset `revision` when rotating other state (such as domain keys).
+
+Rationale: a strict monotonic counter gives cached peers an
+unambiguous comparison. A peer holding cached revision N that
+subsequently fetches revision M where M < N MUST treat the fetch as
+suspicious (attacker serving stale or forged config, operator
+misconfiguration, transport corruption). The peer MUST NOT replace
+its cached copy on such a fetch. The peer SHOULD log the anomaly and
+MAY retry via a different transport (DNS, alternate IP) before
+accepting any update.
+
+If an operator needs to republish the same configuration content, the
+operator MUST still increment `revision`. Republishing identical
+bytes with the same revision is permitted but discouraged because it
+makes change detection ambiguous.
+
+#### 3.5.2 TTL Field
+
+The `ttl_seconds` field is the operator's advised cache lifetime for
+the document. Cached peers MUST re-fetch the configuration when the
+cache age exceeds `ttl_seconds`. Peers MAY re-fetch earlier.
+
+`ttl_seconds` MUST be at least 60 and MAY be at most 604800 (one
+week). The RECOMMENDED default is 3600 (one hour). Operators
+anticipating frequent changes SHOULD use shorter TTLs; operators
+with stable deployments MAY use longer TTLs up to the maximum.
+
+`ttl_seconds` is independent of HTTP `Cache-Control` headers. A
+conformant peer MUST respect `ttl_seconds` regardless of HTTP cache
+hints. Operators MAY set HTTP cache headers consistently with
+`ttl_seconds` for transport-layer correctness, but the application
+MUST NOT defer to HTTP hints when they conflict with `ttl_seconds`.
+
+#### 3.5.3 Mandatory Re-Fetch Triggers
+
+A peer caching the configuration of a domain MUST re-fetch when any
+of the following occurs, regardless of remaining TTL:
+
+- The cache age exceeds `ttl_seconds` (section 3.5.2).
+- The peer receives a `SEMP_CONFIGURATION_UPDATE` message on an
+  active federation session for the domain (section 3.5.4).
+- The peer receives a federation handshake init whose
+  `peer_configuration_revision` differs from the cached revision
+  (`HANDSHAKE.md` section 5.2).
+- An operation the peer performs against the domain fails with a
+  capability- or endpoint-mismatch error attributable to stale
+  configuration (for example, `extension_unsupported` for a feature
+  the peer's cached configuration shows as supported). The peer
+  SHOULD re-fetch and retry once.
+
+Re-fetch MUST follow the full discovery flow (DNS SRV resolution
+first, well-known URI fallback) so that endpoint relocations are
+discovered correctly.
+
+#### 3.5.4 SEMP_CONFIGURATION_UPDATE Message
+
+A SEMP server MAY notify its active federation peers when its
+configuration has changed by sending a `SEMP_CONFIGURATION_UPDATE`
+message over each live federation session:
+
+```json
+{
+    "type": "SEMP_CONFIGURATION_UPDATE",
+    "version": "1.0.0",
+    "domain": "example.com",
+    "revision": 18,
+    "timestamp": "2026-04-19T12:00:00Z",
+    "signature": {
+        "algorithm": "ed25519",
+        "key_id": "domain-signing-key-fingerprint",
+        "value": "base64-signature"
+    }
+}
+```
+
+| Field         | Type      | Required | Description                                                                 |
+|---------------|-----------|----------|-----------------------------------------------------------------------------|
+| `type`        | `string`  | Yes      | MUST be `"SEMP_CONFIGURATION_UPDATE"`.                                      |
+| `version`     | `string`  | Yes      | SEMP protocol version (semver).                                             |
+| `domain`      | `string`  | Yes      | The domain whose configuration has changed.                                 |
+| `revision`    | `integer` | Yes      | The new configuration revision the peer should expect on next fetch.        |
+| `timestamp`   | `string`  | Yes      | ISO 8601 UTC timestamp of the notification.                                 |
+| `signature`   | `object`  | Yes      | Domain-key signature over the canonical bytes of the message with `signature.value` set to `""`. |
+
+The signature MUST be produced by the domain's currently published
+signing key. Peers MUST verify the signature against the cached
+domain key; if verification fails, the peer MUST discard the message
+and MUST NOT re-fetch on its basis.
+
+On receipt of a verified `SEMP_CONFIGURATION_UPDATE` whose `revision`
+is strictly greater than the peer's cached revision, the peer MUST
+re-fetch the configuration document before using any cached endpoint
+or capability. A message whose `revision` equals or is less than the
+peer's cached revision MUST be discarded silently.
+
+The notification is a hint, not a guarantee. Peers MUST NOT depend
+on receiving it; the mandatory re-fetch triggers in section 3.5.3
+still apply. An operator who fails to send notifications remains
+correct so long as they respect `ttl_seconds`; notifications are
+purely a latency optimization.
+
+#### 3.5.5 Handshake Revision Piggyback
+
+Federation handshake init messages carry a
+`peer_configuration_revision` field per `HANDSHAKE.md` section 5.2.
+Each side's cached revision of the other side's configuration is
+included. On handshake processing, each side compares the received
+value to its own current revision. A mismatch (peer's expectation is
+stale) triggers an out-of-band re-fetch by the mismatched side
+before accepting the session for envelope delivery.
+
+#### 3.5.6 Change Classification
+
+All byte-level changes to the configuration increment `revision`.
+The spec does not distinguish cosmetic changes from
+operationally-significant ones; operators who alter whitespace or
+comment-like extension metadata MUST still bump the counter. A
+simpler rule is easier to implement correctly than a spec that asks
+operators to classify their own changes.
+
+Peers MAY compare fetched configurations field-by-field and choose
+to defer cache replacement when the changes are immaterial to the
+peer's use, but the protocol-level revision still advances.
+
+#### 3.5.7 Fail-Closed on Fetch Failure
+
+If a re-fetch triggered by any rule in section 3.5.3 fails
+(network error, HTTP 5xx, signature mismatch on domain key lookup,
+malformed document), the peer MUST NOT use the cached configuration
+for new operations beyond the grace window defined by
+`ttl_seconds`. Operations in-flight at the time of failure MAY
+complete under the cached configuration; new operations MUST be
+deferred until a successful re-fetch.
+
+This fail-closed behavior prevents a peer from operating on
+demonstrably stale configuration when the operator has signaled a
+change.
 
 ---
 
@@ -824,21 +981,24 @@ Discovery results MUST be cached per the TTL returned in the response or DNS
 record. Caching reduces lookup overhead and, by decoupling fetches from
 individual send events, reduces intent leakage.
 
-| Result type   | Default TTL when none provided |
-|---------------|-------------------------------|
-| `semp`        | 1 hour                        |
-| `legacy`      | 24 hours                      |
-| `not_found`   | 1 hour                        |
+| Result type           | Default TTL when none provided | TTL source                                |
+|-----------------------|-------------------------------|-------------------------------------------|
+| `semp`                | 1 hour                        | DNS TTL or lookup response                |
+| `legacy`              | 24 hours                      | DNS TTL or lookup response                |
+| `not_found`           | 1 hour                        | DNS TTL or lookup response                |
+| Configuration document| 1 hour                        | `ttl_seconds` field in the document (§3.5)|
 
 Implementations MUST:
-- Respect TTL values from DNS and lookup responses
-- Invalidate cache entries on delivery failure and re-discover before retry
-- Not serve stale entries beyond their TTL
+- Respect TTL values from DNS and lookup responses.
+- Respect `ttl_seconds` from cached configuration documents per section 3.5.2.
+- Invalidate cache entries on delivery failure and re-discover before retry.
+- Re-fetch configuration per the mandatory triggers in section 3.5.3.
+- Not serve stale entries beyond their TTL.
 
 Implementations SHOULD:
 - Perform discovery speculatively for frequently contacted domains, independent
-  of pending sends, to decouple lookup timing from communication intent
-- Encrypt cached discovery results at rest
+  of pending sends, to decouple lookup timing from communication intent.
+- Encrypt cached discovery results at rest.
 
 ### 6.2 Authenticated Discovery
 
