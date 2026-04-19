@@ -985,7 +985,31 @@ In particular:
   key, regardless of whether the change is due to migration or
   reassignment. (`CLIENT.md` §3.3, `MIGRATION.md` §11.1)
 
-### 5.14 Content Security
+### 5.14 Large Attachments
+
+The `semp.dev/large-attachment` wire extension is specified in
+`ATTACHMENTS.md`. A client claiming support MUST comply with
+`ATTACHMENTS.md` section 10.1, and in particular:
+
+- Derive `K_attachment` from `K_enclosure` via HKDF-Expand with
+  `info = "semp-attachment:" || attachment_id`. (`ATTACHMENTS.md` §3.1)
+- Bind item metadata as AEAD additional-data on encryption and
+  decryption. (`ATTACHMENTS.md` §3.2)
+- Verify `ciphertext_hash` against fetched bytes before attempting
+  AEAD decryption. (`ATTACHMENTS.md` §6, §7.2)
+- Distinguish fetch failure, hash mismatch, decryption failure, and
+  retention-elapsed states in the user-facing error surface.
+  (`ATTACHMENTS.md` §7)
+- Not use plain HTTP URLs for attachment storage. (`ATTACHMENTS.md` §4.1)
+- Surface retention shortfall to the user before send when the chosen
+  storage cannot meet the retention minimum.
+  (`ATTACHMENTS.md` §4.2)
+
+A server operator who hosts blob storage MUST advertise the
+`attachment_storage` endpoint in discovery and MUST NOT decrypt, scan,
+or inspect ciphertext content. (`ATTACHMENTS.md` §4.3, §10.2)
+
+### 5.15 Content Security
 
 A conformant client MUST:
 
