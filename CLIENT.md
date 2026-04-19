@@ -197,14 +197,27 @@ scope from the device's current certificate:
 1. Authenticate the session (standard handshake verification).
 2. Retrieve the current `SEMP_DEVICE_CERTIFICATE` for the submitting device key.
 3. If no certificate exists (full-access device), proceed without scope checks.
-4. If a certificate exists, extract the `scope` fields.
-5. For each recipient in the envelope, verify the address matches an entry in
-   `scope.send.allow` (when `mode` is `restricted`).
-6. If `scope.send.mode` is `none`, reject the submission.
-7. If any recipient is outside the permitted scope, reject with reason code
-   `scope_exceeded`. The rejection MUST identify which recipient(s) failed.
-8. If `scope.receive` is `false`, the server MUST NOT deliver inbound
-   envelopes to this device.
+4. If a certificate exists, extract the `scope` fields per `KEY.md` section
+   10.3.3.
+5. For each recipient in the envelope, evaluate the `scope.send` matcher
+   per `KEY.md` section 10.3.3.1. Reject with `reason_code: "scope_exceeded"`
+   when any recipient fails the matcher. The rejection MUST identify which
+   recipient(s) failed.
+6. Evaluate every tier in `scope.send.rate_limits` per `KEY.md` section
+   10.3.3.3. Reject with `reason_code: "rate_limited"` if any tier's
+   rolling-window cap would be exceeded, and do not record the operation
+   against the counters.
+7. On every inbound envelope addressed to the account, evaluate the
+   delegated device's `scope.receive` matcher against `brief.from`. The
+   server MUST NOT deliver to the device's session if the matcher
+   rejects. Other account devices with permissive matchers are
+   unaffected. If the matcher accepts, evaluate
+   `scope.receive.rate_limits` in the same manner as step 6.
+8. For operations addressing the account's block list, keys, or
+   devices, dispatch on read vs write, check the corresponding
+   `read` or `write` flag on `scope.blocklist`, `scope.keys`, or
+   `scope.devices`, then evaluate that scope field's `rate_limits`
+   tiers.
 
 Scope enforcement uses the current certificate at the time of each submission,
 not the certificate that was active when the session was established. A
@@ -636,10 +649,10 @@ permits sending to the user's own address. The home server enforces scope
 at submission (section 2.4) without special-casing sync envelopes.
 
 A delegated client that consumes sync envelopes MUST hold a certificate
-with `scope.receive` set to `true` for the user's inbound stream. The home
-server delivers sync envelopes to delegated devices on the same terms as
-correspondence envelopes, subject to the device keys present in
-`seal.enclosure_recipients`.
+whose `scope.receive` matcher permits the user's own address (the
+source of sync envelopes). The home server delivers sync envelopes to
+delegated devices on the same terms as correspondence envelopes,
+subject to the device keys present in `seal.enclosure_recipients`.
 
 #### 4.5.6 Relationship to Message History Sync
 

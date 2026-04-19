@@ -767,12 +767,16 @@ register further devices.
             "allow": [
                 { "type": "user", "address": "subscriber1@example.com" },
                 { "type": "domain", "domain": "company.example" }
+            ],
+            "rate_limits": [
+                { "period_seconds": 3600, "amount_allowed": 200 },
+                { "period_seconds": 86400, "amount_allowed": 2000 }
             ]
         },
-        "receive": false,
-        "manage_keys": false,
-        "manage_blocks": false,
-        "manage_devices": false
+        "receive": { "mode": "none", "rate_limits": [] },
+        "blocklist": { "read": false, "write": false, "rate_limits": [] },
+        "keys":      { "read": false, "write": false, "rate_limits": [] },
+        "devices":   { "read": false, "write": false, "rate_limits": [] }
     },
     "signature": {
         "algorithm": "ed25519",
@@ -806,59 +810,215 @@ the canonicalization rules in `ENVELOPE.md` section 4.3.
 
 #### 10.3.3 Scope Object
 
+The scope object has five fields, one per authorizable action class.
+Every field is an object of uniform shape: a permission declaration
+plus a `rate_limits` array. `send` and `receive` use the matcher
+shape. `blocklist`, `keys`, and `devices` use the resource shape.
+
 ```json
 {
     "send": {
         "mode": "restricted",
-        "allow": [ { "type": "user", "address": "..." } ]
+        "allow": [ { "type": "user", "address": "subscriber@example.com" } ],
+        "rate_limits": [
+            { "period_seconds": 3600,  "amount_allowed": 100 },
+            { "period_seconds": 86400, "amount_allowed": 1000 }
+        ]
     },
-    "receive": true,
-    "manage_keys": false,
-    "manage_blocks": false,
-    "manage_devices": false
+    "receive": {
+        "mode": "unrestricted",
+        "rate_limits": []
+    },
+    "blocklist": {
+        "read": true,
+        "write": true,
+        "rate_limits": [
+            { "period_seconds": 86400, "amount_allowed": 50 }
+        ]
+    },
+    "keys": {
+        "read": false,
+        "write": false,
+        "rate_limits": []
+    },
+    "devices": {
+        "read": true,
+        "write": false,
+        "rate_limits": []
+    }
 }
 ```
 
-| Field             | Type      | Required | Description                                                                                                 |
-|-------------------|-----------|----------|-------------------------------------------------------------------------------------------------------------|
-| `send.mode`       | `string`  | Yes      | One of: `unrestricted`, `restricted`, `none`. See section 10.3.4.                                           |
-| `send.allow`      | `array`   | When `send.mode == restricted` | Entity matchers authorizing specific recipients. Same entity types as `DELIVERY.md` section 5.3: `user`, `domain`, `server`. |
-| `receive`         | `boolean` | Yes      | Whether the home server delivers inbound envelopes to this device.                                          |
-| `manage_keys`     | `boolean` | Yes      | Whether the device may publish or rotate user keys via `CLIENT.md` section 2.2.                             |
-| `manage_blocks`   | `boolean` | Yes      | Whether the device may issue block list sync messages per `DELIVERY.md` section 7.                          |
-| `manage_devices`  | `boolean` | Yes      | Whether the device may register additional devices. See section 10.3.9 for the nested-delegation rule.      |
+| Field       | Permission type        | Description                                                                        |
+|-------------|------------------------|------------------------------------------------------------------------------------|
+| `send`      | Matcher (§10.3.3.1)    | Recipients this device may send to.                                                |
+| `receive`   | Matcher (§10.3.3.1)    | Senders whose envelopes this device may receive (matched against `brief.from`).    |
+| `blocklist` | Resource (§10.3.3.2)   | Access to the account's block list (`DELIVERY.md` §5).                             |
+| `keys`      | Resource (§10.3.3.2)   | Access to the account's key rotation history and per-device key metadata.          |
+| `devices`   | Resource (§10.3.3.2)   | Access to the account's registered-devices list and their scoped certificates.     |
 
-Every scope field above is REQUIRED. A certificate missing any field
-MUST be rejected at issuance.
+Every scope field above is REQUIRED, including its `rate_limits`
+array (which MAY be empty). A certificate missing any field, or a
+field missing its `rate_limits`, MUST be rejected at issuance with
+`reason_code: "scope_invalid"`.
 
-#### 10.3.4 Scope Enforcement and `allow` Limits
+##### 10.3.3.1 Matcher Shape
+
+`send` and `receive` use the matcher shape:
+
+```json
+{
+    "mode": "restricted" | "unrestricted" | "denylist" | "none",
+    "allow": [ { "type": "...", "..." } ],
+    "deny":  [ { "type": "...", "..." } ],
+    "rate_limits": [ { "period_seconds": N, "amount_allowed": N } ]
+}
+```
+
+| `mode`         | Meaning                                                                                                  |
+|----------------|----------------------------------------------------------------------------------------------------------|
+| `unrestricted` | All peers are permitted. `allow` and `deny` MUST be absent or empty.                                     |
+| `restricted`   | Only peers matching an entry in `allow` are permitted. `allow` MUST be present and non-empty. `deny` MUST be absent. |
+| `denylist`     | All peers are permitted except those matching an entry in `deny`. `deny` MUST be present and non-empty. `allow` MUST be absent. |
+| `none`         | No peers are permitted. `allow` and `deny` MUST be absent or empty.                                      |
+
+Entries in `allow` and `deny` use the same entity types defined in
+`DELIVERY.md` section 5.3: `user`, `domain`, `server`. A single
+matcher MUST NOT mix `allow` and `deny`; `mode` disambiguates.
+
+Peer semantics depend on the side:
+
+- For `send`, a peer is the recipient address of an outbound envelope.
+  Enforcement happens at submission, per section 10.3.4.
+- For `receive`, a peer is the sender address of an inbound envelope
+  after the home server has decrypted the brief and can read
+  `brief.from`. The home server evaluates the matcher against
+  `brief.from` before delivering to this device's session.
+
+The combined size of `allow` and `deny` in a single matcher MUST NOT
+exceed 10,000 entries. A certificate violating this cap MUST be
+rejected at issuance with `reason_code: "scope_invalid"`.
+
+##### 10.3.3.2 Resource Shape
+
+`blocklist`, `keys`, and `devices` use the resource shape. Each
+resource has a `read` and a `write` permission, granted independently.
+
+```json
+{
+    "read": true | false,
+    "write": true | false,
+    "rate_limits": [ { "period_seconds": N, "amount_allowed": N } ]
+}
+```
+
+| Field         | Type      | Required | Description                                                                |
+|---------------|-----------|----------|----------------------------------------------------------------------------|
+| `read`        | `boolean` | Yes      | Whether the device may list or inspect this resource.                      |
+| `write`       | `boolean` | Yes      | Whether the device may modify this resource.                               |
+| `rate_limits` | `array`   | Yes      | Rate-limit tiers applied to any operation on this resource, regardless of whether it is a read or write. See section 10.3.3.3. MAY be empty. |
+
+Operations gated by each field:
+
+| Resource    | `read` grants                                                                                        | `write` grants                                                                                    |
+|-------------|------------------------------------------------------------------------------------------------------|---------------------------------------------------------------------------------------------------|
+| `blocklist` | Listing block entries (`DELIVERY.md` §5).                                                            | Add, modify, remove block entries.                                                                |
+| `keys`      | Reading the account's key rotation history and per-device key metadata through the home server's key-management endpoint. | Publishing a new user key, rotating, or revoking. Does not include publishing domain-level keys (those are the operator's, not the user's). |
+| `devices`   | Listing registered devices for the account with their scoped certificates (for audit tooling).       | Registering new delegated devices (subject to §10.3.9) and revoking devices.                      |
+
+When `read` is `false`, the home server MUST reject list/inspect
+operations on the corresponding resource with
+`reason_code: "scope_exceeded"`. When `write` is `false`, the home
+server MUST reject modify operations with the same reason code. A
+device with both `read: false` and `write: false` has no access to
+the resource at all.
+
+Rate limits on a resource are evaluated for every operation that
+passes the `read` or `write` gate, regardless of which gate it
+passed. Operators wishing to cap reads and writes separately MAY
+achieve this by revoking one of the two permissions or by using
+multiple rate-limit tiers tuned to the expected read-to-write ratio.
+
+##### 10.3.3.3 Rate Limits
+
+Every scope field carries a `rate_limits` array. Each element is a
+single rate-limit tier:
+
+```json
+{
+    "period_seconds": 3600,
+    "amount_allowed": 100
+}
+```
+
+| Field            | Type      | Required | Description                                                                |
+|------------------|-----------|----------|----------------------------------------------------------------------------|
+| `period_seconds` | `integer` | Yes      | Length of the rolling window in seconds. MUST be >= 1.                     |
+| `amount_allowed` | `integer` | Yes      | Maximum number of operations permitted within any rolling window of `period_seconds`. MUST be >= 0. |
+
+Multiple tiers in the same array are evaluated independently. An
+operation is permitted only if it would not exceed **any** tier's
+cap. This allows short-burst and long-run limits to coexist (for
+example: 100/hour plus 1000/day).
+
+An empty `rate_limits` array means the protocol imposes no rate cap
+on this scope field. The home server MAY still apply operator-defined
+caps outside the certificate.
+
+A tier with `amount_allowed: 0` prohibits the operation for the
+duration of `period_seconds` (equivalent to `mode: "none"` for
+matchers, or `read: false` / `write: false` for resources, but
+expressed as a rate rather than a permission). This form is
+RECOMMENDED only for temporary suspensions expressed by a short-lived
+certificate update; permanent prohibition SHOULD use the primary
+`mode` or `read`/`write` fields instead.
+
+A certificate MUST NOT contain a tier with `period_seconds < 1` or
+`amount_allowed < 0`, or more than 16 tiers in a single `rate_limits`
+array. A certificate violating these constraints MUST be rejected
+with `reason_code: "scope_invalid"`.
+
+The home server MUST expose the current per-tier counters to the
+owning account's authenticated clients (through an
+implementation-defined endpoint) so that the primary device can
+observe how close any delegate is to its caps.
+
+#### 10.3.4 Scope Enforcement
 
 The home server enforces the scope at every relevant operation:
 
-- **Send (`scope.send`).** The home server evaluates the recipient
-  list of every envelope submitted by the delegated device, per
-  `CLIENT.md` section 2.4. If `send.mode` is `unrestricted`, all
-  recipients are permitted. If `send.mode` is `restricted`, every
-  recipient MUST match an entry in `send.allow`. If `send.mode` is
-  `none`, every submission MUST be rejected with reason code
-  `scope_exceeded`.
-- **Receive (`scope.receive`).** When `false`, the home server MUST
-  NOT deliver inbound envelopes to this device. The server MUST NOT
-  wrap session material to this device's enclosure key for envelopes
-  the user did not explicitly address to this device.
-- **Manage keys, blocks, devices.** When any of these fields is
-  `false`, the home server MUST reject the corresponding management
-  operation from this device with reason code `scope_exceeded`.
-
-The `send.allow` array MUST contain at most 10,000 entries. A
-certificate with a larger `allow` list MUST be rejected at issuance
-with `reason_code: "scope_invalid"`. This cap prevents a single
-certificate from encoding an unbounded address book.
+- **Send.** On every envelope submission from the delegated device,
+  the server evaluates `scope.send` per section 10.3.3.1 against
+  each recipient. If any recipient is not permitted, the submission
+  MUST be rejected with `reason_code: "scope_exceeded"`, identifying
+  the rejected recipients. For `mode: "none"`, every submission is
+  rejected.
+- **Receive.** On every inbound envelope whose recipient is the
+  delegating account, the server evaluates `scope.receive` against
+  `brief.from`. If the sender is not permitted, the server MUST NOT
+  deliver the envelope to this device's session and MUST NOT wrap
+  `K_brief` or `K_enclosure` to this device's keys for that envelope.
+  Other devices authorized to receive the envelope are unaffected.
+- **Resource access (blocklist, keys, devices).** On every operation
+  addressing one of these resources, the server first dispatches on
+  operation class (read or write). If the corresponding permission on
+  the resource field is `false`, the server MUST reject with
+  `reason_code: "scope_exceeded"`.
+- **Rate limits.** On every operation that passes the matcher or
+  boolean check above, the server evaluates the scope field's
+  `rate_limits` array. If any tier would be exceeded, the server
+  MUST reject with `reason_code: "rate_limited"` and MUST NOT
+  record the operation against the counters.
 
 Scope enforcement uses the current certificate at the time of each
 operation, not the certificate that was active when the session was
 established. A certificate update by the primary device takes effect
-immediately on the next submission within an existing session.
+immediately on the next operation within an existing session.
+
+Receive-matcher enforcement is applied per-device, not per-account.
+An inbound envelope that is blocked for a delegated device by its
+receive matcher is still delivered to other devices of the same
+account whose certificates (or full-access status) permit it.
 
 #### 10.3.5 Issuance Flow
 
@@ -954,8 +1114,8 @@ On acceptance of a revocation record, the home server MUST:
 2. Reject any subsequent handshake from `device_id` using the
    associated device key, with `reason_code: "revoked"` per
    `HANDSHAKE.md` section 4.1.
-3. Stop delivering inbound envelopes to `device_id` even if the
-   `scope.receive` field had been `true`.
+3. Stop delivering inbound envelopes to `device_id` regardless of
+   the receive matcher that had been in effect.
 4. Publish the revocation record alongside the user's key history
    so that third-party domains can observe the revocation.
 
@@ -992,12 +1152,15 @@ for the same `device_id` per section 10.3.6.
 A delegated device MUST NOT issue a `SEMP_DEVICE_CERTIFICATE`. Only
 a full-access device of the account may issue certificates.
 
-The `scope.manage_devices` field, when set to `true`, authorizes the
-device to **register its own additional delegated devices via the
-issuance flow, acting on behalf of the primary device**, but the
-certificate of any resulting device MUST still be signed by a
-full-access device. This is enforced by the home server verifying
-that `issued_by` refers to a device without a scoped certificate.
+`scope.devices.write: true` on a delegated device authorizes it to
+**submit** device registrations to the home server on the primary
+device's behalf, but the certificate of any resulting device MUST
+still be signed by a full-access device. The home server enforces
+this by verifying that `issued_by` refers to a device without a
+scoped certificate. A submission from a delegate with
+`scope.devices.write: true` whose `issued_by` points at another
+delegated device (creating a chain) MUST be rejected with
+`reason_code: "scope_invalid"`.
 
 The purpose of keeping delegation shallow is auditability: every
 certificate traces to a full-access device in one hop. Deeper chains
@@ -1019,12 +1182,20 @@ list address, redistributes to subscribers.
         "allow": [
             { "type": "user", "address": "subscriber1@example.com" },
             { "type": "user", "address": "subscriber2@example.com" }
+        ],
+        "rate_limits": [
+            { "period_seconds": 3600,  "amount_allowed": 200 },
+            { "period_seconds": 86400, "amount_allowed": 2000 }
         ]
     },
-    "receive": true,
-    "manage_keys": false,
-    "manage_blocks": false,
-    "manage_devices": false
+    "receive": {
+        "mode": "restricted",
+        "allow": [ { "type": "user", "address": "list-owner@example.com" } ],
+        "rate_limits": []
+    },
+    "blocklist": { "read": false, "write": false, "rate_limits": [] },
+    "keys":      { "read": false, "write": false, "rate_limits": [] },
+    "devices":   { "read": false, "write": false, "rate_limits": [] }
 }
 ```
 
@@ -1033,11 +1204,18 @@ send, can manage the user's block list based on classification.
 
 ```json
 {
-    "send": { "mode": "none", "allow": [] },
-    "receive": true,
-    "manage_keys": false,
-    "manage_blocks": true,
-    "manage_devices": false
+    "send":    { "mode": "none", "rate_limits": [] },
+    "receive": { "mode": "unrestricted", "rate_limits": [] },
+    "blocklist": {
+        "read": true,
+        "write": true,
+        "rate_limits": [
+            { "period_seconds": 3600,  "amount_allowed": 200 },
+            { "period_seconds": 86400, "amount_allowed": 1000 }
+        ]
+    },
+    "keys":    { "read": false, "write": false, "rate_limits": [] },
+    "devices": { "read": false, "write": false, "rate_limits": [] }
 }
 ```
 
@@ -1049,21 +1227,66 @@ dynamically by the primary device as correspondents appear).
 {
     "send": {
         "mode": "restricted",
-        "allow": [ { "type": "user", "address": "correspondent@example.com" } ]
+        "allow": [ { "type": "user", "address": "correspondent@example.com" } ],
+        "rate_limits": [
+            { "period_seconds": 3600,  "amount_allowed": 60 },
+            { "period_seconds": 86400, "amount_allowed": 500 }
+        ]
     },
-    "receive": true,
-    "manage_keys": false,
-    "manage_blocks": false,
-    "manage_devices": false
+    "receive":   { "mode": "unrestricted", "rate_limits": [] },
+    "blocklist": { "read": false, "write": false, "rate_limits": [] },
+    "keys":      { "read": false, "write": false, "rate_limits": [] },
+    "devices":   { "read": false, "write": false, "rate_limits": [] }
+}
+```
+
+**Archive exporter with denylist.** Receives from everyone except
+sensitive correspondents, never sends, reads only.
+
+```json
+{
+    "send": { "mode": "none", "rate_limits": [] },
+    "receive": {
+        "mode": "denylist",
+        "deny": [
+            { "type": "user", "address": "therapist@clinic.example" },
+            { "type": "domain", "domain": "legal.example" }
+        ],
+        "rate_limits": [
+            { "period_seconds": 3600, "amount_allowed": 5000 }
+        ]
+    },
+    "blocklist": { "read": false, "write": false, "rate_limits": [] },
+    "keys":      { "read": false, "write": false, "rate_limits": [] },
+    "devices":   { "read": false, "write": false, "rate_limits": [] }
+}
+```
+
+**Device audit tool.** Read-only delegate that lists the account's
+registered devices and their scoped certificates for operator
+tooling. Does not send, receive, or modify anything.
+
+```json
+{
+    "send":    { "mode": "none", "rate_limits": [] },
+    "receive": { "mode": "none", "rate_limits": [] },
+    "blocklist": { "read": false, "write": false, "rate_limits": [] },
+    "keys":      { "read": true,  "write": false, "rate_limits": [] },
+    "devices":   {
+        "read": true,
+        "write": false,
+        "rate_limits": [
+            { "period_seconds": 60, "amount_allowed": 30 }
+        ]
+    }
 }
 ```
 
 These examples are not exhaustive. Other plausible roles include
-archive exporters (receive true, send none, manage_* false),
-read-only mobile viewers (receive true, send restricted to the user's
-own address for status updates, manage_* false), and
-per-correspondent proxies. Implementers select the minimum scope
-sufficient for the role.
+read-only mobile viewers (receive unrestricted, send restricted to
+the user's own address for status updates), and per-correspondent
+proxies with receive restricted to a single sender. Implementers
+select the minimum scope sufficient for the role.
 
 ### 10.4 Key Usage Transparency
 
