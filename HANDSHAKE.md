@@ -758,6 +758,10 @@ explicitly with a reason.
     "session_id": "echoed-session-id",
     "session_ttl": 300,
     "permissions": ["send", "receive", "create_group"],
+    "resumption_ticket": {
+        "value": "base64-opaque-ticket-bytes",
+        "expires_at": "2026-04-26T12:00:00Z"
+    },
     "server_signature": "signature-over-entire-message",
     "extensions": {}
 }
@@ -788,6 +792,7 @@ On rejection:
 | `session_id`      | `string`  | Yes      | Echo of session identifier.                                          |
 | `session_ttl`     | `integer` | Yes      | Session lifetime in seconds from `established_at`. The client uses this to compute `expires_at` and to schedule proactive rekeying per `SESSION.md` section 2.6. A client that receives an `accepted` message without this field MUST assume 300 seconds and SHOULD log a warning. |
 | `permissions`     | `array`   | No       | Granted permissions. Present in `accepted` step only.                |
+| `resumption_ticket` | `object` | No      | Server-issued resumption ticket. Present in `accepted` step when the server supports resumption. See section 2.8. |
 | `reason_code`     | `string`  | No       | Machine-readable reason. Present in `rejected` step only. See section 4.1. |
 | `reason`          | `string`  | No       | Human-readable description. Present in `rejected` step only.         |
 | `server_signature`| `string`  | Yes      | Signature over the entire message.                                   |
@@ -795,6 +800,176 @@ On rejection:
 
 If the server cannot complete the handshake for any reason, it MUST send a
 `rejected` response rather than closing the connection without explanation.
+
+### 2.8 Resumption
+
+A client that holds a valid, unexpired resumption ticket from a prior
+handshake MAY resume instead of performing a full four-message
+handshake. Resumption uses a two-message exchange that binds a fresh
+ephemeral DH to the resumption secret recovered from the ticket. The
+authenticated identity, permissions, and session TTL policy from the
+original handshake carry forward; the key material is fresh.
+
+#### 2.8.1 When to Resume
+
+A client MAY resume if and only if:
+
+1. The server's last `accepted` response issued a `resumption_ticket`.
+2. The ticket's `expires_at` is in the future per the clock tolerance
+   in `CONFORMANCE.md` section 9.3.1.
+3. The ticket has not been presented before (single-use).
+4. The client's cached configuration for the server has not been
+   invalidated (`DISCOVERY.md` section 3.5).
+
+If any precondition fails, the client MUST perform a full handshake.
+
+#### 2.8.2 Resume Step Schema
+
+Client sends:
+
+```json
+{
+    "type": "SEMP_HANDSHAKE",
+    "step": "resume",
+    "party": "client",
+    "version": "1.0.0",
+    "nonce": "base64-random-32-bytes",
+    "resumption_ticket": "base64-opaque-ticket-bytes",
+    "client_ephemeral_key": {
+        "algorithm": "pq-kyber768-x25519",
+        "key": "base64-encoded-ephemeral-public-key",
+        "key_id": "ephemeral-key-fingerprint"
+    },
+    "transport": "ws",
+    "extensions": {}
+}
+```
+
+Server responds with `step: "accepted"` or `step: "rejected"`. On
+acceptance the response carries a fresh `session_id`, a fresh
+`server_ephemeral_key`, a `server_nonce`, and a new
+`resumption_ticket` that replaces the consumed one:
+
+```json
+{
+    "type": "SEMP_HANDSHAKE",
+    "step": "accepted",
+    "party": "server",
+    "version": "1.0.0",
+    "session_id": "new-session-ulid",
+    "session_ttl": 300,
+    "server_nonce": "base64-random-32-bytes",
+    "server_ephemeral_key": {
+        "algorithm": "pq-kyber768-x25519",
+        "key": "base64-encoded-ephemeral-public-key",
+        "key_id": "ephemeral-key-fingerprint"
+    },
+    "resumption_ticket": {
+        "value": "base64-new-opaque-ticket-bytes",
+        "expires_at": "2026-04-26T12:00:00Z"
+    },
+    "server_signature": "signature-over-entire-message",
+    "extensions": {}
+}
+```
+
+Ticket shape fields:
+
+| Field         | Type     | Required | Description                                                                |
+|---------------|----------|----------|----------------------------------------------------------------------------|
+| `value`       | `string` | Yes      | Base64-encoded opaque ticket bytes. Client treats as opaque.               |
+| `expires_at`  | `string` | Yes      | ISO 8601 UTC timestamp after which the ticket MUST NOT be presented.       |
+
+#### 2.8.3 Key Derivation for Resumption
+
+Session keys for the resumed session are derived per `SESSION.md`
+section 2.1 with one modification: the HKDF-Extract input keying
+material is the concatenation of the ephemeral shared secret and
+the resumption secret recovered from the ticket:
+
+```
+IKM_resume = ephemeral_shared_secret || K_resumption
+PRK        = HKDF-Extract(salt = client_nonce || server_nonce, IKM_resume)
+```
+
+The five per-direction keys (`K_enc_c2s`, `K_enc_s2c`, `K_mac_c2s`,
+`K_mac_s2c`, `K_env_mac`) and the next resumption secret
+(`K_resumption_next`) are derived by HKDF-Expand from this PRK
+using the same labels as the full-handshake key schedule
+(`SESSION.md` section 2.1 and section 2.7).
+
+The fresh ephemeral DH is what preserves forward secrecy for the
+resumed session. An attacker who obtains the ticket alone cannot
+derive session keys without also breaking the ephemeral DH
+assumption.
+
+#### 2.8.4 Ticket Lifecycle
+
+Resumption tickets are single-use. On successful acceptance, the
+server MUST:
+
+- Invalidate the presented ticket (stateful servers remove it from
+  the ticket table; stateless servers record its identifier in a
+  consumed-ticket cache until past `expires_at`).
+- Issue a fresh ticket in the `accepted` response, bound to the new
+  session's key schedule.
+
+Ticket `expires_at` MUST NOT exceed 7 days from the time of
+issuance. A server that receives a `resume` message bearing a
+ticket past its `expires_at` MUST reject with
+`reason_code: "resumption_failed"`.
+
+#### 2.8.5 Rejection and Fallback
+
+A server unable to resume a presented ticket MUST return
+`step: "rejected"` with one of:
+
+- `reason_code: "resumption_failed"` for resumption-specific
+  failure: ticket unknown, expired, corrupt, or already consumed.
+- A standard invalidation reason code (section 4.1) when the
+  underlying identity is no longer valid: `revoked`, `blocked`, or
+  `certificate_expired`.
+
+On `resumption_failed` the client MUST perform a full handshake per
+section 2. The client MUST NOT retry resumption with the same
+ticket. The client MUST discard the consumed ticket before
+reconnecting.
+
+On other rejection reasons, fallback to full handshake is not
+guaranteed to succeed (the identity itself is invalid). The client
+MUST surface the underlying reason to the user.
+
+#### 2.8.6 No 0-RTT Data
+
+The `resume` message MUST NOT carry envelope submissions or other
+session-bound application data. The client MUST wait for `accepted`
+before sending any payload that depends on the resumed session
+keys. Servers that receive application data in a `resume` message
+MUST reject with `reason_code: "resumption_failed"`.
+
+This rules out the replay exposure associated with 0-RTT data in
+other protocols. Envelope delivery acknowledgment correctness is
+prioritized over the round-trip savings.
+
+#### 2.8.7 Federation Resumption
+
+Federation handshakes (section 5) support resumption on the same
+terms. The `resume` message uses `party: "server"` and carries the
+domain identity fields from section 5.2 (`server_id`,
+`server_domain`, `peer_configuration_revision`) in addition to the
+resumption-specific fields (`nonce`, `client_ephemeral_key`,
+`resumption_ticket`).
+
+Domain-ownership proof is NOT repeated on resumption: the ticket,
+issued after the original full handshake verified domain ownership,
+stands in for it. If the peer's published domain key has been
+revoked since issuance, the server MUST reject with
+`reason_code: "revoked"` per section 4.1.
+
+If `peer_configuration_revision` indicates the initiator's cache is
+stale, resumption MAY still proceed; the responder SHOULD emit a
+`SEMP_CONFIGURATION_UPDATE` at first opportunity per
+`DISCOVERY.md` section 3.5.4.
 
 ---
 
@@ -855,6 +1030,7 @@ codes are defined for session and envelope rejection:
 | `rate_limited`       | The sender has exceeded the server's rate limits.                       |
 | `challenge_failed`    | The submitted challenge solution was invalid or the challenge expired. The sender MAY request a new challenge by restarting the handshake. |
 | `server_at_capacity` | The server has reached its concurrent session limit per `SESSION.md` section 2.5.3. The sender SHOULD retry after a delay. |
+| `resumption_failed`  | A `resume` step failed: ticket unknown, expired, corrupt, or already consumed. The client MUST perform a full handshake and MUST NOT retry with the same ticket. See section 2.8.5. |
 
 Additional reason codes MAY be defined in extensions using the standard
 namespacing convention.

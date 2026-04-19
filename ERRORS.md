@@ -86,6 +86,7 @@ additions. Defined in `ENVELOPE.md` section 9.3.
 | `scope_exceeded`    | No          | The submitting device's scoped certificate does not authorize sending to one or more recipients. Surface the rejected recipient(s) to the operator. Do not retry without updating the device certificate scope. See `KEY.md` section 10.3. |
 | `scope_invalid`     | No          | A scoped device certificate submitted for registration is malformed: missing required scope fields, `allow` list exceeds 10,000 entries, or `expires_at` exceeds the 365-day cap. See `KEY.md` section 10.3. |
 | `certificate_expired` | No        | The submitting delegated device's certificate has passed its `expires_at`. The primary device MUST issue a renewed certificate before the delegated device resumes operation. See `KEY.md` section 10.3.8. |
+| `resumption_failed` | No          | A `resume` handshake step failed: ticket unknown, expired, corrupt, or already consumed. The client MUST perform a full handshake. MUST NOT retry with the same ticket. See `HANDSHAKE.md` section 2.8.5. |
 
 `seal_invalid` and `session_mac_invalid` are cryptographic verification
 failures. In production, these almost always indicate an implementation bug
@@ -291,6 +292,7 @@ Several codes appear at multiple protocol layers with consistent semantics:
 | `scope_exceeded`    | Envelope (submission)       | Delegated device attempted an action outside its certificate scope. |
 | `scope_invalid`     | Device registration         | Scoped device certificate is malformed, over-capped, or has an excessive lifetime. |
 | `certificate_expired` | Envelope (submission), Handshake | Delegated device's scoped certificate has passed `expires_at`. |
+| `resumption_failed` | Handshake                   | Resume step failed; client MUST fall back to full handshake. |
 
 When the same code appears at multiple layers, the meaning is identical. The
 sender behavior differs only in the context of the operation being performed

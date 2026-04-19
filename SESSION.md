@@ -83,15 +83,16 @@ before message 3). The derivation is defined in `HANDSHAKE.md` section 2.4:
   suites use HKDF-SHA-512 (RFC 5869). See `ENVELOPE.md` section 7.3.1 for
   suite definitions.
 
-Five keys are derived:
+Six keys are derived:
 
-| Key           | Length  | Purpose                                                        |
-|---------------|---------|----------------------------------------------------------------|
-| `K_enc_c2s`   | 32 bytes| Encrypts client → server handshake messages.                   |
-| `K_enc_s2c`   | 32 bytes| Encrypts server → client handshake messages.                   |
-| `K_mac_c2s`   | 32 bytes| MACs client → server handshake messages.                       |
-| `K_mac_s2c`   | 32 bytes| MACs server → client handshake messages.                       |
-| `K_env_mac`   | 32 bytes| MACs all envelopes sent within this session (`seal.session_mac`).|
+| Key            | Length  | Purpose                                                              |
+|----------------|---------|----------------------------------------------------------------------|
+| `K_enc_c2s`    | 32 bytes| Encrypts client → server handshake messages.                         |
+| `K_enc_s2c`    | 32 bytes| Encrypts server → client handshake messages.                         |
+| `K_mac_c2s`    | 32 bytes| MACs client → server handshake messages.                             |
+| `K_mac_s2c`    | 32 bytes| MACs server → client handshake messages.                             |
+| `K_env_mac`    | 32 bytes| MACs all envelopes sent within this session (`seal.session_mac`).    |
+| `K_resumption` | 32 bytes| Pre-shared key used to resume this session after disconnect (`HANDSHAKE.md` §2.8). |
 
 Each key is derived as a distinct HKDF output label expansion. Labels MUST be
 distinct per key to prevent cross-key substitution. The recommended labels are:
@@ -102,11 +103,23 @@ distinct per key to prevent cross-key substitution. The recommended labels are:
 "SEMP-v1-session-mac-c2s"
 "SEMP-v1-session-mac-s2c"
 "SEMP-v1-session-env-mac"
+"SEMP-v1-session-resumption"
 ```
 
-All five expansions use the same HKDF PRK (the single HKDF-Extract output
-over the ephemeral shared secret and nonce salt). The five Expand calls are
+All six expansions use the same HKDF PRK (the single HKDF-Extract output
+over the ephemeral shared secret and nonce salt). The six Expand calls are
 independent.
+
+`K_resumption` is treated differently from the other five keys: it is
+NOT used to encrypt or MAC messages within this session. Instead, the
+server retains `K_resumption` (directly or indirectly via a resumption
+ticket) so that it can be combined with fresh ephemeral DH material to
+derive the key schedule of a later resumed session. See section 2.7
+for the ticket lifecycle and section 2.8 for the forward-secrecy
+analysis.
+
+A server that does not support resumption MAY skip derivation of
+`K_resumption` and MUST NOT issue resumption tickets.
 
 ### 2.2 Ephemeral Key Erasure
 
@@ -317,6 +330,88 @@ The client MUST NOT assume a session is still valid beyond `expires_at`. If
 `expires_at` has passed and the client has not yet completed a rekey, it MUST
 treat the session as expired and begin a fresh handshake before sending any
 further envelopes.
+
+### 2.7 Resumption Ticket Lifecycle
+
+A server that supports resumption (`HANDSHAKE.md` section 2.8) issues
+a resumption ticket at the end of each accepted handshake and each
+accepted resumption. The ticket is an opaque byte string that binds
+the session's authenticated identity to the `K_resumption` derived
+in section 2.1.
+
+Servers MAY implement tickets in one of two ways:
+
+- **Stateful ticket table.** The ticket value is a random
+  identifier. The server maintains a table mapping the identifier to
+  `{authenticated_identity, K_resumption, expires_at, additional context}`.
+- **Stateless self-contained ticket.** The ticket value is an AEAD
+  encryption of `{authenticated_identity, K_resumption, expires_at, additional context}`
+  under a server-held ticket-encryption key. The server holds no
+  per-client state.
+
+The wire format treats the ticket as opaque; clients cannot
+distinguish the two implementations and MUST NOT attempt to.
+
+Tickets are single-use. On successful resumption acceptance the
+server MUST invalidate the consumed ticket:
+
+- Stateful: remove the entry from the ticket table.
+- Stateless: record the ticket's identifier (or hash) in a
+  consumed-ticket cache retained until past its `expires_at`.
+
+A ticket `expires_at` MUST NOT exceed 7 days from issuance.
+Stateful servers MUST delete the ticket's table entry no later than
+its `expires_at`. Stateless servers rely on the embedded expiry for
+rejection at the next presentation, but MUST still honor the cap
+when issuing.
+
+The ticket-encryption key used for stateless tickets is a long-term
+server secret. The operator SHOULD rotate this key at least
+quarterly to bound the exposure window of a leaked ticket-encryption
+key. On rotation, outstanding tickets under the old key become
+undecryptable and return `resumption_failed`, triggering
+client-side full-handshake fallback. Operators MAY retain the
+previous key for a short overlap window (RECOMMENDED one ticket
+lifetime) to avoid mass fallback during rotation.
+
+A server MAY decline to issue tickets (operator policy, resource
+constraints, forward-secrecy-strict mode). In that case, the
+`accepted` message omits `resumption_ticket`. A client that does
+not receive a ticket MUST NOT attempt resumption against that
+server in subsequent reconnects.
+
+### 2.8 Resumption Forward Secrecy
+
+Key derivation for a resumed session (`HANDSHAKE.md` section 2.8.3)
+incorporates both the resumption secret from the ticket and a fresh
+ephemeral DH output. This yields the following properties:
+
+- An attacker who captures a resumption ticket (for example via
+  device theft or a memory leak) but does not break the ephemeral DH
+  assumption cannot derive the resumed session's keys.
+- An attacker who passively observes the ephemeral DH exchange but
+  does not obtain the ticket cannot derive the resumed session's
+  keys, because the ticket's resumption secret is required.
+- An attacker who obtains BOTH the ticket AND observations of the DH
+  exchange derives the resumed session's keys only if the DH
+  assumption is also broken. This matches the forward secrecy of a
+  full handshake with the additional requirement that the ticket be
+  obtained.
+
+The ticket's bounded lifetime (at most 7 days) and single-use
+consumption limit the window in which a compromised ticket has
+value. An attacker must compromise both the ticket and, concurrently,
+the DH exchange of the specific resumption attempt before the ticket
+is either consumed by the legitimate client or expires. This is a
+strictly smaller attack surface than any protocol without fresh DH
+on resumption.
+
+Long-term compromise of a server's ticket-encryption key (stateless
+tickets) exposes all outstanding tickets under that key. The
+mitigation is rotation per section 2.7; a server operator that
+detects key compromise MUST rotate the ticket-encryption key and
+invalidate all outstanding tickets issued under it. Clients observe
+this as `resumption_failed` and fall back to full handshake.
 
 ---
 
