@@ -401,6 +401,7 @@ rest of the stack as-is.
 | `ERRORS.md` | Error codes registry and status values. |
 | `EXTENSIONS.md` | Extension framework, registry, lifecycle, and anti-fragmentation governance. |
 | `RECOVERY.md` | Account recovery extension. Server-assisted and Shamir device-split backup, restore flow, successor records. RECOMMENDED. |
+| `MIGRATION.md` | Provider migration extension. Cross-domain address change with key continuity, forwarding, and local-part reassignment rules. RECOMMENDED. |
 
 ---
 

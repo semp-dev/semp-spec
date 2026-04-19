@@ -801,6 +801,39 @@ Below the threshold, the recipient server returns `policy_forbidden`
 rejections with challenge bodies per section 6.4.3. The throttling
 mechanism is layered atop, not in place of, first-contact enforcement.
 
+### 6.6 Migration Notice
+
+After the forwarding window of a cooperative migration has ended
+(`MIGRATION.md` section 5.3), the old provider MUST return a
+`policy_forbidden` rejection for envelopes addressed to the migrated
+address, and MUST include a `migration_notice` field in the rejection
+body until the local-part is reassigned.
+
+```json
+{
+    "type": "SEMP_ENVELOPE",
+    "step": "rejected",
+    "reason_code": "policy_forbidden",
+    "reason": "Recipient has migrated.",
+    "migration_notice": {
+        "new_address": "alice@new.example",
+        "migration_record_id": "migration-ulid",
+        "migration_record_url": "https://new.example/.well-known/semp/migration/<record_id>"
+    }
+}
+```
+
+The sending server MUST surface the `migration_notice` to the sending
+client in the submission response. The sending client MUST NOT
+redirect correspondence automatically. The user updates their
+correspondent record per `CLIENT.md` section 3.3 after verifying the
+migration record.
+
+When the old local-part has been reassigned to a new occupant, the old
+provider MUST NOT include `migration_notice` in subsequent rejections
+or deliveries. The new occupant is a distinct identity per
+`MIGRATION.md` section 6.3.
+
 ---
 
 ## 7. Multi-Device Synchronization

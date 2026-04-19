@@ -275,6 +275,7 @@ endpoints (which are plain HTTPS) are flat.
 | `verify`           | `string` | No       | Base URL for domain-ownership verification tokens used during federation handshakes. Append the verification token to retrieve the ownership proof. Absence indicates the server does not support well-known URI verification and relies on certificate or DNS TXT verification instead. See `HANDSHAKE.md` section 5.3. |
 | `reputation_transfer` | `string` | No    | Base URL for trust-transfer records published when a domain changes ownership. Append `out` or `in` to retrieve the outgoing or incoming transfer record. Absence indicates the domain does not publish transfer records. See `REPUTATION.md` section 11. |
 | `backup`           | `string` | No       | Base URL for server-assisted account recovery backups. Append the URL-encoded user address to address a specific account. Accepts `POST` (upload), `GET` (download), and `DELETE`. Absence indicates the server does not host recovery backups. See `RECOVERY.md` section 4.1. |
+| `migration`        | `string` | No       | Base URL for provider migration records. Accepts `POST` (submit a cross-signed record), `GET <record_id>` (fetch a specific record), and `GET ?address=<user@domain>` (list records for a user). Absence indicates the server does not participate in cooperative migration. See `MIGRATION.md` section 3.4. |
 
 All URL values are implementation-chosen. The protocol does not mandate URL path
 structure. The transport identifiers in `client` and `federation` are defined in
