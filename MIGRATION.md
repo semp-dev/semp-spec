@@ -41,9 +41,14 @@ user's own client holds the user's archive and decryption keys.
 
 ### 1.2 Conformance Status
 
-This specification is a RECOMMENDED core extension. A SEMP server MAY
-omit support. A server that claims migration support MUST comply with
-every requirement in this document for the mechanisms it supports.
+This specification is a RECOMMENDED optional core module. A SEMP server
+MAY omit support. A server that claims migration support MUST comply
+with every requirement in this document for the mechanisms it supports.
+
+Optional core modules are full protocol modules that live alongside the
+base SEMP specification. They define their own wire types and endpoints
+and do not use the wire-level extension framework in `EXTENSIONS.md`.
+See `EXTENSIONS.md` section 1 for the distinction.
 
 A server advertises cooperative migration support via the `migration`
 endpoint in its discovery configuration (`DISCOVERY.md` section 3.1.1).

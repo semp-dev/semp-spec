@@ -927,7 +927,7 @@ be rejected. (`CLIENT.md` §4.5.7)
 
 ### 5.12 Account Recovery
 
-Account recovery is a RECOMMENDED core extension specified in `RECOVERY.md`.
+Account recovery is a RECOMMENDED optional core module specified in `RECOVERY.md`.
 A client claiming recovery support MUST comply with `RECOVERY.md` section 10.1.
 
 A server claiming recovery support MUST comply with `RECOVERY.md` section
@@ -953,7 +953,7 @@ the new identity key as a fresh identity. (`RECOVERY.md` §7.6)
 
 ### 5.13 Provider Migration
 
-Provider migration is a RECOMMENDED core extension specified in
+Provider migration is a RECOMMENDED optional core module specified in
 `MIGRATION.md`. A client claiming migration support MUST comply with
 `MIGRATION.md` section 11.1. A server claiming cooperative migration
 support MUST comply with section 11.2; a new provider MUST comply with

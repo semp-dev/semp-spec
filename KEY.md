@@ -681,7 +681,7 @@ the on-device representation of private key material.
 ### 9.3 Key Backup and Recovery
 
 Account recovery (restoration of identity and encryption keys after loss of
-all devices) is specified in `RECOVERY.md` as a RECOMMENDED core extension.
+all devices) is specified in `RECOVERY.md` as a RECOMMENDED optional core module.
 Two mechanisms are defined there: server-assisted encrypted backup and
 Shamir device-split backup. Clients and servers claiming recovery support
 MUST comply with `RECOVERY.md`.
@@ -756,10 +756,10 @@ parties' participation, or reconstructed from backup by an unauthorized party.
 
 User-level migration (a user moving from `alice@old.example` to
 `alice@new.example`) is specified in `MIGRATION.md` as a RECOMMENDED
-core extension. Migration binds the old and new identity keys and, in
-cooperative mode, the old and new domain keys. Trust carry-over across
-migration is a per-domain policy decision and is bound to the identity
-keys in the migration record, not to address strings.
+optional core module. Migration binds the old and new identity keys
+and, in cooperative mode, the old and new domain keys. Trust carry-over
+across migration is a per-domain policy decision and is bound to the
+identity keys in the migration record, not to address strings.
 
 ---
 

@@ -19,8 +19,22 @@ governance rules that prevent ecosystem fragmentation. It governs all
 
 ## 1. Extension Points
 
-SEMP provides extension points at multiple layers of the protocol. Each layer
-exposes an `extensions` object with different visibility and trust properties:
+This specification governs **wire-level extensibility**: per-envelope,
+per-message, and per-record `extensions` objects carried inside SEMP
+payloads. A wire-level extension is identified by a namespaced key (for
+example `semp.dev/<name>`), carries a `required` flag, and has a
+definition document resolvable by identifier.
+
+Optional core modules (such as `RECOVERY.md` and `MIGRATION.md`) are a
+separate concept. They are full protocol modules that define their own
+wire types and endpoints, are listed in the `DESIGN.md` document index,
+and are advertised through their own discovery endpoints. They do not
+appear inside any `extensions` field and do not use the namespacing,
+registry, or definition-document machinery defined in this document.
+
+SEMP provides wire-level extension points at multiple layers of the
+protocol. Each layer exposes an `extensions` object with different
+visibility and trust properties:
 
 | Layer                    | Extension Field             | Visibility                              | Defined In           |
 |--------------------------|-----------------------------|-----------------------------------------|----------------------|
