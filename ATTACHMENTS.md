@@ -2,7 +2,7 @@
 
 **Wire-level Extension: `semp.dev/large-attachment`**  
 Status: Internet-Draft  
-Version: 0.1.0  
+Version: 0.2.0-draft  
 Related: `ENVELOPE.md`, `EXTENSIONS.md`, `DISCOVERY.md`, `CLIENT.md`
 
 ---
