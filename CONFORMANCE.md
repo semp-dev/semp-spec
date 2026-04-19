@@ -951,7 +951,41 @@ three signatures (`recovery_signature`, `new_key_signature`,
 A third-party domain choosing not to honor successor records MUST treat
 the new identity key as a fresh identity. (`RECOVERY.md` §7.6)
 
-### 5.13 Content Security
+### 5.13 Provider Migration
+
+Provider migration is a RECOMMENDED core extension specified in
+`MIGRATION.md`. A client claiming migration support MUST comply with
+`MIGRATION.md` section 11.1. A server claiming cooperative migration
+support MUST comply with section 11.2; a new provider MUST comply with
+section 11.3; a third-party domain applying carry-over MUST comply with
+section 11.4.
+
+In particular:
+
+- A cooperative old provider MUST NOT reassign a migrated local-part
+  during the forwarding window. (`MIGRATION.md` §6.1)
+- After the forwarding window ends and until the local-part is
+  reassigned, a cooperative old provider MUST return `policy_forbidden`
+  with a `migration_notice` body for envelopes addressed to the
+  migrated address. (`MIGRATION.md` §5.3, `DELIVERY.md` §6.6)
+- A cooperative old provider MUST revoke the old identity key with
+  reason `"migrated_to"` on migration-record publication.
+  (`MIGRATION.md` §8, `KEY.md` §8)
+- Third-party domains applying known-correspondent, reputation, or
+  block-list carry-over MUST bind the carry-over to the identity keys
+  in the migration record, not to address strings. A sender envelope
+  whose identity key does not match the migrated identity MUST NOT
+  receive carried-over standing. (`MIGRATION.md` §6.3, §7)
+- Third-party domains MUST NOT leak migration state through observable
+  behavior that distinguishes migrated, reassigned, and never-used
+  addresses. (`MIGRATION.md` §9.3, `DESIGN.md` §2.7)
+- A client receiving an envelope with a changed identity key for a
+  previously-known correspondent MUST apply key-change detection and
+  MUST require explicit user confirmation before trusting the new
+  key, regardless of whether the change is due to migration or
+  reassignment. (`CLIENT.md` §3.3, `MIGRATION.md` §11.1)
+
+### 5.14 Content Security
 
 A conformant client MUST:
 

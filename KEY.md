@@ -752,6 +752,15 @@ Loss of the domain private key means loss of the associated trust history.
 There is no recovery path. Trust cannot be forged, reassigned without both
 parties' participation, or reconstructed from backup by an unauthorized party.
 
+### 11.1 User-Level Migration
+
+User-level migration (a user moving from `alice@old.example` to
+`alice@new.example`) is specified in `MIGRATION.md` as a RECOMMENDED
+core extension. Migration binds the old and new identity keys and, in
+cooperative mode, the old and new domain keys. Trust carry-over across
+migration is a per-domain policy decision and is bound to the identity
+keys in the migration record, not to address strings.
+
 ---
 
 ## 12. Security Considerations
