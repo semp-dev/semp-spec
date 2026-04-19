@@ -215,7 +215,7 @@ Each registry entry contains:
 
 | Field              | Description                                                            |
 |--------------------|------------------------------------------------------------------------|
-| Identifier         | Namespaced key (e.g., `semp.dev/message-expiry`).                      |
+| Identifier         | Namespaced key (e.g., `semp.dev/large-attachment`).                    |
 | Status             | Current lifecycle status (section 6).                                  |
 | Layer(s)           | Which extension points the extension occupies.                         |
 | Required-capable   | Whether the extension may be marked `required: true`.                  |
@@ -267,17 +267,17 @@ The definition document is a JSON object with the following structure:
 
 ```json
 {
-    "identifier": "semp.dev/read-receipts",
+    "identifier": "vendor.example.com/example-extension",
     "spec_version": "1.0.0",
     "status": "standard",
-    "specification_uri": "https://semp.dev/extensions/read-receipts.html",
+    "specification_uri": "https://vendor.example.com/extensions/example-extension.html",
 
     "placement": {
         "allowed_layers": ["brief", "enclosure"],
         "required_layer": "brief"
     },
 
-    "data_schema": "https://semp.dev/extensions/read-receipts/schema.json",
+    "data_schema": "https://vendor.example.com/extensions/example-extension/schema.json",
 
     "authority": {
         "produced_by": ["sender_client", "recipient_client"],
@@ -286,8 +286,8 @@ The definition document is a JSON object with the following structure:
 
     "permissions": {
         "reads": ["brief.message_id", "brief.thread_id"],
-        "writes": ["brief.extensions.semp.dev/read-receipts"],
-        "triggers": ["read_event"]
+        "writes": ["brief.extensions.vendor.example.com/example-extension"],
+        "triggers": ["example_event"]
     },
 
     "hooks": ["on_compose", "on_decrypt", "on_display"],
@@ -295,12 +295,12 @@ The definition document is a JSON object with the following structure:
     "dependencies": [],
     "conflicts_with": [],
 
-    "test_vectors": "https://semp.dev/extensions/read-receipts/vectors.json",
+    "test_vectors": "https://vendor.example.com/extensions/example-extension/vectors.json",
     "reference_implementations": [
         {
-            "name": "semp-go",
-            "uri": "https://github.com/semp-dev/semp-go",
-            "module": "extensions/readreceipts"
+            "name": "example-impl",
+            "uri": "https://vendor.example.com/example-impl",
+            "module": "extensions/example-extension"
         }
     ],
 
@@ -309,7 +309,7 @@ The definition document is a JSON object with the following structure:
 
     "signature": {
         "algorithm": "ed25519",
-        "key_id": "semp.dev-domain-key-fingerprint",
+        "key_id": "vendor.example.com-domain-key-fingerprint",
         "value": "base64-signature-over-canonical-document"
     }
 }

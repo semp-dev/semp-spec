@@ -218,8 +218,8 @@ capabilities. Nothing in this message identifies the client.
         ],
         "extensions": [
             "semp.dev/device-sync",
-            "semp.dev/read-receipts",
-            "semp.dev/message-expiry"
+            "semp.dev/large-attachment",
+            "vendor.example.com/example-extension"
         ]
     },
     "extensions": {}
@@ -542,7 +542,7 @@ the shared session secret.
         "encryption_algorithm": "pq-kyber768-x25519",
         "extensions": [
             "semp.dev/device-sync",
-            "semp.dev/read-receipts"
+            "semp.dev/large-attachment"
         ],
         "max_envelope_size": 26214400
     },
@@ -999,8 +999,8 @@ applies to user identity does not apply here.
         ],
         "extensions": [
             "semp.dev/device-sync",
-            "semp.dev/read-receipts",
-            "semp.dev/message-expiry"
+            "semp.dev/large-attachment",
+            "vendor.example.com/example-extension"
         ],
         "max_envelope_size": 52428800,
         "max_batch_size": 1000
@@ -1161,7 +1161,7 @@ message 2 is sent.
         "encryption_algorithm": "pq-kyber768-x25519",
         "extensions": [
             "semp.dev/device-sync",
-            "semp.dev/read-receipts"
+            "semp.dev/large-attachment"
         ],
         "max_envelope_size": 26214400,
         "max_batch_size": 500

@@ -437,13 +437,13 @@ handshake exchange.
 Message 1 (init) canonical form:
 
 ```json
-{"capabilities":{"encryption_algorithms":["pq-kyber768-x25519","x25519-chacha20-poly1305"],"extensions":["semp.dev/device-sync","semp.dev/read-receipts"]},"client_ephemeral_key":{"algorithm":"pq-kyber768-x25519","key":"Y2xpZW50LWVwaGVtZXJhbC1rZXk=","key_id":"client-eph-fp"},"extensions":{},"nonce":"qqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqs=","party":"client","step":"init","transport":"ws","type":"SEMP_HANDSHAKE","version":"1.0.0"}
+{"capabilities":{"encryption_algorithms":["pq-kyber768-x25519","x25519-chacha20-poly1305"],"extensions":["semp.dev/device-sync","semp.dev/large-attachment"]},"client_ephemeral_key":{"algorithm":"pq-kyber768-x25519","key":"Y2xpZW50LWVwaGVtZXJhbC1rZXk=","key_id":"client-eph-fp"},"extensions":{},"nonce":"qqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqs=","party":"client","step":"init","transport":"ws","type":"SEMP_HANDSHAKE","version":"1.0.0"}
 ```
 
 Message 2 (response) canonical form:
 
 ```json
-{"client_nonce":"qqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqs=","extensions":{},"negotiated":{"encryption_algorithm":"pq-kyber768-x25519","extensions":["semp.dev/device-sync","semp.dev/read-receipts"]},"party":"server","server_ephemeral_key":{"algorithm":"pq-kyber768-x25519","key":"c2VydmVyLWVwaGVtZXJhbC1rZXk=","key_id":"server-eph-fp"},"server_identity_proof":{"domain":"example.com","key_id":"server-lt-fp","signature":"c2VydmVyLXNpZw=="},"server_nonce":"u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7s=","server_signature":"c2VydmVyLXNpZ25hdHVyZQ==","session_id":"01JTEST33333333333333333333","step":"response","type":"SEMP_HANDSHAKE","version":"1.0.0"}
+{"client_nonce":"qqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqs=","extensions":{},"negotiated":{"encryption_algorithm":"pq-kyber768-x25519","extensions":["semp.dev/device-sync","semp.dev/large-attachment"]},"party":"server","server_ephemeral_key":{"algorithm":"pq-kyber768-x25519","key":"c2VydmVyLWVwaGVtZXJhbC1rZXk=","key_id":"server-eph-fp"},"server_identity_proof":{"domain":"example.com","key_id":"server-lt-fp","signature":"c2VydmVyLXNpZw=="},"server_nonce":"u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7s=","server_signature":"c2VydmVyLXNpZ25hdHVyZQ==","session_id":"01JTEST33333333333333333333","step":"response","type":"SEMP_HANDSHAKE","version":"1.0.0"}
 ```
 
 **Procedure:**
@@ -539,7 +539,7 @@ discovery responses.
             "address": "alice@example.com",
             "status": "semp",
             "transports": ["ws", "h2"],
-            "extensions": ["semp.dev/device-sync", "semp.dev/read-receipts"],
+            "extensions": ["semp.dev/device-sync", "semp.dev/large-attachment"],
             "server": "semp.example.com",
             "ttl": 3600
         },
@@ -837,23 +837,23 @@ processing continues normally.
 ```json
 {
     "extensions": {
-        "semp.dev/message-expiry": {
+        "vendor.example.com/example-extension": {
             "required": true,
             "data": {
-                "delete_after": "2025-07-01T00:00:00Z"
+                "example_field": "example_value"
             }
         }
     }
 }
 ```
 
-**Expected behavior (implementation supports `semp.dev/message-expiry`):**
+**Expected behavior (implementation supports `vendor.example.com/example-extension`):**
 Extension is parsed and processed. Envelope processing continues.
 
-**Expected behavior (implementation does NOT support `semp.dev/message-expiry`):**
+**Expected behavior (implementation does NOT support `vendor.example.com/example-extension`):**
 Envelope is rejected with reason code `extension_unsupported`. The rejection
-MUST include the key `"semp.dev/message-expiry"` so the sender can identify
-which extension caused the failure.
+MUST include the key `"vendor.example.com/example-extension"` so the sender can
+identify which extension caused the failure.
 
 ### 13.3 Vector: Required Extension, Unknown
 

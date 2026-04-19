@@ -315,11 +315,11 @@ support it to interoperate.
 ```json
 "extensions": [
     {
-        "id": "semp.dev/read-receipts",
+        "id": "semp.dev/large-attachment",
         "required": false
     },
     {
-        "id": "example.com/custom-routing",
+        "id": "vendor.example.com/example-extension",
         "required": true
     }
 ]
@@ -662,7 +662,7 @@ SHOULD batch multiple pending lookups into a single request where possible.
             "transports": ["ws", "h2", "quic"],
             "extensions": [
                 "semp.dev/device-sync",
-                "semp.dev/read-receipts"
+                "semp.dev/large-attachment"
             ],
             "server": "semp.example.com",
             "ttl": 3600
