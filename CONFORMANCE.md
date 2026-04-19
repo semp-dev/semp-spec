@@ -196,6 +196,33 @@ A conformant server MUST NOT:
 - Silently continue as if memory locking succeeded when `mlock` or equivalent
   fails. (`SESSION.md` §5.1)
 
+A conformant server that supports session resumption MUST:
+
+- Derive `K_resumption` from the handshake key schedule per
+  `SESSION.md` §2.1 and retain it in a ticket that binds to the
+  authenticated identity. (`SESSION.md` §2.1, §2.7)
+- Issue resumption tickets with `expires_at` no later than 7 days from
+  issuance. (`HANDSHAKE.md` §2.8.4, `SESSION.md` §2.7)
+- Treat tickets as single-use: invalidate on successful resumption
+  and issue a fresh ticket in the `accepted` response.
+  (`HANDSHAKE.md` §2.8.4)
+- Derive resumed session keys from the concatenation of the fresh
+  ephemeral DH output and the resumption secret, with fresh nonces.
+  (`HANDSHAKE.md` §2.8.3)
+- Reject `resume` messages bearing tickets that are unknown, expired,
+  corrupt, or already consumed with `reason_code: "resumption_failed"`.
+  (`HANDSHAKE.md` §2.8.5)
+- Reject application data included in a `resume` message with
+  `reason_code: "resumption_failed"`. No 0-RTT data is permitted.
+  (`HANDSHAKE.md` §2.8.6)
+- Rotate the ticket-encryption key for stateless tickets at least
+  quarterly. On rotation or key compromise, outstanding tickets MUST
+  become unusable and return `resumption_failed`.
+  (`SESSION.md` §2.7)
+
+A server that does not support resumption MUST NOT issue resumption
+tickets. (`SESSION.md` §2.7)
+
 ### 4.4 Discovery
 
 A conformant server MUST:
@@ -745,6 +772,26 @@ A conformant client SHOULD:
 - Retain the signed `challenge` message that caused a `challenge_invalid`
   abort for potential inclusion in a `protocol_abuse` report.
   (`REPUTATION.md` §8.3.6)
+
+A conformant client that supports session resumption MUST:
+
+- Store a received `resumption_ticket` alongside session state, treat
+  its `value` as opaque, and use it on at most one subsequent reconnect.
+  (`HANDSHAKE.md` §2.8, `SESSION.md` §2.7)
+- Reject a resumption attempt locally if the ticket's `expires_at` is
+  in the past per `CONFORMANCE.md` §9.3.1. Fall back to a full
+  handshake. (`HANDSHAKE.md` §2.8.1)
+- Not include envelope submissions or other session-bound application
+  data in a `resume` message. (`HANDSHAKE.md` §2.8.6)
+- On `reason_code: "resumption_failed"`, discard the consumed ticket
+  and perform a full handshake. MUST NOT retry resumption with the
+  same ticket. (`HANDSHAKE.md` §2.8.5)
+- Derive resumed session keys from the concatenation of the ephemeral
+  shared secret and the resumption secret, with the fresh nonces.
+  (`HANDSHAKE.md` §2.8.3)
+- Erase the old resumption ticket from memory and persistent storage
+  immediately after a successful resume (the server has issued a
+  fresh ticket). (`SESSION.md` §2.7)
 
 ### 5.4 Envelope Composition
 
