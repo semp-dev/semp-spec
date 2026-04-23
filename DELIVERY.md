@@ -156,18 +156,38 @@ terminal `delivered` outcome. A `delivered` acknowledgment that arrives
 without a verifiable receipt MUST be treated as a transport failure and
 retried per section 2.
 
-The sending server MUST store the receipt in a receipts archive keyed by
-`envelope_id`, separate from the queue state record in section 2.5. The
-sending server MUST retain receipts for at least 90 days after issuance.
-Operators MAY retain receipts longer as part of their retention policy.
-Receipt storage is distinct from queue state retention because receipts are
-evidence artifacts with long-lived value, whereas queue state records reveal
-correspondent-graph metadata and are pruned aggressively per section 2.5.
-
 The sending server MUST expose the receipt to the sending client through the
-delivery event notification defined in `CLIENT.md` section 6.5, so the
-client can retain its own copy and export it as a `.semp-receipt` file per
-`MIME.md`.
+delivery event notification defined in `CLIENT.md` section 6.5. The client
+is the authoritative custodian of receipts, as it is for all user-owned
+artifacts. Long-term retention, cross-device propagation, and export to
+`.semp-receipt` files (`MIME.md` section 6) are client responsibilities.
+
+The sending server MUST hold the receipt only as long as necessary to
+deliver it to the sending user's devices:
+
+- The receipt MUST be retained until at least one authenticated client
+  device of the sending user has acknowledged the delivery event carrying
+  it, per the standard push-notification acknowledgment model in
+  `CLIENT.md` section 6.5.
+- After acknowledgment by a client, the sending server MAY drop its copy
+  of the receipt. Multi-device propagation to other devices of the same
+  user MUST use the encrypted device-sync mechanism defined in
+  `CLIENT.md` section 4.5; the sending server MUST NOT retain a
+  plaintext receipt archive for sync fan-out.
+- If no client device acknowledges within the home server's configured
+  push-notification retention window, the receipt MAY be dropped on the
+  same schedule as any other undelivered notification.
+
+This retention rule aligns receipts with the rest of the spec's
+correspondent-graph privacy posture: the sending server is a conduit, not
+a custodian. A server that persists a long-term receipts archive would
+retain non-repudiable metadata about who its users corresponded with,
+which conflicts with the aggressive pruning of queue state records in
+section 2.5.
+
+Users who lose all their devices lose their receipts along with the rest
+of their client-side archive. Receipts are included in encrypted recovery
+bundles (`RECOVERY.md`) for users who have configured recovery.
 
 ##### 1.1.1.7 Receipt Verification by Third Parties
 
