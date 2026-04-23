@@ -635,6 +635,9 @@ via the confirmation hash as described in `HANDSHAKE.md` section 6.3.
 
 ## 5. Security Considerations
 
+For the consolidated adversary model under which this section is
+evaluated, see `THREAT.md`.
+
 ### 5.1 Memory Safety
 
 Session key material exists only in memory. Implementations MUST use

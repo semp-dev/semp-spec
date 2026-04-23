@@ -438,6 +438,9 @@ about; others monitor broadly. There is no onboarding or registry.
 
 ## 7. Security Considerations
 
+For the consolidated adversary model under which this section is
+evaluated, see `THREAT.md`.
+
 ### 7.1 Signing Key Compromise
 
 If the domain's signing key is compromised, the attacker can sign

@@ -319,6 +319,9 @@ finalization.
 
 ## 8. Security Considerations
 
+For the consolidated adversary model under which this section is
+evaluated, see `THREAT.md`.
+
 ### 8.1 Unauthorized Closure Attempt
 
 An attacker who has compromised a full-access device can submit a

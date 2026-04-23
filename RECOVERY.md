@@ -404,13 +404,83 @@ The client MUST:
 
 1. Derive `K_bundle` from the recovery secret per section 2.5.
 2. Apply Shamir's Secret Sharing to `K_bundle` with parameters `(M, N)`.
-3. Transmit one share to each of the user's `N` registered devices over
-   the multi-device sync channel defined in `KEY.md` section 10.2.
+3. Construct the recovery set manifest per section 5.2, binding each
+   share to a specific registered device and that device's identity
+   public key.
+4. Transmit to each of the user's `N` registered devices over the
+   multi-device sync channel defined in `KEY.md` section 10.2:
+   - The device's assigned `SEMP_RECOVERY_SHARE` record (section 5.3).
+   - A copy of the signed `SEMP_RECOVERY_SET_MANIFEST` (section 5.2).
 
-Each device stores its share in local secure storage. A device MUST NOT
-transmit its share to the server or to any non-device party.
+Each device stores its share and the manifest in local secure storage. A
+device MUST NOT transmit its share to the server or to any non-device
+party. The manifest is not secret and MAY be transmitted over any
+authenticated channel, but each device MUST retain its local copy so
+that it is available for the device-to-new-device transfer at restore
+time without requiring server cooperation.
 
-### 5.2 Share Record
+### 5.2 Recovery Set Manifest
+
+The recovery set manifest binds each Shamir share to a specific device's
+identity public key, so that at restore time the restoring client can
+verify that each collected share was assigned to a device the user
+enrolled in the recovery set at backup time, not to an unauthorized
+device injected during local transfer.
+
+```json
+{
+    "type": "SEMP_RECOVERY_SET_MANIFEST",
+    "version": "1.0.0",
+    "bundle_id": "bundle-ulid",
+    "threshold": 3,
+    "total_shares": 5,
+    "contributors": [
+        {
+            "share_index": 1,
+            "device_id": "device-ulid-1",
+            "device_identity_pubkey": {
+                "algorithm": "ed25519",
+                "public_key": "base64-device-identity-pubkey",
+                "key_id": "device-identity-key-fingerprint"
+            }
+        },
+        {
+            "share_index": 2,
+            "device_id": "device-ulid-2",
+            "device_identity_pubkey": {
+                "algorithm": "ed25519",
+                "public_key": "base64-device-identity-pubkey",
+                "key_id": "device-identity-key-fingerprint"
+            }
+        }
+    ],
+    "issued_at": "2026-04-18T10:00:00Z",
+    "signature": {
+        "algorithm": "ed25519",
+        "key_id": "user-identity-key-fingerprint",
+        "value": "base64-signature"
+    }
+}
+```
+
+| Field                         | Type      | Required | Description                                                                                             |
+|-------------------------------|-----------|----------|---------------------------------------------------------------------------------------------------------|
+| `bundle_id`                   | `string`  | Yes      | ULID matching the corresponding bundle and share records. Identical across manifest, bundle, and shares.|
+| `threshold`                   | `integer` | Yes      | Shamir threshold `M` for reconstruction.                                                                |
+| `total_shares`                | `integer` | Yes      | Total number of shares `N`. `contributors` MUST have exactly this length.                               |
+| `contributors[i].share_index` | `integer` | Yes      | 1-based index of the Shamir share bound to this contributor. Indexes MUST be unique across the array.   |
+| `contributors[i].device_id`   | `string`  | Yes      | Identifier of the device holding this share. Device IDs MUST be unique across the array.               |
+| `contributors[i].device_identity_pubkey` | `object` | Yes | The device's identity public key at manifest issuance, used to verify the share record signature at restore. |
+| `issued_at`                   | `string`  | Yes      | ISO 8601 UTC manifest issuance time.                                                                    |
+| `signature`                   | `object`  | Yes      | Signature by the user's current identity key over the canonical bytes of the manifest with `signature.value` set to `""`. |
+
+A client MUST construct a fresh manifest each time the Shamir split is
+recomputed, for example when adding or removing devices or rotating the
+user's identity key. The bundle, share records, and manifest issued in
+a given split share the same `bundle_id` and are mutually authoritative
+only as a matched set.
+
+### 5.3 Share Record
 
 Each share is transmitted as:
 
@@ -420,35 +490,58 @@ Each share is transmitted as:
     "version": "1.0.0",
     "bundle_id": "bundle-ulid",
     "share_index": 3,
+    "device_id": "device-ulid-3",
     "threshold": 3,
     "total_shares": 5,
     "share_value": "base64-encoded-share-bytes",
     "issued_at": "2026-04-18T10:00:00Z",
-    "signature": {
+    "device_signature": {
         "algorithm": "ed25519",
-        "key_id": "current-identity-key-fingerprint",
+        "key_id": "device-identity-key-fingerprint",
         "value": "base64-signature"
     }
 }
 ```
 
-The receiving device MUST verify the signature against the user's current
-identity key before storing the share.
+| Field              | Type      | Required | Description                                                                                           |
+|--------------------|-----------|----------|-------------------------------------------------------------------------------------------------------|
+| `bundle_id`        | `string`  | Yes      | ULID matching the manifest and bundle.                                                                |
+| `share_index`      | `integer` | Yes      | 1-based Shamir share index. MUST match the manifest's `contributors[share_index - 1].share_index`.   |
+| `device_id`        | `string`  | Yes      | Identifier of the device holding this share. MUST match the manifest's contributor entry for this `share_index`. |
+| `share_value`      | `string`  | Yes      | Base64-encoded Shamir share bytes.                                                                    |
+| `device_signature` | `object`  | Yes      | Signature by the bound device's identity key, computed over the canonical bytes of the share record with `device_signature.value` set to `""`. Proves that the device holding this record controls the identity key listed for its `share_index` in the manifest. |
 
-### 5.3 Reconstruction
+The device signature authenticates the share to its bound device. The
+manifest signature authenticates the bound-device set to the user. At
+restore, both signatures together prove that the share came from a
+device the user enrolled in the recovery set, without requiring the
+restoring client to trust local-transfer provenance.
+
+The receiving device MUST verify, before storing the share:
+
+1. The manifest's signature against the user's current identity key.
+2. That its own `device_id` matches the manifest's contributor entry
+   for the share's `share_index`.
+3. That `share_value` is nonempty and of the expected length for the
+   negotiated Shamir parameterization.
+
+If any check fails, the device MUST refuse to store the share.
+
+### 5.4 Reconstruction
 
 To reconstruct `K_bundle`, the user MUST assemble shares from at least
 `M` still-alive devices. The user's new device (the one performing the
-restore) collects shares through a local transfer mechanism: QR code
-display on each alive device scanned by the new device, direct local
-network transfer over an authenticated channel, or USB export.
+restore) collects shares and the recovery set manifest through a local
+transfer mechanism: QR code display on each alive device scanned by the
+new device, direct local network transfer over an authenticated
+channel, or USB export.
 
 Share transfer MUST NOT go through the home server or any other remote
 party. The server is not a participant in Shamir-mode restore.
 
-After assembling `M` shares, the client reconstructs `K_bundle` via
-Lagrange interpolation and proceeds to the common restore flow
-(section 6).
+After assembling `M` shares and the manifest, the client reconstructs
+`K_bundle` via Lagrange interpolation and proceeds to the common
+restore flow (section 6).
 
 ---
 
@@ -479,17 +572,39 @@ On a fresh device with no prior keys, the user:
 On a fresh device with no prior keys:
 
 1. The user identifies `M` of their still-alive devices.
-2. The client collects `M` `SEMP_RECOVERY_SHARE` records from those
-   devices via local transfer (section 5.3).
-3. The client verifies each share's signature against some historically
-   published identity key for `user_id`.
-4. The client verifies that all shares agree on `bundle_id`, `threshold`,
-   and `total_shares`.
-5. The client reconstructs `K_bundle` via Shamir interpolation.
-6. The client fetches the corresponding bundle from the home server via
+2. The client collects `M` `SEMP_RECOVERY_SHARE` records and one
+   `SEMP_RECOVERY_SET_MANIFEST` from those devices via local transfer
+   (section 5.4). The manifest is identical on every contributing
+   device; the client MAY accept the first copy received and MUST
+   reject any subsequent copy that does not byte-match.
+3. The client fetches the user's historically published identity keys
+   for `user_id` via the home server's key endpoint, or via a
+   key-transparency log where available (`TRANSPARENCY.md`).
+4. The client verifies the manifest's `signature` against one of the
+   historically published identity keys. If no historical key verifies
+   the manifest, the client MUST abort with a bundle integrity failure
+   per section 6.5.
+5. For each collected share record, the client verifies:
+   - The share's `bundle_id` matches the manifest's `bundle_id`.
+   - The share's `share_index` appears in the manifest's `contributors`
+     array exactly once.
+   - The share's `device_id` matches the manifest's contributor entry
+     for its `share_index`.
+   - The share's `device_signature` verifies against the
+     `device_identity_pubkey` in the corresponding contributor entry.
+   A share that fails any of these checks MUST be discarded and MUST
+   NOT count toward the `M`-of-`N` threshold. The client continues
+   collecting shares from other still-alive devices until `M` valid
+   shares are assembled or the user aborts.
+6. The client verifies that all accepted shares agree on `bundle_id`,
+   `threshold`, and `total_shares`, and that their `share_index`
+   values are distinct.
+7. The client reconstructs `K_bundle` via Shamir interpolation over
+   the `M` accepted shares.
+8. The client fetches the corresponding bundle from the home server via
    `GET`, matching on `bundle_id`.
-7. The client decrypts the payload as in section 6.1, steps 5 through 7.
-8. The client proceeds to section 6.3.
+9. The client decrypts the payload as in section 6.1, steps 5 through 7.
+10. The client proceeds to section 6.3.
 
 ### 6.3 New Key Generation
 
@@ -638,6 +753,9 @@ conservative default.
 
 ## 8. Security Considerations
 
+For the consolidated adversary model under which this section is
+evaluated, see `THREAT.md`.
+
 ### 8.1 Recovery Secret Strength
 
 The security of server-assisted recovery rests entirely on the strength
@@ -724,7 +842,36 @@ the bundle ciphertext, which is available via `GET`).
 Clients MUST set the default threshold `M` to at least 2 and SHOULD
 default to `M = ceil(N / 2) + 1` for `N >= 3`.
 
-### 8.7 Key Substitution Resistance
+### 8.7 Shamir Share Provenance
+
+The recovery set manifest (section 5.2) binds each Shamir share to a
+specific device identity public key, and each share record carries a
+device signature over that binding. Together, these defeat an attacker
+who attempts to inject a forged share into a restore flow by placing a
+rogue device in physical or local-network proximity to the restoring
+client.
+
+An attacker who holds neither the user's current identity private key
+nor any enrolled device's identity private key cannot produce a share
+that verifies against the manifest: the manifest's user signature would
+not verify (no user identity key), and a newly crafted manifest listing
+attacker-controlled devices would not match any historically published
+user identity key at restore time (section 6.2 step 4).
+
+An attacker who has extracted a legitimate share from a compromised
+enrolled device gains exactly one share's worth of Shamir information,
+which the threshold parameter is chosen to tolerate (section 8.6). The
+manifest prevents that attacker from re-presenting the extracted share
+under a different `share_index` or from any device other than the one
+it was bound to.
+
+The manifest does not defend against an attacker who compromises the
+user's current identity private key; such an attacker can issue a new
+manifest binding their own devices and can forge arbitrary share
+records. Defense against that scenario depends on key-transparency
+monitoring (`TRANSPARENCY.md`), out of scope for this section.
+
+### 8.8 Key Substitution Resistance
 
 The successor record's `recovery_signature` binds the new identity key
 to a signature verifiable by the prior bundle's `recovery_verify_pk`.
@@ -782,11 +929,21 @@ A client claiming server-assisted recovery support MUST:
 
 A client claiming Shamir device-split recovery support MUST additionally:
 
-- Distribute shares over the multi-device sync channel per section 5.1.
-- Verify share signatures against the current identity key before
-  storing.
-- Transfer shares during reconstruction only through local channels,
-  never through the home server.
+- Distribute shares and the recovery set manifest over the multi-device
+  sync channel per section 5.1.
+- Construct a fresh recovery set manifest (section 5.2) for each split
+  and sign it with the user's current identity key.
+- On receipt of a share, verify the manifest's signature against the
+  user's current identity key and verify that the share's bound
+  `device_id` matches the manifest's contributor entry before storing.
+- Retain a local copy of the manifest alongside the share on each
+  enrolled device, so that the manifest is available for local transfer
+  at restore time without server cooperation.
+- At restore, verify each collected share against the recovery set
+  manifest per section 6.2 before counting it toward the `M`-of-`N`
+  threshold.
+- Transfer shares and the manifest during reconstruction only through
+  local channels, never through the home server.
 
 ### 10.2 Server Conformance
 

@@ -1120,6 +1120,9 @@ policy choice.
 
 ## 9. Security Considerations
 
+For the consolidated adversary model under which this section is
+evaluated, see `THREAT.md`.
+
 ### 9.1 Observation Forgery
 
 Observation records are signed by the observer's domain key. Forging an

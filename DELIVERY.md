@@ -1035,9 +1035,10 @@ A sender that has successfully delivered at least one envelope under
 first-contact PoW MUST be treated as a known correspondent for purposes
 of subsequent envelopes from the same sender domain to the same
 recipient address, until the recipient explicitly revokes that status.
-Subsequent envelopes from the same sender within the binding window
-MAY also reuse the same first_contact_token per `HANDSHAKE.md`
-section 2.2a.3.
+A `first_contact_token` is bound to a specific envelope's `postmark.id`
+per `HANDSHAKE.md` section 2.2a.3 and MUST NOT be reused across
+envelopes; subsequent envelopes from the same sender rely on
+known-correspondent status rather than token reuse.
 
 ### 6.5 Sender Rate Limiting
 
@@ -1242,6 +1243,9 @@ kinds.
 ---
 
 ## 8. Privacy Considerations
+
+For the consolidated adversary model under which this section is
+evaluated, see `THREAT.md`.
 
 ### 8.1 User Policy Confidentiality
 

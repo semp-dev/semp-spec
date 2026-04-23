@@ -109,6 +109,7 @@ Defined extensions registered under the `semp.dev/` namespace. Wire-level extens
 
 | Document | Description |
 |---|---|
+| [THREAT.md](THREAT.md) | Consolidated threat model: actors, adversary classes, information visibility, and residual risks. Companion to the security and privacy sections of the core documents. |
 | [FAQ.md](FAQ.md) | Frequently asked questions about SEMP. |
 
 ## How It Works
