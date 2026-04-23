@@ -363,6 +363,19 @@ A conformant server MUST:
   the sending user accurately. (`DELIVERY.md` §1.4)
 - Not misrepresent acknowledgment types. If a `rejected` response is received,
   the user MUST be told delivery failed. (`DELIVERY.md` §1.4)
+- Produce a signed delivery receipt on every `delivered` acknowledgment,
+  covering the canonical envelope hash, the recipient domain, and the
+  accepted-at time, signed under the `SEMP-DELIVERY-RECEIPT:` domain
+  separation prefix. (`DELIVERY.md` §1.1.1, `ENVELOPE.md` §4.3)
+- Verify the receipt's signature against the recipient domain's published
+  signing key before treating an acknowledgment as terminal `delivered`.
+  Treat a `delivered` acknowledgment without a verifiable receipt as a
+  transport failure and retry it. (`DELIVERY.md` §1.1.1.6)
+- Store delivery receipts in a receipts archive keyed by `envelope_id`,
+  separate from the queue state record, and retain them for at least 90
+  days after issuance. (`DELIVERY.md` §1.1.1.6)
+- Not issue a delivery receipt for an envelope not accepted for delivery.
+  (`DELIVERY.md` §1.1.1.5)
 - Enforce a timeout on delivery attempts (30 seconds recommended for initial
   attempts). (`DELIVERY.md` §1.5)
 - Follow the fixed delivery pipeline sequence for envelope processing.
@@ -398,12 +411,12 @@ A conformant server MUST:
   (`DELIVERY.md` §2.7.2, §2.7.4)
 - Enforce delivery policy on cryptographically verified identifiers.
   (`DELIVERY.md` §9.1)
-- Verify signatures on block list sync messages before storing or
+- Verify signatures on user policy sync messages before storing or
   propagating. Reject unsigned or unverifiable sync messages.
   (`DELIVERY.md` §7.2, §9.2)
-- Store block lists encrypted at rest; the server MUST NOT be able to read
-  block list contents in plaintext. (`DELIVERY.md` §7.3)
-- Not disclose block list contents to any party other than the owning user's
+- Store user policy state encrypted at rest; the server MUST NOT be able to read
+  policy contents in plaintext. (`DELIVERY.md` §7.5)
+- Not disclose user policy contents to any party other than the owning user's
   authenticated devices. (`DELIVERY.md` §8.1)
 - Explicitly reject envelopes with invalid seals even when operating in
   silent mode. (`DELIVERY.md` §1.3)
@@ -505,11 +518,11 @@ A conformant server MUST:
 - Not fabricate or inflate observation metrics. (`REPUTATION.md` §4.5)
 - Verify challenge solutions before proceeding with handshakes: confirm
   `challenge_id` matches an issued, unexpired challenge, recompute the hash,
-  and confirm the required leading zero bits. (`REPUTATION.md` §8.3.4)
+  and confirm the required leading zero bits. (`HANDSHAKE.md` §2.2a.2)
 - Treat each challenge as single use and reject duplicate submissions.
-  (`REPUTATION.md` §8.3.4)
+  (`HANDSHAKE.md` §2.2a.2)
 - Not treat challenge completion as evidence of legitimacy.
-  (`REPUTATION.md` §8.3.5)
+  (`REPUTATION.md` §8.3.2)
 - Not issue a `proof_of_work` challenge with `difficulty` greater than 28,
   regardless of sender reputation or operator policy. (`HANDSHAKE.md`
   §2.2a.2, `REPUTATION.md` §8.3.2)
@@ -561,7 +574,7 @@ A conformant federation server SHOULD:
   `challenge` message as evidence. (`ERRORS.md` §2)
 - Publish `protocol_abuse` observation records against remote domains that
   exhibit the sustained challenge issuance pattern described in
-  `REPUTATION.md` section 8.3.6, subject to the evidence and threshold
+  `REPUTATION.md` section 8.3.3, subject to the evidence and threshold
   requirements defined there.
 
 ### 4.9 Extensibility
@@ -771,7 +784,7 @@ A conformant client SHOULD:
   as potentially misbehaving or compromised. (`ERRORS.md` §2)
 - Retain the signed `challenge` message that caused a `challenge_invalid`
   abort for potential inclusion in a `protocol_abuse` report.
-  (`REPUTATION.md` §8.3.6)
+  (`REPUTATION.md` §8.3.3)
 
 A conformant client that supports session resumption MUST:
 
@@ -887,6 +900,14 @@ A conformant client MUST:
   (`CLIENT.md` §7.1)
 - Not display a delivery-confirmed indicator until a `delivered` status has
   been received. (`CLIENT.md` §7.1)
+- Verify the signed delivery receipt accompanying a `delivered` event against
+  the recipient domain's published signing key before treating the envelope
+  as confirmed delivered. Treat a `delivered` event without a verifiable
+  receipt as indeterminate and surface the anomaly. (`CLIENT.md` §6.5.1,
+  `DELIVERY.md` §1.1.1)
+- Retain verified receipts in local storage keyed by `envelope_id` and offer
+  an export action that writes a receipt as a `.semp-receipt` file per
+  `MIME.md` §6. (`CLIENT.md` §6.5.1)
 - Not display a `canceled` indicator for a recipient until a
   `cancel_response` entry or a delivery event reports `state: canceled` for
   that recipient. (`CLIENT.md` §6.6.3)
@@ -930,7 +951,7 @@ A conformant client MUST:
 - Not log private key material. (`CLIENT.md` §10.1)
 - Store private keys encrypted at rest, gated behind user authentication.
   (`KEY.md` §9.1)
-- Sign block list sync messages with the originating device's key before
+- Sign user policy sync messages with the originating device's key before
   transmission. (`CLIENT.md` §8.1)
 - Obtain the user's explicit signed authorization before including decrypted
   `brief` or `enclosure` content in abuse reports. (`CLIENT.md` §8.2)
@@ -1526,7 +1547,7 @@ timestamp validation in the protocol, including but not limited to:
 - `postmark.expires` in `ENVELOPE.md`.
 - `expires` in handshake challenges (`HANDSHAKE.md` section 2.2a).
 - `expires_at` in session records (`SESSION.md` section 2).
-- `timestamp` in block list sync messages (`DELIVERY.md` section 7).
+- `timestamp` in user policy sync messages (`DELIVERY.md` section 7).
 - Queue state timestamps (`DELIVERY.md` section 2.5).
 - `created_at` and `expires` in user and domain key records
   (`KEY.md`).

@@ -772,6 +772,7 @@ the new identity key as a fresh identity per section 7.6.
 | `DISCOVERY.md`   | The `backup` endpoint is advertised in the discovery configuration (section 3.1.1).                      |
 | `CONFORMANCE.md` | This document's conformance requirements are referenced from `CONFORMANCE.md`.                           |
 | `EXTENSIONS.md`  | Account recovery is a RECOMMENDED optional core module, not a wire-level extension. It does not appear in any `extensions` field and does not use the `semp.dev/<name>` extension namespace. |
+| `MIME.md`        | The recovery bundle media type `application/semp-recovery` and file extension `.semp-recovery` are registered in `MIME.md` section 7. |
 
 ---
 

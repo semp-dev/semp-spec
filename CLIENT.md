@@ -1105,7 +1105,22 @@ notification to the client when the outcome is known:
     "status": "delivered",
     "reason_code": null,
     "reason": null,
-    "timestamp": "2025-06-10T20:36:45Z"
+    "timestamp": "2025-06-10T20:36:45Z",
+    "receipt": {
+        "type": "SEMP_DELIVERY_RECEIPT",
+        "version": "1.0.0",
+        "envelope_hash": {
+            "algorithm": "sha-256",
+            "value": "base64-digest"
+        },
+        "recipient_domain": "recipient.example",
+        "accepted_at": "2025-06-10T20:36:44Z",
+        "signature": {
+            "algorithm": "ed25519",
+            "key_id": "recipient-domain-key-fingerprint",
+            "value": "base64-signature"
+        }
+    }
 }
 ```
 
@@ -1117,6 +1132,27 @@ The `status` field in a delivery event MAY take any terminal state defined in
 `DELIVERY.md` section 2.6, including `delivered`, `rejected`, `expired`, and
 `canceled`. The `reason_code` field is present for `rejected` terminal states
 and absent for the others.
+
+#### 6.5.1 Receipt Handling
+
+When `status` is `delivered`, the server MUST include the signed delivery
+receipt returned by the recipient server in the `receipt` field. The receipt
+schema and semantics are defined in `DELIVERY.md` section 1.1.1.
+
+The client MUST verify the receipt's signature against the recipient domain's
+published signing key before treating the event as confirmed delivery. A
+delivery event with `status: delivered` that lacks a `receipt` field, or
+whose receipt does not verify, MUST NOT be displayed to the user as confirmed
+delivery; the client SHOULD surface the anomaly and treat the envelope's
+delivery state as indeterminate.
+
+The client SHOULD retain the receipt in local storage keyed by `envelope_id`
+and SHOULD offer an export action that writes the receipt as a
+`.semp-receipt` file per `MIME.md` section 6. The client MUST NOT discard
+the receipt before the user has had an opportunity to export it.
+
+For `status` values other than `delivered`, the `receipt` field MUST be
+absent.
 
 ### 6.6 Cancellation Request
 
@@ -1259,9 +1295,9 @@ already-trusted sender is gated on either side.
 When the user approves a first-contact sender, the client MUST:
 
 1. Add the sender to its local known correspondents store.
-2. Transmit a signed accepted-senders update to the home server, in the
-   same authentication model as block list sync messages
-   (`DELIVERY.md` section 7.1).
+2. Transmit a signed user policy update to the home server carrying an
+   `add` operation with `kind: "semp.dev/accepted_sender"` per
+   `DELIVERY.md` section 7.
 3. Move the envelope into the primary inbox.
 
 #### 7.2.2 Reply Implies Approval
@@ -1289,13 +1325,16 @@ not suppressed or aggregated.
 
 ---
 
-## 8. Block List
+## 8. User Policy
 
 ### 8.1 Sync Message Obligations
 
-Block list changes initiated by the client MUST be transmitted to the home
-server as signed sync messages per `DELIVERY.md` section 7.1. The client MUST
-sign sync messages with the originating device's key before transmission.
+User policy changes initiated by the client (block list entries,
+accepted-senders entries, first-contact policy mode, and any other rule
+kinds defined in `DELIVERY.md` section 7.3) MUST be transmitted to the
+home server as signed `SEMP_USER_POLICY` messages per `DELIVERY.md`
+section 7.1. The client MUST sign sync messages with the originating
+device's key before transmission.
 
 ### 8.2 Abuse Reporting
 

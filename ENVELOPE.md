@@ -257,6 +257,7 @@ where a signature valid in one context could be misinterpreted in another.
 | Key response signature | `SEMP-KEYS:` |
 | Discovery response signature | `SEMP-DISCOVERY:` |
 | Revocation signature | `SEMP-REVOCATION:` |
+| Delivery receipt signature | `SEMP-DELIVERY-RECEIPT:` |
 
 The signed input is always `prefix || canonical_bytes`. Verification MUST
 reconstruct the same prefixed input before calling Ed25519 Verify.

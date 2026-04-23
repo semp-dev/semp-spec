@@ -82,7 +82,7 @@ Every SEMP implementation must conform to these documents.
 | [TRANSPORT.md](TRANSPORT.md) | Transport requirements and bindings (WebSocket, HTTP/2, QUIC; optional gRPC). |
 | [EXTENSIONS.md](EXTENSIONS.md) | Wire-level extension framework, registry, and anti-fragmentation governance. |
 | [ERRORS.md](ERRORS.md) | Error code registry and status values. |
-| [MIME.md](MIME.md) | MIME compatibility and mapping rules. |
+| [MIME.md](MIME.md) | Media type and file format registrations for envelopes, delivery receipts, recovery bundles, and migration records. |
 | [CONFORMANCE.md](CONFORMANCE.md) | Conformance requirements for implementations. |
 | [VECTORS.md](VECTORS.md) | Test vectors for implementers. |
 

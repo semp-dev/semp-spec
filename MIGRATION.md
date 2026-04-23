@@ -613,6 +613,7 @@ Regardless of carry-over policy, third-party domains MUST:
 | `RECOVERY.md`   | A user who has lost their old identity private key cannot migrate. Recovery provides the mechanism to retain the key in the first place. |
 | `CLIENT.md`     | Key-change detection and user-confirmation requirements apply uniformly to migration-induced address updates.      |
 | `CONFORMANCE.md`| This document's conformance requirements are referenced from `CONFORMANCE.md`.                                     |
+| `MIME.md`       | The migration record media type `application/semp-migration` and file extension `.semp-migration` are registered in `MIME.md` section 8. |
 
 ---
 

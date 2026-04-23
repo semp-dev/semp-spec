@@ -57,7 +57,7 @@ govern session establishment failures. Defined in `HANDSHAKE.md` section 4.1.
 | `rate_limited`      | Yes         | Back off and retry.                                               |
 | `challenge`         | Yes         | Solve the issued challenge and continue handshake.                |
 | `challenge_failed`  | Yes         | Request new challenge by restarting the handshake.                |
-| `challenge_invalid` | No          | The challenge exceeds protocol bounds (for example, `proof_of_work` difficulty greater than 28, or `expires` below the minimum floor for its difficulty). Surface to user or operator as a misbehaving or compromised server. Do not retry. Implementations SHOULD retain the signed `challenge` message for potential inclusion in an abuse report under category `protocol_abuse` (`REPUTATION.md` section 8.3.6). See `HANDSHAKE.md` section 2.2a.2. |
+| `challenge_invalid` | No          | The challenge exceeds protocol bounds (for example, `proof_of_work` difficulty greater than 28, or `expires` below the minimum floor for its difficulty). Surface to user or operator as a misbehaving or compromised server. Do not retry. Implementations SHOULD retain the signed `challenge` message for potential inclusion in an abuse report under category `protocol_abuse` (`REPUTATION.md` section 8.3.3). See `HANDSHAKE.md` section 2.2a.2. |
 | `server_at_capacity`| Yes         | Back off and retry later.                                         |
 
 `challenge` is unique: it is not a terminal rejection but a conditional gate.
@@ -108,7 +108,21 @@ govern in-session rekeying failures. Defined in `SESSION.md` section 3.2.
 
 ---
 
-## 5. Submission Status Values
+## 5. User Policy Reason Codes
+
+These codes appear in rejections to `SEMP_USER_POLICY` sync messages from
+the home server to the submitting client device. Defined in
+`DELIVERY.md` section 7.
+
+| Code                      | Recoverable | Sender behavior                                                 |
+|---------------------------|-------------|-----------------------------------------------------------------|
+| `policy_kind_unsupported` | No          | The submitted operation carries a `kind` the home server does not recognize. The rejection identifies the offending `kind`. The whole message is rejected atomically; unrelated operations in the same message are not applied. Do not retry without removing the unsupported operation. |
+| `policy_op_invalid`       | No          | The submitted operation combines a `kind` with a verb that is not valid for that kind (for example, `add` or `remove` on a singleton-shaped kind such as `semp.dev/first_contact`). Do not retry without correcting the operation. |
+| `policy_version_stale`    | Yes         | The submitted `policy_version` is not greater than the current known version. The client MUST refresh its view of the current version and resubmit. |
+
+---
+
+## 6. Submission Status Values
 
 These values appear in `SEMP_SUBMISSION` response messages from the home
 server to the client. They describe per-recipient delivery outcomes. Defined
@@ -132,7 +146,7 @@ section 6.4.
 
 ---
 
-## 6. Discovery Status Values
+## 7. Discovery Status Values
 
 These values appear in `SEMP_DISCOVERY` response result objects. They describe
 per-address capability. Defined in `DISCOVERY.md` section 4.6.
@@ -149,7 +163,7 @@ delivery; `legacy` → return `legacy_required` to client; `not_found` → retur
 
 ---
 
-## 7. Key Request Status Values
+## 8. Key Request Status Values
 
 These values appear in `SEMP_KEYS` response result objects returned to the
 client via the home server. Defined in `CLIENT.md` section 5.4.5.
@@ -165,7 +179,7 @@ the key fetch. `not_found` is definitive for the duration of the result's TTL.
 
 ---
 
-## 8. Key Revocation Reasons
+## 9. Key Revocation Reasons
 
 These values appear in `SEMP_KEY_REVOCATION` records. They describe why a key
 was revoked. Defined in `KEY.md` section 8.2.
@@ -183,7 +197,7 @@ represent permanent revocation. When a revoked key includes a
 
 ---
 
-## 9. Abuse Report Categories
+## 10. Abuse Report Categories
 
 These values appear in `SEMP_ABUSE_REPORT` messages. They classify the nature
 of the reported abuse. Defined in `REPUTATION.md` section 3.4.
@@ -200,7 +214,7 @@ of the reported abuse. Defined in `REPUTATION.md` section 3.4.
 
 ---
 
-## 10. Delivery Acknowledgment Types
+## 11. Delivery Acknowledgment Types
 
 These are protocol-level wire outcomes for envelope delivery between servers.
 They are not error codes but form the foundation on which submission statuses
@@ -219,7 +233,7 @@ to deliver.
 
 ---
 
-## 11. Transport-Layer Status Codes
+## 12. Transport-Layer Status Codes
 
 These codes are returned at the transport layer, below the SEMP application
 layer. They appear as HTTP status codes in the HTTP/2 and QUIC bindings and
@@ -239,7 +253,7 @@ independent layers.
 | 429         | Transport-level rate limit.                                           | Yes         | Back off and retry. Distinct from SEMP `rate_limited`.|
 | 503         | Server temporarily unavailable.                                       | Yes         | Back off and retry.                                   |
 
-### 11.1 Transport Connection Failures
+### 12.1 Transport Connection Failures
 
 The following conditions are not wire codes but transport-level failure states
 that implementations MUST handle. They arise during the transport fallback
@@ -261,7 +275,7 @@ to the SEMP layer.
 
 ---
 
-## 12. Extension Codes
+## 13. Extension Codes
 
 Additional codes MAY be defined in extensions using the standard SEMP
 namespacing convention: `"vendor.example.com/code-name"`. This applies to
@@ -276,7 +290,7 @@ to allow discovery by other implementations.
 
 ---
 
-## 13. Code Reuse Across Layers
+## 14. Code Reuse Across Layers
 
 Several codes appear at multiple protocol layers with consistent semantics:
 
@@ -300,16 +314,16 @@ sender behavior differs only in the context of the operation being performed
 
 ---
 
-## 14. Implementation Notes
+## 15. Implementation Notes
 
-### 14.1 Human-Readable Descriptions
+### 15.1 Human-Readable Descriptions
 
 All rejections carry both a machine-readable `reason_code` and a human-readable
 `reason` string. The `reason` string is for operator diagnostics and user
 display. Implementations MUST NOT parse the `reason` string programmatically;
 only `reason_code` governs behavior.
 
-### 14.2 Unknown Code Handling
+### 15.2 Unknown Code Handling
 
 An implementation that receives a `reason_code` it does not recognize MUST:
 
@@ -320,14 +334,14 @@ An implementation that receives a `reason_code` it does not recognize MUST:
 This ensures forward compatibility: a newer server can introduce codes
 (via extensions) without causing older clients to enter infinite retry loops.
 
-### 14.3 Case Sensitivity
+### 15.3 Case Sensitivity
 
 All codes are lowercase with underscores. Implementations MUST perform
 case-sensitive matching. `Blocked` is not `blocked`.
 
 ---
 
-## 15. Relationship to Other Specifications
+## 16. Relationship to Other Specifications
 
 | Specification  | Relationship                                                                          |
 |----------------|---------------------------------------------------------------------------------------|
