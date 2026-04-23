@@ -505,8 +505,6 @@ The following are known gaps that future revisions of the specification
 are expected to address. Implementers and operators SHOULD treat them as
 caveats on the security claims.
 
-- **SMTP fallback wire format.** Implementer's choice, no interop
-  specification. Open question: normative SMTP mapping.
 - **Cover traffic and timing unlinkability.** Envelope and recipient
   size padding are specified (sections 2.4 and 4.4.1 of
   `ENVELOPE.md`), but timing correlation between send and receive

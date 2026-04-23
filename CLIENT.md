@@ -443,6 +443,71 @@ Clients MUST NOT present legacy messages and SEMP messages in a unified inbox
 without a persistent, unambiguous indicator identifying the origin of each
 message. The indicator MUST be visible without additional user interaction.
 
+#### 4.3.1 Upgrade-Signal Detection
+
+A SEMP-capable client processing an inbound legacy message SHOULD
+inspect the `SEMP-Capability`, `SEMP-Identity`, `SEMP-Domain`, and
+`SEMP-Address` headers (section 6.4.3) if present. When all four are
+present and `SEMP-Capability` is `1`, the client MAY record the
+sender as potentially SEMP-reachable at `SEMP-Address`.
+
+The client MUST NOT treat the upgrade signal as authoritative
+without verification. Before routing a reply via SEMP on the basis
+of these headers, the client MUST:
+
+1. Perform SEMP discovery against `SEMP-Domain` per `DISCOVERY.md`.
+2. Fetch the identity key record for `SEMP-Address` from the
+   resulting SEMP server.
+3. Verify that the fetched identity key's fingerprint matches the
+   `SEMP-Identity` header value.
+4. Confirm that the fetched record's `address` matches
+   `SEMP-Address` after canonicalization per `ENVELOPE.md`
+   section 2.3.
+
+A mismatch at any step MUST cause the client to discard the upgrade
+hint. The client MUST NOT surface a false upgrade to the user; a
+discarded hint simply means the reply path remains SMTP until a
+subsequent signal verifies.
+
+Successful verification results in the client caching
+`(From-address, SEMP-Address, SEMP-Identity-fingerprint,
+verified-at)` in its local correspondent table. Cache TTL is
+implementation-defined; clients SHOULD re-verify at least every
+30 days, on any key-record rotation notification, and whenever an
+upgrade signal from the same correspondent arrives with a different
+fingerprint.
+
+#### 4.3.2 Reply Routing From Legacy
+
+When the user replies to a legacy message:
+
+- If the sender is in the verified SEMP correspondent table per
+  section 4.3.1, the client SHOULD default to SEMP for the reply
+  and MUST surface the routing choice to the user alongside any
+  user-editable recipient list.
+- If the sender is not verified as SEMP-reachable, the client
+  defaults to SMTP and behaves per section 6.4.
+
+The user MAY override the default route on any specific reply. An
+override downgrading a SEMP-reachable reply to SMTP triggers the
+degradation warning in section 6.4.1.
+
+#### 4.3.3 Origin Indicator Requirements
+
+Every legacy message displayed alongside SEMP messages MUST carry a
+visible origin indicator. The indicator MUST:
+
+- Be rendered without additional user interaction (no hover, no
+  click, no menu expansion required).
+- Distinguish at least three states: "SEMP", "legacy", and
+  "legacy with verified SEMP-capable sender" (section 4.3.1).
+- Remain visible when the message is displayed in compact,
+  expanded, threaded, and notification views.
+
+A client MAY add further origin categorizations (for example,
+"SEMP with key-transparency verification"), provided the three
+baseline states remain distinguishable.
+
 ### 4.4 Message History Sync Across Devices
 
 When a new device is registered, it cannot decrypt envelopes that were delivered
@@ -1095,22 +1160,197 @@ eventually delivered, rejected, or times out.
 
 When the server returns `legacy_required` for a recipient, it has determined
 via discovery that the recipient domain does not support SEMP. The envelope
-cannot be delivered via SEMP for that recipient. The client MUST:
+cannot be delivered via SEMP for that recipient. The client's fallback path
+is its own SMTP credentials for a separate, classically-provisioned mail
+account; the SEMP home server is not a participant in legacy delivery.
+
+#### 6.4.1 User Consent
+
+The client MUST:
 
 1. Surface the degradation to the user before proceeding. The user MUST be
-   informed that the message to this recipient will be sent without end-to-end
-   encryption, sealed metadata, or explicit rejection guarantees.
-2. Require explicit user confirmation to proceed with SMTP fallback. The client
-   MUST NOT automatically send via SMTP without user awareness.
-3. If the user confirms: compose a standards-compliant MIME message from the
-   plaintext content and deliver it directly via SMTP using the user's
-   configured SMTP credentials. The client MUST NOT transmit SMTP credentials
-   to the home server.
-4. If the user declines: surface the message as undelivered for that recipient
-   and retain it for the user to act on.
+   informed that the message to this recipient will be sent without
+   end-to-end encryption, sealed metadata, or explicit rejection guarantees.
+2. Require explicit user confirmation to proceed with SMTP fallback. The
+   client MUST NOT automatically send via SMTP without user awareness.
+3. If the user confirms: compose a MIME message per section 6.4.2 and
+   deliver it via SMTP per section 6.4.3.
+4. If the user declines: surface the message as undelivered for that
+   recipient and retain it for the user to act on.
 
 The client MUST NOT include decrypted `enclosure` content in SMTP delivery
 without first surfacing the encryption degradation to the user.
+
+#### 6.4.2 MIME Composition
+
+The MIME message submitted to SMTP MUST be a standards-compliant
+RFC 5322 / RFC 2045 message derived from the plaintext content of the
+intended SEMP envelope. The client MUST produce the following header
+set at minimum:
+
+| Header         | Value                                                                                                 |
+|----------------|-------------------------------------------------------------------------------------------------------|
+| `From`         | The user's legacy SMTP address as configured in the client's SMTP credentials. This is NOT the user's SEMP address unless the two coincide. |
+| `To`           | The legacy recipients for this send, one per address. Multiple addresses are comma-separated per RFC 5322. |
+| `Cc`           | As set by the user at compose time. MAY be absent.                                                    |
+| `Bcc`          | The client MUST NOT emit `Bcc` headers; blind copies are delivered by omitting the recipient from `To`/`Cc` while still including them in SMTP `RCPT TO`. |
+| `Subject`      | The `subject` the user entered at compose time. Identical to what would have gone into `brief.subject` for a SEMP send. |
+| `Date`         | Current UTC time in RFC 5322 date-time form.                                                          |
+| `Message-ID`   | A fresh RFC 5322 Message-ID. The client MUST record this value in its local legacy-threading map (section 6.4.4). |
+| `In-Reply-To`  | If the send is a reply, the Message-ID the client resolved per section 6.4.4.                         |
+| `References`   | The ancestor chain resolved per section 6.4.4.                                                        |
+| `MIME-Version` | `1.0`.                                                                                                |
+| `Content-Type` | Set per the message's structure: `text/plain; charset="utf-8"` for plain bodies, `multipart/alternative` when both HTML and text are present, `multipart/mixed` when attachments accompany the body. Encoding MUST be a valid MIME transfer encoding (7bit, quoted-printable, or base64). |
+
+The body is the plaintext content the user composed. Attachments MUST
+be carried as additional MIME parts with `Content-Type`,
+`Content-Disposition`, and `Content-Transfer-Encoding` per RFC 2183
+and RFC 2045. The client MUST NOT attach any SEMP-layer artifact
+(postmark, seal, encrypted brief, encrypted enclosure, domain
+signature) to the MIME message; those fields have no meaning to an
+SMTP recipient and including them risks exposing metadata in
+plaintext.
+
+SMTP envelope addresses (`MAIL FROM` and `RCPT TO`) MUST use the
+ASCII A-label form of any IDN domain per `ENVELOPE.md` section 2.3.2.
+
+#### 6.4.3 SEMP Upgrade-Signaling Headers
+
+When a SEMP-capable recipient client processes a received legacy
+message, an advertised SEMP identity on the sender allows the
+recipient to offer a thread upgrade without an additional DNS lookup.
+A sending client SHOULD include the following headers on every SMTP
+message it sends:
+
+| Header            | Value                                                                                              |
+|-------------------|----------------------------------------------------------------------------------------------------|
+| `SEMP-Capability` | `1`. Present whenever the sender's client can receive via SEMP at a published SEMP address.         |
+| `SEMP-Identity`   | Fingerprint of the sender's current SEMP identity public key, in the form `<algorithm>:<hex>` (for example `ed25519:abc123...`). |
+| `SEMP-Domain`     | The sender's SEMP domain (the domain part of the sender's SEMP address). MAY differ from the domain of `From`. |
+| `SEMP-Address`    | Full SEMP address of the sender. Included so the recipient does not have to infer it from the `From` local-part when the SMTP and SEMP local-parts differ. |
+
+The sending client MAY omit these headers on messages the user has
+flagged as "do not advertise SEMP-capability", for example when
+sending from a throwaway SMTP identity the user does not wish to
+link to their SEMP identity. Omission is a user-privacy setting, not
+a protocol fault.
+
+A receiving SEMP-capable client that observes these headers on an
+inbound legacy message MAY cache `(From-address, SEMP-Address,
+SEMP-Identity, SEMP-Domain)` as an upgrade hint (section 4.3.2). A
+recipient client that does not recognize the headers MUST ignore
+them per RFC 5322's tolerance for unknown headers.
+
+The upgrade signal is unauthenticated at the SMTP layer: an attacker
+who can inject SMTP mail can also inject false SEMP headers. A
+recipient client that acts on the signal MUST verify the advertised
+identity by completing SEMP discovery against `SEMP-Domain` and
+fetching the identity key from that domain before treating the
+upgrade as trusted (section 4.3.2).
+
+#### 6.4.4 Thread Continuity Across SEMP and Legacy
+
+A conversation may mix SEMP and legacy messages: a SEMP-capable user
+replies via SMTP to a legacy contact; a SEMP-capable user receives
+SMTP mail and later upgrades the correspondent to SEMP. The client
+MUST maintain a local mapping so that thread state is continuous
+regardless of the origin of each message.
+
+**Local threading map.** For every message the client sends or
+receives (SEMP or legacy), the client stores a tuple
+`(thread_key, message_origin, message_id_legacy,
+message_id_semp, parent_message_id, sent_at)`, where:
+
+- `thread_key` is a stable identifier the client chooses at thread
+  creation. All messages in the thread share this key.
+- `message_origin` is `semp` or `legacy`.
+- `message_id_legacy` is the RFC 5322 `Message-ID` header if the
+  message traversed SMTP, otherwise empty.
+- `message_id_semp` is the `brief.message_id` value if the message
+  is a SEMP envelope, otherwise empty.
+- `parent_message_id` is the identifier (of either form) of the
+  message this one replies to, if any.
+
+**Reply routing.** On reply:
+
+- If the parent message was SEMP and the reply is being sent via
+  SEMP, the client sets `brief.in_reply_to` to the parent's
+  `message_id_semp`.
+- If the parent message was SEMP and the reply is being sent via
+  SMTP (because the recipient is legacy-only at reply time), the
+  client sets SMTP `In-Reply-To` to a synthetic Message-ID derived
+  from the parent's `message_id_semp`, encoded as
+  `<message_id_semp>@semp.example`, where `semp.example` is a
+  placeholder hostname the client uses consistently for synthetic
+  SEMP-derived Message-IDs.
+- If the parent message was legacy and the reply is being sent via
+  SMTP, the client sets SMTP `In-Reply-To` to the parent's
+  `message_id_legacy` directly.
+- If the parent message was legacy and the reply is being sent via
+  SEMP (because the correspondent was upgraded in the meantime),
+  the client sets `brief.in_reply_to` to a synthetic value derived
+  from the parent's `message_id_legacy`, prefixed with
+  `legacy:`, for example `legacy:01234567@example.com`. This form
+  is never emitted as an RFC 5322 Message-ID; it is solely a SEMP
+  internal reference.
+
+The client MUST build the full `References` header and
+`brief.thread_ancestors` (if the brief defines one) from its local
+thread map so that receiving clients, SEMP or legacy, can
+reconstruct the thread in full. The mapping is client-local; the
+home server does not participate.
+
+The client MUST NOT attempt to reuse a legacy Message-ID as a SEMP
+`brief.message_id` value or vice versa: the identifier spaces are
+distinct. The synthetic-prefix rules above are the only permitted
+cross-references.
+
+#### 6.4.5 Mixed-Recipient Composes
+
+When a single compose action names both SEMP-reachable recipients
+and recipients for which discovery returned `legacy_required`, the
+client MUST split the delivery rather than downgrade the entire
+send.
+
+Required behavior:
+
+1. Classify each recipient via the submission response or a
+   pre-flight discovery check: either SEMP-reachable (`semp`) or
+   legacy (`legacy_required`). Other statuses (see section 6.3) are
+   handled per their own semantics; this subsection concerns the
+   SEMP/legacy split only.
+2. Surface the split to the user, listing which recipients will
+   receive via SEMP and which via SMTP, with the SMTP group flagged
+   with the degradation warning required by section 6.4.1.
+3. Require explicit user confirmation of the split. The user MAY
+   cancel, remove recipients, or override the classification (for
+   example by demoting a SEMP-reachable recipient to the SMTP group
+   for a specific send).
+4. On confirmation, produce two outbound artifacts:
+   - A SEMP envelope addressed to the SEMP-reachable recipients,
+     composed and submitted per the normal composition sequence
+     (section 3.1).
+   - A single SMTP message addressed to the legacy recipients,
+     composed per section 6.4.2 and sent via the client's SMTP
+     credentials.
+5. Record both in the local threading map under the same
+   `thread_key`.
+
+A conformant client MUST NOT:
+
+- Silently downgrade SEMP-reachable recipients to SMTP without
+  explicit user confirmation.
+- Omit legacy recipients from the send without informing the user
+  that the delivery was partial.
+- Combine the SEMP and SMTP artifacts into a single MIME message
+  that includes both encrypted and plaintext renditions of the
+  same content.
+
+#### 6.4.6 SMTP Credentials
+
+The client MUST use its locally-held SMTP credentials only. SMTP
+credentials MUST NOT be transmitted to the home server or any
+other SEMP protocol participant. See section 10.5.
 
 ### 6.5 Delivery Event Notifications
 
