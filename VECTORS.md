@@ -623,6 +623,7 @@ reason codes as recoverable or non-recoverable.
 | `challenge_failed`  | Yes         | Request new challenge and retry.                  |
 | `challenge_invalid` | No          | Surface to user or operator. Do not retry.        |
 | `server_at_capacity`| Yes         | Back off and retry later.                         |
+| `version_unsupported`| No         | Surface to user. Peer's MAJOR version unsupported.|
 
 ### 8.2 Envelope Rejection Codes
 
@@ -632,6 +633,8 @@ reason codes as recoverable or non-recoverable.
 | `seal_invalid`        | No          | Indicates a bug. Do not retry same envelope.    |
 | `session_mac_invalid` | No          | Indicates a bug or session mismatch. Re-handshake before retry. |
 | `envelope_expired`    | No          | Recompose with new expiry if content still relevant. |
+| `envelope_size_exceeded` | No       | Recompose with smaller envelope: split recipients or move large content to the large-attachment extension. |
+| `policy_forbidden`    | No          | Surface to user. Rejection MAY carry a challenge. |
 | `handshake_invalid`   | Yes         | Establish new session and resend.               |
 | `handshake_expired`   | Yes         | Establish new session and resend.               |
 | `no_session`          | Yes         | Establish new session and resend.               |

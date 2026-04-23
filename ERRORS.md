@@ -59,6 +59,7 @@ govern session establishment failures. Defined in `HANDSHAKE.md` section 4.1.
 | `challenge_failed`  | Yes         | Request new challenge by restarting the handshake.                |
 | `challenge_invalid` | No          | The challenge exceeds protocol bounds (for example, `proof_of_work` difficulty greater than 28, or `expires` below the minimum floor for its difficulty). Surface to user or operator as a misbehaving or compromised server. Do not retry. Implementations SHOULD retain the signed `challenge` message for potential inclusion in an abuse report under category `protocol_abuse` (`REPUTATION.md` section 8.3.3). See `HANDSHAKE.md` section 2.2a.2. |
 | `server_at_capacity`| Yes         | Back off and retry later.                                         |
+| `version_unsupported`| No         | The peer's declared MAJOR protocol version is not supported. Surface to user or operator. Do not retry under the same MAJOR. See `CONFORMANCE.md` section 9.1.3. |
 
 `challenge` is unique: it is not a terminal rejection but a conditional gate.
 The handshake is suspended, not failed, until the challenge is resolved. See
@@ -78,6 +79,7 @@ additions. Defined in `ENVELOPE.md` section 9.3.
 | `seal_invalid`        | No          | Indicates a bug. Do not retry the same envelope.                |
 | `session_mac_invalid` | No          | Indicates a bug or session mismatch. Re-handshake before retry. |
 | `envelope_expired`    | No          | Recompose with new expiry if content is still relevant.         |
+| `envelope_size_exceeded` | No       | The serialized envelope exceeds `max_envelope_size`. Recompose with smaller envelope: split recipients across multiple envelopes, or move large content to the large-attachment extension. See `ENVELOPE.md` section 9.3. |
 | `policy_forbidden`    | No          | Delivery refused for policy reasons. Surface to user. The rejection response MAY include a `challenge` body inviting the sender to retry with proof of work. See `DELIVERY.md` section 6.4. |
 | `handshake_invalid`   | Yes         | Establish new session and resend.                               |
 | `handshake_expired`   | Yes         | Establish new session and resend.                               |
@@ -278,16 +280,67 @@ to the SEMP layer.
 
 ## 13. Extension Codes
 
+### 13.1 Namespace
+
 Additional codes MAY be defined in extensions using the standard SEMP
-namespacing convention: `"vendor.example.com/code-name"`. This applies to
-reason codes, abuse categories, and any other registered code space.
+namespacing convention: `"vendor.example.com/code-name"`. The namespace
+is a DNS name controlled by the extension author, followed by `/` and a
+lower-case identifier. This applies to reason codes, abuse categories,
+submission statuses, and any other code space registered in this
+document.
 
-Extension codes MUST NOT collide with core codes. Implementations that
-encounter an unrecognized code MUST treat it as non-recoverable unless the
-extension is explicitly supported.
+Core codes (those defined without a namespace, such as `blocked` and
+`policy_forbidden`) occupy the unprefixed registry. Extension codes MUST
+use their namespace in every wire occurrence. An unnamespaced code that
+is not registered in this document MUST be rejected as malformed.
 
-Extension authors SHOULD publish their code definitions at the namespace URI
-to allow discovery by other implementations.
+### 13.2 Registration Requirements
+
+For each extension code, the defining specification MUST specify:
+
+- The code's name within its namespace.
+- The layer at which it is used (handshake, envelope, rekeying, user
+  policy, submission, discovery, key request, key revocation, abuse
+  report, delivery acknowledgment, transport, or another registered
+  layer).
+- Whether the code is recoverable (suitable for automated retry) or
+  non-recoverable.
+- The sender behavior on receipt.
+- The set of conditions under which a server MAY issue the code.
+
+Extension authors SHOULD publish the specification at a stable URL under
+the namespace DNS name (for example,
+`https://vendor.example.com/semp-codes/code-name`) so that other
+implementations can discover and validate it.
+
+### 13.3 Collision Avoidance
+
+Extension codes MUST NOT collide with core codes. Extension authors MUST
+choose names that are not listed in sections 2 through 12 of this
+document, including when the namespace prefix is stripped, to avoid
+confusion with core codes in logs and tooling.
+
+Two extensions MAY define the same code name under different
+namespaces; the namespace prefix disambiguates them. Implementations
+MUST match on the full namespaced string (`vendor.example.com/name`)
+and MUST NOT match on the unprefixed name alone.
+
+### 13.4 Deprecation
+
+An extension author that deprecates a code SHOULD continue to document
+the code at its namespace URL with a deprecation notice and a link to
+the replacement code, if any. Implementations that have processed the
+deprecated code in production SHOULD continue to handle it for at least
+one year after the deprecation notice to accommodate peers that have
+not yet updated.
+
+### 13.5 Core Registry Extension
+
+Adding a new code to the unprefixed (core) registry requires a
+specification revision to this document. Proposed codes SHOULD be
+prototyped under an extension namespace first, and graduate to the core
+registry only after interop experience demonstrates their
+cross-vendor utility.
 
 ---
 

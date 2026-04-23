@@ -428,12 +428,20 @@ verification: the domain vouches that the keys it publishes for its users are
 the keys those users registered. Relying parties MUST verify the domain
 signature before trusting any key material.
 
+The domain signature is computed over the canonical bytes of the key response
+with `signature.value` set to `""`, prefixed with `SEMP-KEYS:` per the domain
+separation rules in `ENVELOPE.md` section 4.3.
+
 ### 5.2 Self-Signature
 
 Encryption keys SHOULD be self-signed by the user's identity key. This provides
 an additional binding: not only has the domain published this key, but the user
 whose identity key is trusted has also attested to it. Relying parties SHOULD
 verify self-signatures where present.
+
+The self-signature is computed over the canonical bytes of the key record with
+the relevant self-signature slot set to `""`, prefixed with `SEMP-KEY-SELF-SIG:`
+per `ENVELOPE.md` section 4.3.
 
 ### 5.3 Web of Trust
 
@@ -591,6 +599,11 @@ Rotation MUST follow the publication and revocation process defined in sections
     }
 }
 ```
+
+The revocation `signature` is computed over the canonical bytes of the
+revocation record with `signature.value` set to `""`, prefixed with
+`SEMP-REVOCATION:` per the domain separation rules in `ENVELOPE.md` section
+4.3.
 
 ### 8.2 Revocation Reasons
 

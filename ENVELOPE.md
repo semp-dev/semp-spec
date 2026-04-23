@@ -74,6 +74,77 @@ is only meaningful after decryption by the recipient.
 | `brief`     | `string` | Yes      | Encrypted inner header (base64)                          |
 | `enclosure` | `string` | Yes      | Encrypted message body and attachments (base64)          |
 
+### 2.3 Address Canonicalization
+
+Every SEMP address in wire form is the UTF-8 string `local-part "@" domain`,
+where `local-part` and `domain` are each normalized to a single canonical form
+before signing, hashing, comparison, or storage. A non-canonical address MUST
+be rejected as malformed at the point of ingress. The canonicalization rules
+below apply to every address field in every SEMP message, including
+`brief.from`, `brief.to`, `brief.cc`, `block_entry.entity.address`, user
+policy targets, migration record addresses, and any other address-bearing
+field defined by this specification or an extension.
+
+#### 2.3.1 Local-Part
+
+The local-part MUST be Unicode-normalized to Normalization Form C (NFC) per
+Unicode Annex #15. Implementations MUST NOT apply compatibility decomposition
+(NFKD or NFKC). Case folding is NOT applied: the local-part is case-sensitive
+on the wire. Operators that wish to treat `Alice@example.com` and
+`alice@example.com` as the same recipient MUST perform that mapping at the
+local delivery layer, not at the protocol layer; the protocol MUST pass the
+local-part through unchanged after NFC normalization.
+
+A local-part MUST NOT contain a U+0040 COMMERCIAL AT (`@`), U+0000 NUL, any
+C0 or C1 control character, or any code point that is unassigned in the
+active Unicode version at the time of canonicalization. A local-part's UTF-8
+encoding MUST NOT exceed 64 octets, matching the RFC 5321 octet limit.
+
+#### 2.3.2 Domain
+
+The domain MUST be encoded in its A-label (Punycode, ASCII-compatible)
+form per IDNA2008 (RFC 5890 through RFC 5895) before being placed in any
+SEMP message. U-label (Unicode) forms are for user-interface display only
+and MUST NOT appear on the wire. A conformant implementation receiving a
+domain that contains any code point outside the ASCII range 0x00 to 0x7F
+MUST reject the address as malformed.
+
+Domain matching is case-insensitive per DNS convention: a conformant
+implementation MUST fold the domain to lower case before comparison,
+signing, or hashing. On the wire, the domain SHOULD be transmitted in
+lower case; an implementation MUST accept mixed-case domains and fold
+them before use.
+
+The fully qualified domain including its terminating dot MUST NOT appear
+in SEMP addresses; a trailing `.` is a DNS presentation form and is not
+part of the canonical SEMP address.
+
+#### 2.3.3 Composition and Length
+
+After local-part NFC normalization and domain A-label encoding, the
+composed address `local-part "@" domain` MUST NOT exceed 254 octets of
+UTF-8, matching the RFC 5321 line-length limit for addresses. Clients
+MUST enforce this bound at envelope composition time and MUST NOT
+produce a seal over an envelope whose brief contains any non-canonical
+or over-length address. A server that detects a canonicalization
+failure after brief decryption MUST reject the envelope with
+`reason_code: "policy_forbidden"`, preserving the existence
+indistinguishability required by `DESIGN.md` section 2.7. Operators
+MUST NOT define a distinct reason code for address malformation, as
+such a code would function as an existence oracle for invalid
+recipients.
+
+#### 2.3.4 Equivalence
+
+Two addresses are equivalent if and only if their local-parts are
+identical octet-for-octet after NFC normalization AND their domains
+are identical octet-for-octet after A-label encoding and lower-case
+folding. No other equivalence MUST be assumed by the protocol.
+Visually similar characters (Cyrillic `а` vs Latin `a`, for example)
+produce distinct addresses under this rule; confusables defense is
+the responsibility of user-interface layers per Unicode Technical
+Standard #39 and is outside the scope of this specification.
+
 ---
 
 ## 3. Postmark
@@ -255,9 +326,15 @@ where a signature valid in one context could be misinterpreted in another.
 | Handshake message signature | `SEMP-HANDSHAKE:` |
 | Identity proof signature | `SEMP-IDENTITY:` |
 | Key response signature | `SEMP-KEYS:` |
+| User key self-signature | `SEMP-KEY-SELF-SIG:` |
 | Discovery response signature | `SEMP-DISCOVERY:` |
 | Revocation signature | `SEMP-REVOCATION:` |
 | Delivery receipt signature | `SEMP-DELIVERY-RECEIPT:` |
+| Recovery backup bundle signature | `SEMP-RECOVERY-BUNDLE:` |
+| Recovery set manifest signature | `SEMP-RECOVERY-MANIFEST:` |
+| Recovery share device signature | `SEMP-RECOVERY-SHARE:` |
+| Successor record signatures (all three) | `SEMP-SUCCESSOR-RECORD:` |
+| Migration record signatures (all four) | `SEMP-MIGRATION-RECORD:` |
 
 The signed input is always `prefix || canonical_bytes`. Verification MUST
 reconstruct the same prefixed input before calling Ed25519 Verify.
@@ -1056,6 +1133,7 @@ at the envelope layer:
 | `seal_invalid`          | `seal.signature` domain key verification failed.                         |
 | `session_mac_invalid`   | `seal.session_mac` session key MAC verification failed.                  |
 | `envelope_expired`      | `postmark.expires` is in the past.                                       |
+| `envelope_size_exceeded`| The serialized envelope exceeds `max_envelope_size` as negotiated for the session (`HANDSHAKE.md` section 2.3.1) or as published by the recipient domain (`DISCOVERY.md` section 3.1). The rejection response MAY include the current `max_envelope_size` in bytes for troubleshooting. The sender MUST NOT retry the same envelope; the envelope must be recomposed (for example, by splitting recipients across multiple envelopes or by moving large content to the large-attachment extension). |
 | `policy_forbidden`      | Delivery refused for policy reasons. The protocol does not distinguish among the underlying causes through this code. The rejection response MAY include a `challenge` body inviting the sender to retry with proof of work. See `DELIVERY.md` section 6.4 and `DESIGN.md` section 2.7. |
 
 The sender server MUST handle `handshake_invalid`, `handshake_expired`, and

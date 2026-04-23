@@ -1042,6 +1042,7 @@ codes are defined for session and envelope rejection:
 | `rate_limited`       | The sender has exceeded the server's rate limits.                       |
 | `challenge_failed`   | The submitted challenge solution was invalid or the challenge expired. The sender MAY request a new challenge by restarting the handshake. |
 | `challenge_invalid`  | The received challenge exceeds protocol bounds (see `ERRORS.md` section 2). The sender MUST NOT retry. See section 2.2a.2. |
+| `version_unsupported`| The peer's declared MAJOR protocol version is not supported by this server. See `CONFORMANCE.md` section 9.1.3. |
 | `server_at_capacity` | The server has reached its concurrent session limit per `SESSION.md` section 2.5.3. The sender SHOULD retry after a delay. |
 | `resumption_failed`  | A `resume` step failed: ticket unknown, expired, corrupt, or already consumed. The client MUST perform a full handshake and MUST NOT retry with the same ticket. See section 2.8.5. |
 
