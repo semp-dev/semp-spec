@@ -371,9 +371,13 @@ A conformant server MUST:
   signing key before treating an acknowledgment as terminal `delivered`.
   Treat a `delivered` acknowledgment without a verifiable receipt as a
   transport failure and retry it. (`DELIVERY.md` §1.1.1.6)
-- Store delivery receipts in a receipts archive keyed by `envelope_id`,
-  separate from the queue state record, and retain them for at least 90
-  days after issuance. (`DELIVERY.md` §1.1.1.6)
+- Deliver the received receipt to the sending client via the delivery
+  event notification in `CLIENT.md` §6.5. Hold the receipt only until at
+  least one authenticated client device of the sending user has
+  acknowledged the delivery event, then drop the server-side copy. Not
+  retain a long-term server-side receipts archive. Multi-device
+  propagation uses the encrypted device-sync mechanism in `CLIENT.md`
+  §4.5. (`DELIVERY.md` §1.1.1.6)
 - Not issue a delivery receipt for an envelope not accepted for delivery.
   (`DELIVERY.md` §1.1.1.5)
 - Enforce a timeout on delivery attempts (30 seconds recommended for initial

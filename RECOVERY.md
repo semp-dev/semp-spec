@@ -151,6 +151,23 @@ The decrypted payload is a JSON object:
             "superseded_at": null
         }
     ],
+    "receipts": [
+        {
+            "type": "SEMP_DELIVERY_RECEIPT",
+            "version": "1.0.0",
+            "envelope_hash": {
+                "algorithm": "sha-256",
+                "value": "base64-digest"
+            },
+            "recipient_domain": "recipient.example",
+            "accepted_at": "2025-06-10T20:36:44Z",
+            "signature": {
+                "algorithm": "ed25519",
+                "key_id": "recipient-domain-key-fingerprint",
+                "value": "base64-signature"
+            }
+        }
+    ],
     "metadata": {
         "accepted_senders_version": 17
     }
@@ -161,11 +178,47 @@ The decrypted payload is a JSON object:
 |-------------------|----------|----------|---------------------------------------------------------------------------------------|
 | `identity_key`    | `object` | Yes      | The user's currently active identity key, including private key material.             |
 | `encryption_keys` | `array`  | Yes      | Every encryption key the user has ever held, in creation order, including revoked ones. |
+| `receipts`        | `array`  | No       | Signed delivery receipts the user has accumulated, as defined in `DELIVERY.md` section 1.1.1. Each element is a complete receipt object preserving its signature. |
 | `metadata`        | `object` | No       | Opaque client metadata. The server MUST NOT interpret this object.                    |
 
 The payload MUST include all encryption keys ever issued for the account,
 including superseded and revoked keys, so that envelopes sealed under any
 of them remain decryptable after recovery.
+
+#### 2.3.1 Receipts in the Recovery Payload
+
+Delivery receipts are user-owned evidence artifacts. The home server does
+not retain a long-term receipts archive (`DELIVERY.md` section 1.1.1.6);
+receipts live on the user's client devices and propagate across devices
+via encrypted device sync. A user who has configured recovery SHOULD
+include their receipts archive in the recovery payload so that a total
+device loss does not also destroy the evidence of prior deliveries.
+
+Clients producing a recovery bundle SHOULD:
+
+- Include every receipt currently retained on the client at the time of
+  bundle generation, in ascending order of `accepted_at`.
+- Preserve each receipt's signature bytes unchanged. Receipts are
+  verifiable artifacts; re-encoding or re-serializing them in a way that
+  breaks canonical form would invalidate the signature.
+- Regenerate and re-upload the bundle when the receipts archive has grown
+  meaningfully since the last upload, on a cadence the client chooses.
+  The spec does not mandate a regeneration schedule, but clients SHOULD
+  avoid unbounded divergence between the bundle's receipts and the
+  client's live archive.
+
+A bundle consumer restoring from recovery MUST verify every receipt's
+signature against the recipient domain's current or historical signing
+keys before treating any restored receipt as evidential. A receipt whose
+signature does not verify MUST be discarded or surfaced to the user as
+suspect; it MUST NOT be silently dropped without indication, because
+verification failure after a restore could indicate a receipt whose
+issuing domain has rotated keys in a way the verifier cannot reconcile.
+
+Clients MAY apply an age cap when including receipts (for example,
+omitting receipts older than the user's configured retention preference)
+to bound bundle size. A receipt omitted from the bundle is lost on
+recovery; this is a user-visible tradeoff the client SHOULD expose.
 
 ### 2.4 Canonical Bytes and Signature
 
@@ -768,6 +821,7 @@ the new identity key as a fresh identity per section 7.6.
 |------------------|---------------------------------------------------------------------------------------------------------|
 | `DESIGN.md`      | Honors operator-non-trust: the server is a custodian only, not a recovery authority.                     |
 | `KEY.md`         | Backup payload carries keys defined in `KEY.md` section 1.1. Revocation uses section 8.1.                |
+| `DELIVERY.md`    | Signed delivery receipts (section 1.1.1) are included in the recovery payload per section 2.3.1, because the home server does not maintain a long-term receipts archive. |
 | `CLIENT.md`      | New key publication after restore uses the key registration protocol in section 2.2.                     |
 | `DISCOVERY.md`   | The `backup` endpoint is advertised in the discovery configuration (section 3.1.1).                      |
 | `CONFORMANCE.md` | This document's conformance requirements are referenced from `CONFORMANCE.md`.                           |
