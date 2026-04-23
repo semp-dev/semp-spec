@@ -1067,6 +1067,9 @@ MUST be surfaced to the sending user rather than retried automatically.
 
 ## 10. Security Considerations
 
+For the consolidated adversary model under which this section is
+evaluated, see `THREAT.md`.
+
 ### 10.1 Metadata Protection
 
 The postmark contains only domain-level routing information.

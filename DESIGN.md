@@ -465,6 +465,7 @@ supporting material.
 
 | Document | Description |
 |---|---|
+| `THREAT.md` | Consolidated threat model: actors, adversary classes, information visibility, residual risks. Companion to the security and privacy sections of the core documents. |
 | `FAQ.md` | Frequently asked questions. |
 
 ---

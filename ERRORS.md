@@ -50,7 +50,7 @@ govern session establishment failures. Defined in `HANDSHAKE.md` section 4.1.
 |---------------------|-------------|-------------------------------------------------------------------|
 | `blocked`           | No          | Surface to user. Do not retry.                                    |
 | `auth_failed`       | No          | Surface to user. Do not retry.                                    |
-| `policy_violation`  | No          | Surface to user. Do not retry.                                    |
+| `policy_forbidden`  | No          | Surface to user. Do not retry.                                    |
 | `handshake_expired` | Yes         | Re-handshake and retry.                                           |
 | `handshake_invalid` | Yes         | Re-handshake and retry.                                           |
 | `no_session`        | Yes         | Establish new session and retry.                                  |
@@ -78,6 +78,7 @@ additions. Defined in `ENVELOPE.md` section 9.3.
 | `seal_invalid`        | No          | Indicates a bug. Do not retry the same envelope.                |
 | `session_mac_invalid` | No          | Indicates a bug or session mismatch. Re-handshake before retry. |
 | `envelope_expired`    | No          | Recompose with new expiry if content is still relevant.         |
+| `policy_forbidden`    | No          | Delivery refused for policy reasons. Surface to user. The rejection response MAY include a `challenge` body inviting the sender to retry with proof of work. See `DELIVERY.md` section 6.4. |
 | `handshake_invalid`   | Yes         | Establish new session and resend.                               |
 | `handshake_expired`   | Yes         | Establish new session and resend.                               |
 | `no_session`          | Yes         | Establish new session and resend.                               |

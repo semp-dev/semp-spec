@@ -614,13 +614,14 @@ reason codes as recoverable or non-recoverable.
 |---------------------|-------------|---------------------------------------------------|
 | `blocked`           | No          | Surface to user. Do not retry.                    |
 | `auth_failed`       | No          | Surface to user. Do not retry.                    |
-| `policy_violation`  | No          | Surface to user. Do not retry.                    |
+| `policy_forbidden`  | No          | Surface to user. Do not retry.                    |
 | `handshake_expired` | Yes         | Re-handshake and retry.                           |
 | `handshake_invalid` | Yes         | Re-handshake and retry.                           |
 | `no_session`        | Yes         | Establish new session and retry.                  |
 | `rate_limited`      | Yes         | Back off and retry.                               |
 | `challenge`         | Yes         | Solve the issued challenge and continue handshake.|
 | `challenge_failed`  | Yes         | Request new challenge and retry.                  |
+| `challenge_invalid` | No          | Surface to user or operator. Do not retry.        |
 | `server_at_capacity`| Yes         | Back off and retry later.                         |
 
 ### 8.2 Envelope Rejection Codes
@@ -1260,9 +1261,9 @@ priority order:
   `resumption_failed` fallback cases.
 - **First-contact enforcement** (`DELIVERY.md` §6.4,
   `HANDSHAKE.md` §2.2a.3): token binding to
-  (sender_domain, recipient_address, hour_bucket), hour-bucket drift
-  edge cases, and indistinguishable rejection for non-existent
-  addresses.
+  (sender_domain, recipient_address, postmark_id), per-envelope
+  single-use enforcement, rejection of cross-envelope token reuse,
+  and indistinguishable rejection for non-existent addresses.
 - **Configuration versioning** (`DISCOVERY.md` §3.5): revision
   monotonicity enforcement, STH signature on `SEMP_CONFIGURATION_UPDATE`,
   handshake revision mismatch handling.

@@ -373,16 +373,19 @@ field of a `policy_forbidden` rejection response.
 challenge types MAY be defined per `KEY.md` section 3.2.2 and this section
 MAY be extended with analogous first-contact binding rules for them.
 
-The challenge is bound to a (sender_domain, recipient_address, hour_bucket)
+The challenge is bound to a (sender_domain, recipient_address, postmark_id)
 tuple by including those values in the `prefix` derivation. The exact
 binding is defined as:
 
 ```
-prefix = base64( random_bytes(16) || H( sender_domain || recipient_address || hour_bucket ) )
+prefix = base64( random_bytes(16) || H( sender_domain || recipient_address || postmark_id ) )
 ```
 
-Where `hour_bucket` is the integer hour-precision Unix timestamp at the
-time of issuance, `H` is SHA-256, and `||` denotes byte concatenation.
+Where `postmark_id` is the `postmark.id` of the envelope that triggered the
+`policy_forbidden` rejection, `H` is SHA-256, and `||` denotes byte
+concatenation. Binding to `postmark.id` ensures that a solved token is valid
+only for the specific envelope it was issued against, and cannot be reused
+across envelopes.
 
 The recipient server MUST NOT vary `difficulty` based on whether the
 recipient address exists. The same difficulty MUST be issued for
@@ -392,12 +395,16 @@ indistinguishability requirement in `DESIGN.md` section 2.7.
 The sender's server, on receiving a `policy_forbidden` rejection that
 carries a `challenge` body, MAY compute a solution and resubmit the
 envelope. The solved token is carried in `seal.first_contact_token` per
-section 2.2a.4.
+section 2.2a.4. A sender that resubmits MUST preserve the original
+envelope's `postmark.id`; a submission that changes `postmark.id` is a
+different envelope and MUST obtain a fresh challenge.
 
-The recipient server MUST accept a valid `first_contact_token` for any
-envelope from the same sender_domain to the same recipient_address within
-the bound hour_bucket and the next hour_bucket (a two-hour acceptance
-window). Tokens older than two hour_buckets MUST be rejected as expired.
+The recipient server MUST accept a valid `first_contact_token` only for the
+specific envelope identified by the token's bound `postmark_id`. Tokens
+MUST NOT be reused across envelopes. Token validity is further bounded by
+the `expires` timestamp of the originating challenge: a token whose
+challenge has expired MUST be rejected, and a fresh challenge MAY be issued
+in the resulting `policy_forbidden` response.
 
 #### 2.2a.4 first_contact_token Schema
 
@@ -410,7 +417,7 @@ The `seal.first_contact_token` field on an envelope (`ENVELOPE.md` section
     "algorithm": "sha256",
     "prefix": "base64-prefix-from-original-challenge",
     "difficulty": 22,
-    "hour_bucket": 489657,
+    "postmark_id": "01HT3Q6ZF4V0N9K2X7W8YB5M1C",
     "nonce": "base64-solution-nonce",
     "issued_by": "recipient.example.com"
 }
@@ -422,21 +429,23 @@ The `seal.first_contact_token` field on an envelope (`ENVELOPE.md` section
 | `algorithm`    | `string`  | Yes      | Hash algorithm. MUST be `sha256`.                                            |
 | `prefix`       | `string`  | Yes      | Base64-encoded prefix as issued by the recipient server.                     |
 | `difficulty`   | `integer` | Yes      | Leading zero bits required, as issued. Subject to the difficulty cap.        |
-| `hour_bucket`  | `integer` | Yes      | Hour-precision Unix timestamp from issuance.                                 |
+| `postmark_id`  | `string`  | Yes      | The `postmark.id` that this token is bound to. MUST equal the carrying envelope's `postmark.id`. |
 | `nonce`        | `string`  | Yes      | Base64-encoded nonce that satisfies the difficulty when hashed with prefix.  |
 | `issued_by`    | `string`  | Yes      | Hostname of the recipient server that issued the challenge.                  |
 
 A recipient server MUST verify that:
 
-1. `challenge_id` matches a challenge it previously issued.
+1. `challenge_id` matches a challenge it previously issued, and that the
+   challenge's `expires` timestamp has not passed.
 2. `prefix` matches the prefix recorded for that challenge.
 3. `H(prefix || nonce)` has at least `difficulty` leading zero bits.
-4. The challenge's `hour_bucket` is the current hour_bucket or the
-   immediately preceding one.
+4. `postmark_id` in the token equals the carrying envelope's `postmark.id`.
+5. The challenge has not been previously consumed (single-use enforcement).
 
 If verification succeeds, the recipient server MUST treat the envelope as
-having satisfied the first-contact policy for the binding tuple. If
-verification fails, the recipient server MUST reject the envelope with
+having satisfied the first-contact policy for the binding tuple and MUST
+mark the challenge consumed to prevent replay. If verification fails, the
+recipient server MUST reject the envelope with
 `reason_code: "policy_forbidden"` per the indistinguishability requirement
 in `DESIGN.md` section 2.7; the rejection MAY include a fresh challenge.
 
@@ -1029,9 +1038,10 @@ codes are defined for session and envelope rejection:
 | `handshake_expired`  | The session TTL has elapsed. A new handshake is required.               |
 | `no_session`         | The envelope does not reference a valid session identifier.             |
 | `auth_failed`        | Identity or authentication verification failed during handshake.        |
-| `policy_violation`   | The request violates a server or federation policy.                     |
+| `policy_forbidden`   | The request violates a server or federation policy. The protocol does not distinguish among underlying causes through this code. |
 | `rate_limited`       | The sender has exceeded the server's rate limits.                       |
-| `challenge_failed`    | The submitted challenge solution was invalid or the challenge expired. The sender MAY request a new challenge by restarting the handshake. |
+| `challenge_failed`   | The submitted challenge solution was invalid or the challenge expired. The sender MAY request a new challenge by restarting the handshake. |
+| `challenge_invalid`  | The received challenge exceeds protocol bounds (see `ERRORS.md` section 2). The sender MUST NOT retry. See section 2.2a.2. |
 | `server_at_capacity` | The server has reached its concurrent session limit per `SESSION.md` section 2.5.3. The sender SHOULD retry after a delay. |
 | `resumption_failed`  | A `resume` step failed: ticket unknown, expired, corrupt, or already consumed. The client MUST perform a full handshake and MUST NOT retry with the same ticket. See section 2.8.5. |
 
@@ -1043,17 +1053,35 @@ namespacing convention.
 Servers MUST check block lists before processing a handshake `init` message.
 This check occurs before any session resources are allocated.
 
-- A blocked sender's `init` MUST be rejected immediately with `step=rejected`
-  and `reason_code: "blocked"`.
-- A blocked sender's envelope, if somehow received on an existing session, MUST
-  be rejected with `reason_code: "blocked"`.
-- Blocked senders MUST NOT be silently dropped or left waiting.
+The server's action depends on the `acknowledgment` type of the matching block
+entry (`DELIVERY.md` section 5.2):
+
+- `acknowledgment: "rejected"`: the blocked sender's `init` MUST be rejected
+  immediately with `step=rejected` and `reason_code: "blocked"`. A blocked
+  sender's envelope received on an existing session MUST be rejected with
+  `reason_code: "blocked"`. Where operator policy requires indistinguishability
+  from other policy refusals, `reason_code: "policy_forbidden"` MUST be
+  returned in place of `blocked` (`ENVELOPE.md` section 9.3, `DESIGN.md`
+  section 2.7).
+- `acknowledgment: "silent"`: the server MUST NOT send any response to the
+  `init` message, and MUST discard envelopes received on an existing session
+  without reply, per `DELIVERY.md` section 1.3. Silent mode is reserved for
+  anti-harassment and privacy cases; operators MUST NOT make silent the
+  default acknowledgment for all blocks. A server operating a silent block
+  MUST maintain consistent timing per `DELIVERY.md` section 8.2 so that silence
+  is indistinguishable from unrelated network failure.
+
+A blocked sender MUST NOT be left in an indeterminate waiting state. A server
+that neither rejects nor discards within the sender's timeout window violates
+this requirement regardless of acknowledgment type.
 
 When a block is applied after a session is already established, the server
-invalidates the session locally. No message is sent to the blocked party. All
-subsequent envelopes referencing that session are rejected with
-`reason_code: "blocked"`. All subsequent handshake attempts are rejected with
-`reason_code: "blocked"`.
+invalidates the session locally. No invalidation message is sent to the
+blocked party regardless of acknowledgment type. Subsequent envelopes and
+handshake attempts from the blocked party are handled according to the block
+entry's `acknowledgment`: explicit rejection with `reason_code: "blocked"` (or
+`policy_forbidden` under indistinguishability policy), or silent discard per
+the rules above.
 
 ### 4.3 Non-Block Invalidation
 
@@ -1399,6 +1427,9 @@ On rejection, `step` is `"rejected"` and the message carries `reason_code` and `
 ---
 
 ## 6. Security Considerations
+
+For the consolidated adversary model under which this section is
+evaluated, see `THREAT.md`.
 
 ### 6.1 Identity Confidentiality
 

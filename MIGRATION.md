@@ -452,6 +452,9 @@ protocol-visible signal of the move.
 
 ## 9. Security Considerations
 
+For the consolidated adversary model under which this section is
+evaluated, see `THREAT.md`.
+
 ### 9.1 Hostile Old Provider
 
 An old provider that acts in bad faith (refuses to cooperate, refuses

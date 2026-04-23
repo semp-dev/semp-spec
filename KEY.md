@@ -1352,6 +1352,9 @@ identity keys in the migration record, not to address strings.
 
 ## 12. Security Considerations
 
+For the consolidated adversary model under which this section is
+evaluated, see `THREAT.md`.
+
 ### 12.1 Post-Quantum Readiness
 
 All key discovery mechanisms MUST support post-quantum algorithms. During the
