@@ -46,7 +46,7 @@ The following registration template follows the format specified in RFC 6838.
 | Type name              | `application`                                            |
 | Subtype name           | `semp-envelope`                                          |
 | Required parameters    | None                                                     |
-| Optional parameters    | `version` — SEMP protocol version (semver). Defaults to the version declared in the envelope's `version` field. |
+| Optional parameters    | `version`: SEMP protocol version (semver). Defaults to the version declared in the envelope's `version` field. |
 | Encoding considerations| 8bit. The envelope is a UTF-8 JSON object. Binary content within the envelope (encrypted brief, encrypted enclosure, key material) is base64-encoded within the JSON structure. |
 | Security considerations| See section 5.                                           |
 | Interoperability considerations | See section 4.                                  |
@@ -159,7 +159,7 @@ integrity without access to private key material.
 
 `seal.session_mac` cannot be verified from a file alone because it requires
 the session key (`K_env_mac`), which is ephemeral and erased after the session
-ends per `SESSION.md` section 2. This is expected — the session MAC proves
+ends per `SESSION.md` section 2. This is expected. The session MAC proves
 the envelope was delivered within a valid session, a property that is
 meaningful at delivery time, not at rest.
 
@@ -182,7 +182,7 @@ When a client application opens a `.semp` file:
 ### 3.4 Exporting Envelopes
 
 SEMP clients SHOULD support exporting received envelopes as `.semp` files.
-The exported file is the envelope exactly as received — postmark, seal,
+The exported file is the envelope exactly as received: postmark, seal,
 encrypted brief, and encrypted enclosure. The client MUST NOT export
 decrypted content into the `.semp` file. The file preserves the envelope's
 security properties at rest.
@@ -287,7 +287,7 @@ One receipt per file.
 | Type name              | `application`                                            |
 | Subtype name           | `semp-receipt`                                           |
 | Required parameters    | None                                                     |
-| Optional parameters    | `version` — receipt format version (semver). Defaults to the version declared in the receipt's `version` field. |
+| Optional parameters    | `version`: receipt format version (semver). Defaults to the version declared in the receipt's `version` field. |
 | Encoding considerations| 8bit. UTF-8 JSON object. Signature bytes are base64-encoded within the JSON structure. |
 | Security considerations| See section 6.4.                                         |
 | Interoperability considerations | The receipt format is defined in `DELIVERY.md` section 1.1.1.1 and is stable across SEMP versions per the extensibility rules in `DESIGN.md` section 2.5. |
@@ -348,7 +348,7 @@ identity key material after device loss.
 | Type name              | `application`                                            |
 | Subtype name           | `semp-recovery`                                          |
 | Required parameters    | None                                                     |
-| Optional parameters    | `version` — recovery bundle format version (semver).     |
+| Optional parameters    | `version`: recovery bundle format version (semver).      |
 | Encoding considerations| 8bit. UTF-8 JSON object. Binary fields are base64-encoded within the JSON structure. |
 | Security considerations| See section 7.4.                                         |
 | Interoperability considerations | The bundle format is defined in `RECOVERY.md`. |
@@ -403,7 +403,7 @@ identity key.
 | Type name              | `application`                                            |
 | Subtype name           | `semp-migration`                                         |
 | Required parameters    | None                                                     |
-| Optional parameters    | `version` — migration record format version (semver).    |
+| Optional parameters    | `version`: migration record format version (semver).     |
 | Encoding considerations| 8bit. UTF-8 JSON object. Signature bytes are base64-encoded within the JSON structure. |
 | Security considerations| See section 8.4.                                         |
 | Interoperability considerations | The record format is defined in `MIGRATION.md` section 3.1. |

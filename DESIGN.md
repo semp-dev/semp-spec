@@ -194,10 +194,12 @@ SEMP explicitly does not attempt to:
   no protocol can solve alone. SEMP raises the cost of abuse.
 
 - **Replace SMTP overnight.** SEMP is designed for incremental adoption. Users
-  may maintain both SEMP and SMTP accounts during the transition period. SEMP
-  clients SHOULD support SMTP/IMAP access alongside SEMP, allowing users to
-  manage legacy correspondence without switching clients. The server is
-  SEMP-only; legacy mail handling is a client responsibility.
+  may maintain both SEMP and legacy mail accounts during the transition
+  period. SEMP clients SHOULD support legacy mail access (typically SMTP
+  Submission for send and IMAP or POP3 for retrieval, or any provider
+  equivalent) alongside SEMP, allowing users to manage legacy correspondence
+  without switching clients. The server is SEMP-only; legacy mail handling
+  is a client responsibility.
 
 - **Guarantee anonymity.** SEMP provides metadata protection significantly
   stronger than SMTP. It does not provide the anonymity guarantees of systems
@@ -396,12 +398,14 @@ then decides how to proceed:
   encryption, explicit rejection) do not apply to legacy delivery.
 
 Inbound legacy mail is handled by the client connecting directly to the user's
-IMAP server alongside their SEMP server. The client presents legacy and SEMP
-messages in a unified interface with a persistent, unambiguous origin indicator.
-The SEMP server is never involved in legacy mail retrieval.
+legacy retrieval provider (typically IMAP or POP3, occasionally JMAP or a
+proprietary API) alongside their SEMP server. The client presents legacy and
+SEMP messages in a unified interface with a persistent, unambiguous origin
+indicator. The SEMP server is never involved in legacy mail retrieval, and
+SEMP does not constrain which legacy retrieval protocol the client uses.
 
-SMTP credentials are held by the client only and MUST NOT be transmitted to the
-SEMP server.
+Legacy credentials (SMTP Submission, IMAP, POP3, or other) are held by the
+client only and MUST NOT be transmitted to the SEMP server.
 
 Outbound SMTP messages MAY carry `SEMP-Capability`, `SEMP-Identity`,
 `SEMP-Domain`, and `SEMP-Address` upgrade-signal headers so that a SEMP-capable

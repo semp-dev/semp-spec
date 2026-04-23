@@ -432,12 +432,16 @@ exist in memory only for the duration of the decryption operation.
 
 ### 4.3 Legacy-Origin Messages
 
-Messages retrieved from a legacy IMAP account are not SEMP envelopes. They
-arrive through the client's SMTP/IMAP path, not through the SEMP server. The
-client MUST clearly distinguish legacy messages from SEMP-delivered messages
-in the user interface. Legacy messages carry none of SEMP's guarantees --
-no sealed metadata, no end-to-end encryption, no integrity proof, no explicit
-rejection semantics.
+Messages retrieved from a legacy mail account are not SEMP envelopes. They
+arrive through whatever retrieval protocol the user's legacy provider
+supports (typically IMAP or POP3, occasionally JMAP or a proprietary
+provider API), not through the SEMP server. SEMP does not constrain the
+retrieval protocol; any mechanism that lets the client fetch legacy
+messages is compatible. The client MUST clearly distinguish legacy
+messages from SEMP-delivered messages in the user interface. Legacy
+messages carry none of SEMP's guarantees. They have no sealed metadata,
+no end-to-end encryption, no integrity proof, and no explicit rejection
+semantics.
 
 Clients MUST NOT present legacy messages and SEMP messages in a unified inbox
 without a persistent, unambiguous indicator identifying the origin of each
@@ -1161,8 +1165,22 @@ eventually delivered, rejected, or times out.
 When the server returns `legacy_required` for a recipient, it has determined
 via discovery that the recipient domain does not support SEMP. The envelope
 cannot be delivered via SEMP for that recipient. The client's fallback path
-is its own SMTP credentials for a separate, classically-provisioned mail
-account; the SEMP home server is not a participant in legacy delivery.
+is its own legacy mail credentials for a separate, classically-provisioned
+mail account; the SEMP home server is not a participant in legacy delivery.
+
+SEMP does not constrain the legacy send protocol. SMTP Submission
+(RFC 6409, typically port 587) is the dominant and RECOMMENDED mechanism
+for legacy outbound. Where this specification refers to "SMTP fallback"
+or "SMTP credentials", it means whatever protocol the client uses to hand
+a MIME message off to the user's legacy outbound provider. A client
+using a provider API (for example a proprietary HTTP send endpoint)
+instead of SMTP Submission is conformant as long as the resulting
+message on the legacy network satisfies the composition rules in
+section 6.4.2 and the upgrade-signal rules in section 6.4.3.
+
+The inbound counterpart is symmetric: the client retrieves legacy mail
+via IMAP, POP3, or any other mechanism the legacy provider supports
+(section 4.3). The choice is operational, not protocol-defined.
 
 #### 6.4.1 User Consent
 
@@ -1346,11 +1364,14 @@ A conformant client MUST NOT:
   that includes both encrypted and plaintext renditions of the
   same content.
 
-#### 6.4.6 SMTP Credentials
+#### 6.4.6 Legacy Credentials
 
-The client MUST use its locally-held SMTP credentials only. SMTP
-credentials MUST NOT be transmitted to the home server or any
-other SEMP protocol participant. See section 10.5.
+The client MUST use its locally-held legacy mail credentials only
+(SMTP Submission for send, or a provider equivalent). Credentials
+MUST NOT be transmitted to the home server or any other SEMP
+protocol participant. See section 10.5, which applies symmetrically
+to outbound send credentials and inbound retrieval credentials
+(IMAP, POP3, JMAP, or provider API).
 
 ### 6.5 Delivery Event Notifications
 
@@ -1652,13 +1673,20 @@ require explicit user permission before loading remote content.
 Clients MUST prevent execution of scripts or active content embedded in
 `enclosure` message bodies.
 
-### 10.5 SMTP Credential Isolation
+### 10.5 Legacy Credential Isolation
 
-When a client holds SMTP credentials for legacy fallback per section 6.4, those
-credentials MUST be stored locally on the client only. Clients MUST NOT
-transmit SMTP credentials to the home server for any purpose. If a client
-implementation stores credentials in a shared credential store, it MUST use the
-most restrictive access controls available on the platform.
+When a client holds credentials for legacy mail access (SMTP Submission,
+IMAP, POP3, JMAP, or a proprietary provider API) per sections 4.3 and
+6.4, those credentials MUST be stored locally on the client only.
+Clients MUST NOT transmit legacy credentials to the SEMP home server for
+any purpose. If a client implementation stores credentials in a shared
+credential store, it MUST use the most restrictive access controls
+available on the platform.
+
+This rule applies symmetrically to outbound credentials (used by the
+SMTP fallback path in section 6.4) and inbound credentials (used to
+retrieve legacy messages per section 4.3). The SEMP server never needs
+and MUST never be given either.
 
 ---
 
