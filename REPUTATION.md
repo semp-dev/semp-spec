@@ -392,17 +392,58 @@ absent, not as evidence of continued behavior.
 
 | Field                     | Type      | Required | Description                                              |
 |---------------------------|-----------|----------|----------------------------------------------------------|
-| `envelopes_received`      | `integer` | Yes      | Total envelopes received from the subject domain.        |
-| `envelopes_rejected`      | `integer` | Yes      | Envelopes rejected for any reason.                       |
-| `abuse_reports`           | `integer` | Yes      | Abuse reports filed by users against the subject domain. |
+| `envelopes_received`      | `integer` | Yes      | Count bucket of envelopes received from the subject domain. See section 4.5.1. |
+| `envelopes_rejected`      | `integer` | Yes      | Count bucket of envelopes rejected for any reason. See section 4.5.1. |
+| `abuse_reports`           | `integer` | Yes      | Count bucket of abuse reports filed by users against the subject domain. See section 4.5.1. |
 | `abuse_categories`        | `array`   | No       | List of abuse categories reported. May contain duplicates.|
-| `unique_senders_observed` | `integer` | No       | Distinct sender addresses observed from the domain.      |
-| `handshakes_completed`    | `integer` | No       | Successful handshakes with the subject domain.           |
-| `handshakes_rejected`     | `integer` | No       | Handshakes rejected from the subject domain.             |
+| `unique_senders_observed` | `integer` | No       | Count bucket of distinct sender addresses observed from the domain. See section 4.5.1. |
+| `handshakes_completed`    | `integer` | No       | Count bucket of successful handshakes with the subject domain. See section 4.5.1. |
+| `handshakes_rejected`     | `integer` | No       | Count bucket of handshakes rejected from the subject domain. See section 4.5.1. |
 
 Servers MUST NOT fabricate or inflate metrics. An observation record is a
 factual report of measurable events. Its value depends on the observer's
 credibility, which is itself subject to the same peer observation mechanism.
+
+#### 4.5.1 Count Bucketing
+
+All integer-valued count metrics in an observation record MUST be
+reported as powers-of-two buckets, not as raw counts. The published
+value is the smallest power of two greater than or equal to the raw
+count, drawn from the sequence:
+
+```
+0, 1, 2, 4, 8, 16, 32, 64, 128, 256, 512, 1024, 2048,
+4096, 8192, 16384, 32768, 65536, 131072, 262144,
+524288, 1048576
+```
+
+A raw count of `0` is published as `0`. A raw count of `1` is
+published as `1`. A raw count in the range `[2, 2]` is published as
+`2`. A raw count in the range `[3, 4]` is published as `4`. A raw
+count in the range `[5, 8]` is published as `8`. And so on. The
+maximum published bucket is `1048576`; raw counts greater than this
+threshold MUST be published as `1048576`.
+
+Bucketing reduces the effective resolution of published metrics, which
+is the point: third parties observing multiple observation records
+cannot intersect them to reconstruct the correspondent graph at a
+resolution finer than the bucket width. The doubling sequence retains
+enough signal for reputation consumers to distinguish orders of
+magnitude (a domain with `65536` abuse reports is meaningfully
+different from one with `16`) while preventing the single-envelope
+disclosures that plaintext counts enable.
+
+Consumers of observation records MUST treat the published value as an
+upper-bound of the true count within the preceding bucket. An observer
+that publishes `envelopes_received: 128` means "at least 65 and at most
+128 envelopes observed in the window". Assessment thresholds and
+automated policies that ingest these metrics MUST account for the
+bucketing bias.
+
+Observers that historically published exact counts MUST transition to
+bucketed counts at their next observation window. A record MUST NOT
+mix exact and bucketed values across fields; all count fields in a
+given record use the same bucketing rule.
 
 ### 4.6 Assessment Values
 

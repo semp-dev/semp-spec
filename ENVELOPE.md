@@ -55,7 +55,8 @@ recipient identity, subject, timestamp) from exposure to intermediaries.
     "postmark": { },
     "seal": { },
     "brief": "<base64-encoded-encrypted-bytes>",
-    "enclosure": "<base64-encoded-encrypted-bytes>"
+    "enclosure": "<base64-encoded-encrypted-bytes>",
+    "padding": "<base64-encoded-random-bytes-or-empty>"
 }
 ```
 
@@ -73,6 +74,7 @@ is only meaningful after decryption by the recipient.
 | `seal`      | `object` | Yes      | Cryptographic integrity proof                            |
 | `brief`     | `string` | Yes      | Encrypted inner header (base64)                          |
 | `enclosure` | `string` | Yes      | Encrypted message body and attachments (base64)          |
+| `padding`   | `string` | Yes      | Base64-encoded padding bytes. See section 2.4. MAY be the empty string. |
 
 ### 2.3 Address Canonicalization
 
@@ -144,6 +146,63 @@ Visually similar characters (Cyrillic `а` vs Latin `a`, for example)
 produce distinct addresses under this rule; confusables defense is
 the responsibility of user-interface layers per Unicode Technical
 Standard #39 and is outside the scope of this specification.
+
+### 2.4 Envelope Padding
+
+The `padding` field carries opaque bytes whose sole purpose is to
+obscure the wire size of an envelope from any observer of routing
+infrastructure. Sending clients MUST populate `padding` so that the
+total wire size of the canonical envelope falls on one of the size
+buckets defined below. Routing servers and recipient servers MUST
+ignore the contents of `padding` during delivery and MUST count its
+bytes toward `max_envelope_size` enforcement.
+
+#### 2.4.1 Size Buckets
+
+The size of the canonical envelope, measured in bytes of UTF-8
+encoded JSON (the same canonical form defined in section 4.3, with
+`padding` included), MUST equal a value in the following sequence
+after padding:
+
+```
+1024, 2048, 4096, 8192, 16384, 32768, 65536, 131072,
+262144, 524288, 1048576, 2097152, 4194304, 8388608,
+16777216, max_envelope_size
+```
+
+The smallest bucket is 1024 bytes. Each subsequent bucket is twice
+the previous, up to `max_envelope_size` (the session-negotiated
+ceiling, see `HANDSHAKE.md` section 2.3.1). A sender MUST pick the
+smallest bucket whose value is at least the unpadded envelope size.
+An envelope whose unpadded size exceeds `max_envelope_size` MUST be
+recomposed; padding is not a remedy for over-limit content.
+
+#### 2.4.2 Padding Content
+
+`padding` contains random bytes drawn from a cryptographically
+secure source, base64-encoded. Senders MUST NOT reuse padding bytes
+across envelopes; each envelope receives fresh randomness. Zero
+bytes are PERMITTED but NOT RECOMMENDED because they leak the
+padding boundary under compression.
+
+#### 2.4.3 Interaction with the Seal
+
+`padding` is outside the signature scope: it is not covered by
+`seal.signature` or `seal.session_mac` per section 4.3. This is
+deliberate. A routing intermediary that alters `padding` has not
+tampered with the authenticated envelope, and a recipient server
+validates the seal against the unpadded canonical bytes without
+dependency on padding content. Padding is a size-obfuscation
+mechanism, not an integrity mechanism.
+
+#### 2.4.4 Minimum Floor
+
+The 1024-byte floor means every envelope, including the smallest
+plaintext-only messages, occupies at least 1 KB on the wire. This
+floor obscures the lower end of the size distribution where
+short-message signals would otherwise be most distinguishable.
+Operators that require stricter unlinkability MAY configure a
+higher floor; the 1024-byte floor is the protocol minimum.
 
 ---
 
@@ -304,13 +363,18 @@ of the envelope with:
 - `seal.signature` set to an empty string `""` during both computations
 - `seal.session_mac` set to an empty string `""` during both computations
 - `postmark.hop_count` omitted entirely, whether or not present in transit
+- `padding` omitted entirely, whether or not present in transit
 
 Setting both fields to empty string during computation means neither proof
 depends on the value of the other. Both cover identical input bytes. The
 canonical form is computed once and passed to both verification routines.
 
-The exclusion of `hop_count` is intentional because it is a mutable transit field.
-All other postmark fields are immutable and covered by both proofs.
+The exclusion of `hop_count` is intentional because it is a mutable transit
+field. The exclusion of `padding` is intentional because padding is a
+size-obfuscation mechanism only (section 2.4); its bytes are ignored during
+verification and MAY be altered in transit without affecting envelope
+authenticity. All other postmark fields are immutable and covered by both
+proofs.
 
 This canonical form MUST be reproduced identically by any implementation.
 
@@ -389,6 +453,65 @@ public key as AEAD additional authenticated data.
 The `brief` and `enclosure` AEAD encryption MUST pass `postmark.id` as additional
 authenticated data. This binds the ciphertext to the specific envelope and
 prevents transplanting encrypted payloads between envelopes.
+
+#### 4.4.1 Recipient-Count Obfuscation
+
+The size of `seal.brief_recipients` and `seal.enclosure_recipients` reveals
+the number of recipients on an envelope to any party that can inspect the
+seal: routing servers see both maps, and the recipient server counts the
+entries it cannot decrypt alongside those it can. To prevent recipient-count
+enumeration and group-size inference, sending clients MUST pad both maps
+with dummy entries so that the number of entries falls on a power-of-two
+bucket.
+
+**Bucket sequence.** The number of entries in `enclosure_recipients` after
+padding MUST equal one of: `1, 2, 4, 8, 16, 32, 64, 128, 256, 512, 1024`.
+The client MUST pick the smallest bucket whose value is at least the count
+of real recipient client keys.
+
+The number of entries in `brief_recipients` after padding MUST equal
+`enclosure_bucket + domain_bucket`, where:
+
+- `enclosure_bucket` is the bucket value chosen above (one entry per
+  recipient client, real or dummy).
+- `domain_bucket` is `max(D, 1)` rounded up to the next power of two,
+  where `D` is the count of distinct recipient domains that hold real
+  recipient clients on this envelope. Recipient-server domain-key
+  entries are not padded beyond their own power-of-two rounding because
+  a recipient server's own domain key is not a social-graph signal.
+
+**Dummy entry construction.** Each dummy entry in `brief_recipients` or
+`enclosure_recipients` MUST:
+
+- Have a `key_id` that is indistinguishable from a real key fingerprint:
+  32 bytes drawn from a cryptographically secure random source, encoded
+  as hex. The random fingerprint MUST NOT match any real published key
+  fingerprint known to the sender; the 2^-128 collision probability
+  with a single 32-byte draw is acceptable.
+- Have a ciphertext whose length is identical to a real wrapped-key
+  ciphertext for the negotiated suite, populated with fresh random
+  bytes drawn from a cryptographically secure source.
+
+A recipient attempting to decrypt the seal iterates over the entries
+matching its key fingerprint. Dummy entries' fingerprints do not match
+any recipient's real keys, so no decryption is attempted against them.
+An observer cannot distinguish real from dummy entries without holding
+a recipient's private key, and a recipient cannot determine the count
+of other real recipients.
+
+**No-padding exceptions.** A sending client MAY omit dummy entries only
+when the envelope is addressed to a single recipient client on a single
+recipient domain AND no group address is present in `brief.to` or
+`brief.cc` AND the envelope is not a device-sync envelope. In every
+other case, padding to the next power-of-two bucket is REQUIRED. This
+exception preserves protocol efficiency for one-to-one envelopes while
+hiding group sizes.
+
+**Interaction with total-size padding.** Dummy entries inflate the
+envelope's pre-padding size. Senders compute recipient-count padding
+first, then compute total-size padding per section 2.4 against the
+resulting envelope. Recipient-count padding reduces the distinguishing
+power of total-size buckets; both mechanisms compose.
 
 Recipient client identities are not present in either map as plaintext. A client
 identifies its entry by attempting decryption with each of its active private

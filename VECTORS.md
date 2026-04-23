@@ -234,7 +234,8 @@ sequence from a given envelope, which is the input to both `seal.signature` and
         "extensions": {}
     },
     "brief": "ZW5jcnlwdGVkLWJyaWVm",
-    "enclosure": "ZW5jcnlwdGVkLWVuY2xvc3VyZQ=="
+    "enclosure": "ZW5jcnlwdGVkLWVuY2xvc3VyZQ==",
+    "padding": "cGFkZGluZy1ieXRlcy1mb3ItMTAyNC1idWNrZXQ="
 }
 ```
 
@@ -243,9 +244,10 @@ sequence from a given envelope, which is the input to both `seal.signature` and
 1. `seal.signature` → set to `""`
 2. `seal.session_mac` → set to `""`
 3. `postmark.hop_count` → omitted entirely
-4. All keys sorted lexicographically at every nesting level
-5. No insignificant whitespace
-6. UTF-8 encoding
+4. `padding` → omitted entirely
+5. All keys sorted lexicographically at every nesting level
+6. No insignificant whitespace
+7. UTF-8 encoding
 
 **Expected canonical form (UTF-8 string):**
 
@@ -257,6 +259,8 @@ sequence from a given envelope, which is the input to both `seal.signature` and
 
 - `hop_count` is absent from the canonical output even though it was present
   in the input (value `2`).
+- `padding` is absent from the canonical output even though it was present
+  in the input. Padding never enters the signature or MAC computation.
 - `seal.signature` and `seal.session_mac` are present as empty strings, not
   omitted.
 - Top-level keys are sorted: `brief`, `enclosure`, `postmark`, `seal`, `type`,
@@ -318,6 +322,63 @@ sequence from a given envelope, which is the input to both `seal.signature` and
 - `brief_recipients` keys are sorted: `client-key-fp` before `server-key-fp`.
 - No `hop_count` was present in the input, so none appears in the output.
   The canonicalization is the same whether `hop_count` was absent or present.
+
+### 3.3 Vector: Envelope Size Bucket Computation
+
+Reference: `ENVELOPE.md` §2.4.1.
+
+These vectors verify that an implementation selects the correct
+power-of-two bucket for a given unpadded envelope size.
+
+| Unpadded envelope size (bytes) | Selected bucket (bytes) |
+|--------------------------------|-------------------------|
+| 1                              | 1024                    |
+| 1023                           | 1024                    |
+| 1024                           | 1024                    |
+| 1025                           | 2048                    |
+| 2048                           | 2048                    |
+| 2049                           | 4096                    |
+| 4096                           | 4096                    |
+| 4097                           | 8192                    |
+| 16383                          | 16384                   |
+| 16384                          | 16384                   |
+| 16385                          | 32768                   |
+| 1000000                        | 1048576                 |
+| 1048576                        | 1048576                 |
+| 1048577                        | 2097152                 |
+| 16777217                       | `max_envelope_size`     |
+
+The padding-byte count is `selected_bucket - unpadded_size`. The
+padding bytes, base64-encoded in `padding`, will enlarge the envelope
+by a factor slightly larger than 1 (4 base64 output bytes per 3 input
+bytes plus JSON string overhead); implementations MUST iterate to
+convergence or compute the padding budget with the base64 overhead
+accounted for, so that the final serialized envelope matches the
+selected bucket exactly.
+
+### 3.4 Vector: Recipient-Count Bucket Computation
+
+Reference: `ENVELOPE.md` §4.4.1.
+
+These vectors verify that an implementation selects the correct
+power-of-two recipient bucket for a given count of real recipient
+client keys.
+
+| Real recipients | `enclosure_recipients` entries after padding |
+|-----------------|----------------------------------------------|
+| 1 (single-domain, not group)         | 1   (padding exception applies) |
+| 1 (group or multi-domain)            | 2                               |
+| 2                                    | 2                               |
+| 3                                    | 4                               |
+| 4                                    | 4                               |
+| 5                                    | 8                               |
+| 9                                    | 16                              |
+| 16                                   | 16                              |
+| 17                                   | 32                              |
+| 65                                   | 128                             |
+| 129                                  | 256                             |
+| 1024                                 | 1024                            |
+| 1025                                 | (exceeds bucket ceiling; recomposition required) |
 
 ---
 

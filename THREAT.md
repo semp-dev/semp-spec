@@ -380,6 +380,18 @@ sections.
 - **Unauthorized Shamir share injection at restore.** Recovery set
   manifest binds each share to a specific device identity key
   (`RECOVERY.md` sections 5.2, 8.7).
+- **Envelope-size traffic analysis at bucket resolution.** Wire size is
+  padded to the nearest power-of-two bucket between 1 KB and
+  `max_envelope_size` (`ENVELOPE.md` section 2.4). Content-category
+  inference is bounded to the bucket, not the exact size.
+- **Recipient-count and group-size disclosure via seal structure.**
+  Recipient maps are padded to power-of-two entry counts with
+  indistinguishable dummy entries (`ENVELOPE.md` section 4.4.1). Group
+  size is revealed only at bucket resolution.
+- **Correspondent-graph inference via reputation gossip counts.**
+  Observation metrics are published as power-of-two buckets, not exact
+  counts (`REPUTATION.md` section 4.5.1). Intersection attacks are
+  bounded to bucket width.
 
 ---
 
@@ -406,20 +418,25 @@ on operator selection.
 ### 6.3 Traffic Analysis by Envelope Size and Timing
 
 Envelope sizes reveal approximate content category (short text, image,
-attached document) to any observer on the path. Send timing correlates
-to user activity. The specification does not mandate fixed-size
-padding or cover traffic. Operators SHOULD consider padding buckets
-for high-sensitivity deployments, but this is not normative.
+attached document) only at the bucket resolution defined in
+`ENVELOPE.md` section 2.4. Wire sizes are padded to powers of two
+between 1 KB and `max_envelope_size`, so every envelope is
+indistinguishable in size from every other envelope in the same
+bucket. Send timing correlates to user activity. The specification
+does not mandate cover traffic. Operators requiring timing
+unlinkability SHOULD batch outbound sends or introduce randomized
+delays; these remain operator-layer techniques.
 
 ### 6.4 Social-Graph Inference from Reputation Gossip
 
 Reputation observations published by servers include counts of senders
 and envelopes observed from each peer domain (`REPUTATION.md`
-section 4.2). A third party observing multiple gossip records may
-intersect them to approximate the correspondent graph at the
-domain-pair level. The specification does not mandate aggregation or
-bucketing. `REPUTATION.md` section 10.2 notes this as an operator
-consideration.
+section 4.2). Counts are published as power-of-two buckets per
+`REPUTATION.md` section 4.5.1, not as exact values. Third parties
+observing multiple gossip records cannot intersect them below the
+bucket width, which reduces but does not eliminate domain-pair
+correspondent-graph inference. The residual signal is intentional: it
+preserves reputation utility while bounding leakage.
 
 ### 6.5 Migration-Record Linkability
 
@@ -450,10 +467,13 @@ NOT publish clearnet artifacts for the same domain.
 ### 6.8 Fan-Out Patterns from Large Recipient Sets
 
 A sender delivering an envelope to a large recipient set exposes the
-size of that set in `seal.brief_recipients` and
-`seal.enclosure_recipients`. The specification does not define a
-bucketed-set obfuscation mechanism; recipient counts are observable to
-any party that inspects the seal structure.
+size of that set only at the bucket resolution defined in
+`ENVELOPE.md` section 4.4.1. Recipient maps are padded to power-of-two
+entry counts with dummy entries indistinguishable from real wrapped
+keys. A group message to 50 real recipients appears identical in
+structure to a group message to 64 real recipients. Residual leakage
+is the bucket index itself: an envelope with 64 entries is
+distinguishable from one with 4.
 
 ---
 
@@ -463,24 +483,17 @@ The following are known gaps that future revisions of the specification
 are expected to address. Implementers and operators SHOULD treat them as
 caveats on the security claims.
 
-- **Envelope size padding.** Not normative. Open question: bucketed
-  padding versus fixed maximum.
-- **Reputation metric aggregation.** Plaintext counts leak at the
-  domain-pair level. Open question: aggregation buckets, differential
-  privacy, or removal.
-- **Retention policy for delivery receipts and abuse evidence.** Not
-  normative. Open question: per-class retention floors and ceilings.
 - **Multi-device provisioning and revocation flow.** Partially specified
   (`CLIENT.md` section 2, `KEY.md` section 10). Open question: full
   normative enrollment and revocation protocol.
 - **SMTP fallback wire format.** Implementer's choice, no interop
   specification. Open question: normative SMTP mapping.
-- **Protocol version negotiation and deprecation.** Not normative. Open
-  question: deprecation policy and minimum-supported-version rules.
-- **Storage and retention requirements.** Operator discretion. Open
-  question: per-artifact retention floors.
-- **Recipient-count obfuscation for fan-out.** See section 6.8.
 - **Tor-isolated discovery and key fetch.** See section 6.7.
+- **Cover traffic and timing unlinkability.** Envelope and recipient
+  size padding are specified (sections 2.4 and 4.4.1 of
+  `ENVELOPE.md`), but timing correlation between send and receive
+  events remains an open problem. Operator-layer batching or delayed
+  sending is out of scope.
 
 ---
 

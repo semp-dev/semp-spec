@@ -99,9 +99,13 @@ A conformant server MUST:
   for all rejections. (`ENVELOPE.md` §9.2)
 - Reproduce the canonical envelope serialization identically: UTF-8 JSON with
   lexicographically sorted keys, no insignificant whitespace, both
-  `seal.signature` and `seal.session_mac` set to empty string, and
-  `postmark.hop_count` omitted. (`ENVELOPE.md` §4.3)
+  `seal.signature` and `seal.session_mac` set to empty string, and both
+  `postmark.hop_count` and `padding` omitted. (`ENVELOPE.md` §4.3)
 - Use the defined envelope rejection reason codes. (`ENVELOPE.md` §9.3)
+- Count the bytes of the top-level `padding` field toward
+  `max_envelope_size` enforcement. A server MUST reject with
+  `envelope_size_exceeded` if the received envelope, including padding,
+  exceeds the session-negotiated `max_envelope_size`. (`ENVELOPE.md` §2.4)
 
 A conformant server MUST NOT:
 
@@ -109,6 +113,12 @@ A conformant server MUST NOT:
   `DESIGN.md` §2.3)
 - Forward an envelope with an invalid seal. (`ENVELOPE.md` §9.1)
 - Modify any signed field of the envelope. (`ENVELOPE.md` §9.1)
+- Read, interpret, or validate the contents of the top-level `padding`
+  field. (`ENVELOPE.md` §2.4)
+- Strip or rewrite `padding` while forwarding an envelope between
+  partition servers or during internal routing; padding bytes travel
+  with the envelope through to the recipient server. (`ENVELOPE.md`
+  §2.4)
 
 A conformant server MAY:
 
@@ -520,6 +530,8 @@ A conformant server MUST:
 - Verify observation signatures before using them. Discard observations
   signed by unknown or untrusted keys. (`REPUTATION.md` §9.1)
 - Not fabricate or inflate observation metrics. (`REPUTATION.md` §4.5)
+- Publish count-valued observation metrics as power-of-two buckets per
+  `REPUTATION.md` §4.5.1. Servers MUST NOT publish exact counts.
 - Verify challenge solutions before proceeding with handshakes: confirm
   `challenge_id` matches an issued, unexpired challenge, recompute the hash,
   and confirm the required leading zero bits. (`HANDSHAKE.md` §2.2a.2)
@@ -930,6 +942,15 @@ A conformant client MUST:
 - Support `x25519-chacha20-poly1305` (baseline) and `pq-kyber768-x25519`
   (recommended). (`ENVELOPE.md` §7.3)
 - Not negotiate algorithms below the minimum baseline. (`ENVELOPE.md` §7.3)
+- Pad the envelope's wire size to the smallest power-of-two bucket between
+  1024 bytes and `max_envelope_size` per `ENVELOPE.md` §2.4. Populate the
+  top-level `padding` field with fresh random bytes.
+- Pad `seal.enclosure_recipients` to the smallest power-of-two entry count
+  via dummy entries per `ENVELOPE.md` §4.4.1, and pad
+  `seal.brief_recipients` consistently. Dummy entry fingerprints and
+  ciphertext bytes MUST be drawn from a cryptographically secure random
+  source and MUST be indistinguishable from real entries. The single-domain,
+  non-group one-recipient exception MAY be applied per §4.4.1.
 
 For forward composition, a conformant client MUST:
 
