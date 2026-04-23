@@ -292,9 +292,11 @@ application uses.
 
 The address format is unchanged: `user@domain.tld`. Existing contact lists,
 business cards, and account recovery flows work without modification. The
-client presents SEMP and legacy IMAP messages in a unified inbox with a clear
-origin indicator. Users do not need to choose between protocols: they use SEMP
-for correspondents who support it and SMTP for everyone else.
+client presents SEMP and legacy messages (retrieved via IMAP, POP3, or any
+other legacy retrieval mechanism the user's provider supports) in a unified
+inbox with a clear origin indicator. Users do not need to choose between
+protocols: they use SEMP for correspondents who support it and legacy mail
+for everyone else.
 
 ### 2.3 Why is SEMP server-only, with no SMTP backward compatibility?
 
@@ -304,12 +306,13 @@ authentication extensions. This would undermine SEMP's security model at the
 architectural level. A server that speaks SMTP can be compelled to process
 plaintext metadata, which defeats the purpose of sealed envelopes.
 
-Legacy interoperability is handled at the client layer (`CLIENT.md` section 6.4,
-`DESIGN.md` section 8). The client speaks IMAP for legacy mail retrieval and
-SMTP for legacy mail sending, with explicit user consent and degradation
-warnings. The SEMP server is never involved in legacy mail. This separation
-ensures that SEMP's security guarantees are not diluted by backward
-compatibility.
+Legacy interoperability is handled at the client layer (`CLIENT.md` sections
+4.3 and 6.4, `DESIGN.md` section 8). The client speaks whatever retrieval
+protocol the user's legacy provider supports (IMAP, POP3, JMAP, a provider
+API) for inbound, and SMTP Submission or the equivalent provider send
+protocol for outbound, with explicit user consent and degradation warnings.
+The SEMP server is never involved in legacy mail. This separation ensures
+that SEMP's security guarantees are not diluted by backward compatibility.
 
 ### 2.4 Isn't SEMP just a web service?
 
@@ -524,9 +527,11 @@ the distinction invisible to users.
 
 By placing legacy interop at the client layer, the security boundary is clear:
 SEMP envelopes go through the SEMP server with full security properties. Legacy
-messages go through IMAP/SMTP directly, with explicit user-visible indicators
-that SEMP guarantees do not apply. The SEMP server never handles plaintext
-email, which means its security properties are unconditional.
+messages go through the client's own legacy retrieval and send paths (IMAP,
+POP3, SMTP Submission, or any provider-specific equivalent) directly, with
+explicit user-visible indicators that SEMP guarantees do not apply. The SEMP
+server never handles plaintext email, which means its security properties are
+unconditional.
 
 ### 5.7 Why per-layer extensions instead of a flat extension mechanism?
 

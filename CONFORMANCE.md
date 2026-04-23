@@ -1109,7 +1109,9 @@ A conformant client MUST:
   fallback when `legacy_required` is received. (`CLIENT.md` §6.4.1)
 - Require explicit user confirmation before sending via SMTP.
   (`CLIENT.md` §6.4.1)
-- Not transmit SMTP credentials to the home server. (`CLIENT.md` §10.5)
+- Not transmit legacy mail credentials of any kind (SMTP Submission,
+  IMAP, POP3, JMAP, or provider API) to the home server.
+  (`CLIENT.md` §10.5)
 - Not automatically send via SMTP without user awareness.
   (`CLIENT.md` §6.4.1)
 - Produce MIME messages for SMTP fallback per `CLIENT.md` §6.4.2,
