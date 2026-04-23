@@ -399,6 +399,10 @@ where a signature valid in one context could be misinterpreted in another.
 | Recovery share device signature | `SEMP-RECOVERY-SHARE:` |
 | Successor record signatures (all three) | `SEMP-SUCCESSOR-RECORD:` |
 | Migration record signatures (all four) | `SEMP-MIGRATION-RECORD:` |
+| Device registration signature (identity key) | `SEMP-DEVICE-REGISTER:` |
+| Device enrollment authorization (authorizing device key) | `SEMP-DEVICE-AUTHORIZE:` |
+| Device revocation signature (identity key) | `SEMP-DEVICE-REVOCATION:` |
+| Device directory signature (identity key) | `SEMP-DEVICE-DIRECTORY:` |
 
 The signed input is always `prefix || canonical_bytes`. Verification MUST
 reconstruct the same prefixed input before calling Ed25519 Verify.

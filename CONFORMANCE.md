@@ -379,7 +379,38 @@ A conformant server MUST:
   well-known URI and MUST NOT publish keys at any clearnet endpoint
   (`DISCOVERY.md` §2.5.3).
 - Reject device registrations without a valid authorization proof from an
-  existing trusted device. (`CLIENT.md` §2.2)
+  existing full-access device. (`KEY.md` §10.1, §10.2)
+- Verify `SEMP_DEVICE` registration records: identity-key signature under
+  the `SEMP-DEVICE-REGISTER:` prefix; authorizing-device signature under the
+  `SEMP-DEVICE-AUTHORIZE:` prefix; `device_id` uniqueness in the current
+  directory; `role` and `certificate_id` consistency; authorizing device
+  currently registered as `full_access`. (`KEY.md` §10.1)
+- Reject `endpoints.register` submissions for accounts that already have a
+  device directory entry; subsequent devices MUST enroll via `KEY.md`
+  §10.2. (`CLIENT.md` §2.2.b)
+- On accepting a registration, append the new device to the device
+  directory and publish a new monotonic revision per `KEY.md` §10.6.
+- Verify `SEMP_DEVICE_REVOCATION` records: identity-key signature under
+  the `SEMP-DEVICE-REVOCATION:` prefix; `revoked_by_device_id` currently
+  registered with sufficient authority per `KEY.md` §10.5.3; first-accept
+  policy for same `device_id`. On acceptance, invalidate sessions for the
+  revoked device per `SESSION.md` §2.5 and publish a new device directory
+  revision. (`KEY.md` §10.5)
+- Retain device revocation records indefinitely, same rule as key
+  revocations. (`KEY.md` §10.5, §8.3)
+- When a revocation carries `reason: "key_compromise"`, refuse to
+  publish the revocation unless accompanied by a successor record
+  (`RECOVERY.md` §7) and a rotated identity-key publication in the same
+  submission. A `key_compromise` revocation published without the
+  rotation cascade is a specification violation and MUST be rejected
+  with `reason_code: "policy_forbidden"`. (`KEY.md` §10.5.5)
+- Serve the current `SEMP_DEVICE_DIRECTORY` at the account's key
+  endpoint in response to `SEMP_KEYS` requests whose `key_types`
+  includes `"device"`. MUST return the most recent revision; stale
+  directories beyond the advertised TTL MUST NOT be served.
+  (`KEY.md` §10.6.2)
+- Never serve a device directory whose `revision` is less than a
+  revision previously served for the same `user_id`. (`KEY.md` §10.6.2)
 
 ### 4.6 Delivery and Blocking
 
