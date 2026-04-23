@@ -229,6 +229,10 @@ bundle object with:
 - `signature.value` set to `""`.
 - No insignificant whitespace.
 
+The canonical bytes are prefixed with the domain-separation context
+`SEMP-RECOVERY-BUNDLE:` before signing, per the signature domain separation
+rules in `ENVELOPE.md` section 4.3.
+
 The signature MUST be produced with the user's currently active identity
 private key and MUST verify against the user's published identity public
 key at the time of upload. A client MUST NOT upload an unsigned bundle.
@@ -472,7 +476,7 @@ device injected during local transfer.
 | `contributors[i].device_id`   | `string`  | Yes      | Identifier of the device holding this share. Device IDs MUST be unique across the array.               |
 | `contributors[i].device_identity_pubkey` | `object` | Yes | The device's identity public key at manifest issuance, used to verify the share record signature at restore. |
 | `issued_at`                   | `string`  | Yes      | ISO 8601 UTC manifest issuance time.                                                                    |
-| `signature`                   | `object`  | Yes      | Signature by the user's current identity key over the canonical bytes of the manifest with `signature.value` set to `""`. |
+| `signature`                   | `object`  | Yes      | Signature by the user's current identity key over the canonical bytes of the manifest with `signature.value` set to `""`, prefixed with `SEMP-RECOVERY-MANIFEST:` per `ENVELOPE.md` section 4.3. |
 
 A client MUST construct a fresh manifest each time the Shamir split is
 recomputed, for example when adding or removing devices or rotating the
@@ -509,7 +513,7 @@ Each share is transmitted as:
 | `share_index`      | `integer` | Yes      | 1-based Shamir share index. MUST match the manifest's `contributors[share_index - 1].share_index`.   |
 | `device_id`        | `string`  | Yes      | Identifier of the device holding this share. MUST match the manifest's contributor entry for this `share_index`. |
 | `share_value`      | `string`  | Yes      | Base64-encoded Shamir share bytes.                                                                    |
-| `device_signature` | `object`  | Yes      | Signature by the bound device's identity key, computed over the canonical bytes of the share record with `device_signature.value` set to `""`. Proves that the device holding this record controls the identity key listed for its `share_index` in the manifest. |
+| `device_signature` | `object`  | Yes      | Signature by the bound device's identity key, computed over the canonical bytes of the share record with `device_signature.value` set to `""`, prefixed with `SEMP-RECOVERY-SHARE:` per `ENVELOPE.md` section 4.3. Proves that the device holding this record controls the identity key listed for its `share_index` in the manifest. |
 
 The device signature authenticates the share to its bound device. The
 manifest signature authenticates the bound-device set to the user. At
@@ -691,8 +695,10 @@ key based on successor record verification.
 
 ### 7.3 Signatures
 
-The record carries three signatures, all over the canonical bytes of
-the record with the corresponding signature's `value` set to `""`:
+The record carries three signatures, each computed over the canonical
+bytes of the record with the corresponding signature's `value` set to
+`""`, prefixed with `SEMP-SUCCESSOR-RECORD:` per the domain separation
+rules in `ENVELOPE.md` section 4.3:
 
 - `recovery_signature`: produced by `recovery_sign_sk` derived from the
   recovery secret per section 3.3. Verifiable using
@@ -703,6 +709,8 @@ the record with the corresponding signature's `value` set to `""`:
 - `domain_signature`: produced by the home server's domain signing key.
   Confirms the home server's participation.
 
+All three signatures cover the same canonical input; they are
+distinguished by the signing key rather than by the canonical bytes.
 All three signatures MUST be present. Verifiers that cannot obtain all
 three MUST treat the successor record as unverified.
 

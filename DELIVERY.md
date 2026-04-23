@@ -450,9 +450,21 @@ attempt subject to the following bounds:
 - The sending server MUST apply jitter of at least plus or minus 10 percent to
   each scheduled interval.
 
-The following schedule is RECOMMENDED as a default, subject to jitter:
-1 minute, 5 minutes, 15 minutes, 1 hour, 4 hours, then every 4 hours until the
-effective deadline.
+The bounds compose as follows. The server computes a base interval by applying
+the configured multiplier to the previous base interval, then clamping to the
+6-hour cap. The 60-second minimum applies to the first base interval only. The
+server then applies symmetric jitter to the base interval by selecting a random
+multiplier in the range `[1 - j, 1 + j]`, where `j` is at least `0.1`.
+Jitter MAY NOT reduce the realized interval below 50 percent of the first
+base interval (30 seconds). Servers MAY use `j` values larger than `0.1`;
+`j = 0.25` is RECOMMENDED for high-volume queues to reduce thundering-herd
+effects after correlated outages. The realized interval is the jittered value;
+the multiplier continues to operate on the base interval, not the jittered
+value.
+
+The following schedule is RECOMMENDED as a default, understood as the base
+intervals before jitter: 1 minute, 5 minutes, 15 minutes, 1 hour, 4 hours,
+then every 4 hours until the effective deadline.
 
 Operators MAY use a different schedule provided the bounds above are met.
 

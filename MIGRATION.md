@@ -177,10 +177,24 @@ record with:
 - All other signatures present at their final values.
 - No insignificant whitespace.
 
+The canonical bytes are prefixed with `SEMP-MIGRATION-RECORD:` per the
+domain separation rules in `ENVELOPE.md` section 4.3 before signing. All
+four signature slots use the same prefix; they are distinguished by the
+signing key and by the set of prior signatures embedded in the canonical
+bytes.
+
 Signatures are added in the order: `old_identity_signature`,
 `new_identity_signature`, `new_domain_signature`, `old_domain_signature`.
 Each signature binds the record fields and all prior signatures. A
 verifier MUST verify in the same order.
+
+`migrated_at` MUST be at or after the `created` timestamp of the
+`old_identity_key_id` key record and MUST NOT be in the future relative
+to the verifier's clock beyond ordinary clock-skew tolerance
+(`CONFORMANCE.md` section 9.3). A record whose `migrated_at` precedes
+the old identity key's creation MUST be rejected as malformed. This
+bound prevents an attacker who has compromised both identity keys from
+backdating a migration record to before the legitimate identity existed.
 
 ### 3.4 Publication
 

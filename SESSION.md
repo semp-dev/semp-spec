@@ -203,6 +203,18 @@ while it believes its session is active SHOULD treat this as evidence that the
 server has expired or superseded its session. The client MUST initiate a new
 handshake rather than retrying the envelope under the now-invalid session.
 
+The server does not push an invalidation message on the superseded session at
+the moment of supersession. The design intent is that the client is itself the
+party that initiated the new handshake: the client always knows which session
+is current without server notification. Any continued use of the old session
+after supersession indicates either a client defect or a second process under
+the same `client_identity` that raced the first; in either case the server's
+response of `handshake_invalid` or `no_session` is sufficient to redirect the
+stale submitter to the current session. Servers MUST NOT push a
+`session_superseded` or equivalent message on the old session; the old
+session's key material is erased at supersession per section 2.4 and no
+further authenticated message can be produced on it.
+
 #### 2.5.2 Federation Sessions
 
 For server-to-server federation sessions, a server MUST permit at most

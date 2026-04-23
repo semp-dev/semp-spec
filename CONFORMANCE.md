@@ -727,6 +727,107 @@ A conformant server MUST:
 - Not read or act on the contents of `enclosure.extensions` on a sync
   envelope. (`CLIENT.md` §4.5.4)
 
+### 4.13 Retention Policy
+
+A conformant server MUST apply per-artifact retention rules so that
+operator data holdings are bounded to what the protocol requires for
+correct operation. The rules below are the normative minimums and
+maximums; operators MAY apply shorter retention where permitted and
+MUST NOT exceed the maximums.
+
+#### 4.13.1 Delivery Receipts
+
+Delivery receipts at the sending server: SHOULD be dropped after the
+sending client has acknowledged receipt of the delivery event
+(`CLIENT.md` §6.5). MUST NOT be retained beyond 30 days after the
+envelope's `postmark.expires` timestamp. (`DELIVERY.md` §1.1.1.6)
+
+Delivery receipts at the recipient server: SHOULD NOT be retained
+beyond what is needed to produce the acknowledgment response; the
+recipient server is a conduit, not a custodian, for delivery outcomes.
+
+#### 4.13.2 Abuse Evidence
+
+Sealed abuse evidence (`REPUTATION.md` §3): MUST be retained at the
+reporting server for at least 90 days, to support observation
+publication and peer review. MAY be retained longer under operator
+policy, subject to applicable privacy obligations. Evidence MUST be
+deleted on request by the reporter.
+
+#### 4.13.3 Session Tickets and Session State
+
+Session tickets: MUST NOT have a lifetime exceeding 7 days from
+issuance (`SESSION.md` §2.7). A server MUST delete ticket-encryption
+key material for tickets issued under a rotated key at least
+quarterly.
+
+Active session state: held in memory only, MUST NOT be persisted
+beyond the session's `expires_at` (`SESSION.md` §2.4).
+
+Expired `session_id` log for replay prevention: MUST be retained for
+at least one session TTL window (`SESSION.md` §5.2), MUST NOT exceed
+30 days.
+
+#### 4.13.4 Revocation Records
+
+MUST be retained indefinitely (`KEY.md` §8.3). Revocation records
+prevent key-substitution attacks and cannot be safely deleted.
+
+#### 4.13.5 Backup Bundles (Server-Assisted Recovery)
+
+Current bundle: retained as long as the account is active.
+
+Superseded bundles: MUST be retained for at least 30 days after
+supersession to support restore under an older recovery secret
+(`RECOVERY.md` §4.4). MAY be retained longer under operator policy.
+
+After account closure: retention follows `CLOSURE.md` §5.1 retention
+window rules.
+
+#### 4.13.6 Block Lists
+
+User block lists are user-owned state. MUST be retained for as long
+as the account is active. MUST be deleted at account finalization
+unless the user has explicitly requested carry-over to a migrated
+account per `MIGRATION.md` §7.4.
+
+#### 4.13.7 Correspondent Graph Derivatives
+
+Any data that encodes who corresponded with whom beyond the minimum
+required for delivery (for example, search indexes, per-conversation
+metadata caches, archived delivery-receipt summaries) is a
+correspondent-graph derivative under `ENVELOPE.md` §10.6. Operators
+SHOULD NOT create such derivatives; where operational requirements
+(monitoring, abuse investigation) demand them, they MUST be retained
+no longer than the minimum needed for that requirement and MUST be
+surfaced in the operator's privacy documentation.
+
+#### 4.13.8 Queued Envelopes
+
+Envelopes in the sender-side delivery queue: persisted until a
+terminal outcome per `DELIVERY.md` §2.1. MUST be deleted from the
+queue at the earlier of: reaching a terminal outcome, or
+`postmark.expires` plus one retention window. The retention window
+for expired-but-queued envelopes SHOULD NOT exceed 24 hours to
+accommodate operator diagnostics.
+
+#### 4.13.9 First-Contact Challenge State
+
+The `(challenge_id, prefix, postmark_id)` triple for issued
+first-contact challenges MUST be retained at least until the
+challenge's `expires` timestamp, to support single-use enforcement
+(`HANDSHAKE.md` §2.2a.4). MAY be retained up to 24 hours past
+`expires` for diagnostics. Consumed challenge IDs SHOULD be retained
+for at least the challenge's original lifetime to prevent replay.
+
+#### 4.13.10 Logs and Diagnostics
+
+Server operational logs (access logs, error logs, rate-limit counters)
+are out of scope for this specification. Operators MUST NOT log
+decrypted `brief` or `enclosure` content under any circumstances and
+MUST NOT log private key material, recovery secrets, or session
+keys.
+
 ---
 
 ## 5. Client Conformance Requirements
@@ -1426,11 +1527,92 @@ session requires a fresh handshake regardless of TLS resumption state.
 
 ### 9.1 Version Negotiation
 
-- All handshake messages MUST include the `version` field.
-  (`HANDSHAKE.md` §2.2)
+#### 9.1.1 Version Format
+
+SEMP protocol versions follow semantic versioning: `MAJOR.MINOR.PATCH`.
+The current version is `1.0.0`. Every SEMP message type MUST carry a
+`version` field in this format.
+
+- **MAJOR** is incremented on any wire-incompatible change: a new
+  message structure, a removed field, a changed field semantics, a
+  new mandatory-to-implement cryptographic primitive, or any other
+  change that prevents an older implementation from correctly
+  processing the new message.
+- **MINOR** is incremented on backward-compatible additions: new
+  optional fields, new message types whose absence is acceptable,
+  new optional extensions added to the registry, clarifications that
+  tighten previously ambiguous behavior without changing conforming
+  implementations.
+- **PATCH** is incremented for editorial clarifications and typo
+  fixes only. A PATCH bump MUST NOT change any conforming
+  implementation's behavior.
+
+#### 9.1.2 Supported Version Declaration
+
+Every implementation MUST declare the MAJOR version it speaks in:
+
+- Its DNS TXT record (`v=semp1` for MAJOR 1 per `DISCOVERY.md` §2.2).
+- Its configuration document (`version` field per `DISCOVERY.md`
+  §3.1).
+- Every handshake message it sends (`version` field per
+  `HANDSHAKE.md` §2.2).
+
+An implementation MAY declare support for more than one MAJOR by
+publishing one configuration document per supported MAJOR under
+distinct DNS TXT records.
+
+#### 9.1.3 Cross-Major Interoperability
+
+Different MAJOR versions are not wire-interoperable. Implementations
+encountering a peer whose declared MAJOR does not match any MAJOR they
+support MUST:
+
+- At discovery: treat the domain as non-SEMP for this MAJOR and fall
+  back per `CLIENT.md` section 6.4 or abandon the delivery per
+  operator policy.
+- At handshake: reject the `init` with
+  `reason_code: "version_unsupported"`. The rejecting side MAY
+  include the list of MAJOR versions it does support in the response
+  `reason` string (advisory, not machine-parseable).
+
+An implementation MUST NOT attempt to negotiate down to a lower MAJOR
+than it supports. Cross-MAJOR federation is achieved by operators who
+run gateways deliberately, outside the scope of this specification.
+
+#### 9.1.4 Within-Major Interoperability
+
+Implementations on the same MAJOR MUST interoperate regardless of
+MINOR or PATCH differences. Specifically:
+
+- Unknown fields MUST be ignored, not rejected (`DISCOVERY.md` §3.1,
+  `ENVELOPE.md` §8.1).
+- Unknown optional message types MUST be rejected with
+  `extension_unsupported` if the sender marked them critical, and
+  silently dropped otherwise.
+- New extensions introduced in a later MINOR are advertised per
+  `EXTENSIONS.md` and negotiated at handshake capability exchange.
+
+#### 9.1.5 Deprecation and Sunset
+
+MINOR versions are not deprecated: older MINOR implementations
+continue to interoperate indefinitely within the same MAJOR, subject
+to the normal extension-advertisement negotiation. Individual
+extensions MAY be deprecated per `EXTENSIONS.md` section 7.
+
+A MAJOR version is sunset when a successor MAJOR has been
+widely deployed. The specification revision that introduces MAJOR N+1
+SHOULD state the recommended end-of-support date for MAJOR N, giving
+operators at least 24 months to migrate. The protocol does not
+mandate a specific end-of-support date; that decision is deferred to
+the spec revision that defines the successor.
+
+#### 9.1.6 Legacy Requirements
+
+- All handshake messages MUST include the `version` field
+  (`HANDSHAKE.md` §2.2).
 - All SEMP message types MUST include a `version` field (semver).
-- Implementations MUST ignore unknown fields rather than failing.
-  (`DISCOVERY.md` §3.1, `ENVELOPE.md` §8.1)
+- Implementations MUST ignore unknown fields rather than failing
+  (`DISCOVERY.md` §3.1, `ENVELOPE.md` §8.1).
 
 ### 9.2 Transport Support
 
