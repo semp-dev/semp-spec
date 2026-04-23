@@ -530,6 +530,41 @@ When a client needs recipient keys for envelope composition, it sends a
 the request using whatever fetching mechanism its operator has configured
 (section 6.1).
 
+### 6.4 Tor-Reachable Recipients
+
+When the recipient domain is a `.onion` address, all key-fetching
+traffic MUST be carried over Tor. A sending server MUST:
+
+- Perform the direct well-known fetch (section 6.1) over a Tor
+  circuit to the onion service, per `DISCOVERY.md` section 2.5.2.
+- NOT resolve or connect to any clearnet endpoint associated with the
+  onion domain for the purpose of key retrieval. If operator
+  configuration lists a clearnet endpoint for a `.onion` domain
+  (dual-reachable per `DISCOVERY.md` section 2.5.4), the sending
+  server MUST prefer the onion endpoint for privacy purposes unless
+  the operator has explicitly configured clearnet preference.
+
+A sending server MAY use third-party key relays (section 6.1) for
+`.onion` recipients only if the relay itself fetches via Tor. A
+relay that fetches over clearnet when proxying an onion target
+defeats recipient anonymity: the relay's clearnet fetch reveals the
+onion destination to any observer of the relay's clearnet traffic.
+Relays that support onion targets MUST document their Tor-routing
+behavior.
+
+Speculative batch crawling (section 6.1) MAY be used for `.onion`
+domains. The crawl schedule SHOULD be randomized so that crawl
+patterns cannot be correlated with send intent by an observer of
+the sending server's Tor egress. Where a sending server hosts both
+clearnet and Tor senders, it SHOULD partition its crawl scheduling
+so that a Tor crawl is not timed coincidentally with a clearnet
+send to the same apparent identity.
+
+A sending server lacking Tor egress MUST NOT attempt clearnet
+fallback for a `.onion` recipient. The key fetch fails transiently,
+propagating as `server_unavailable` to the envelope submission path
+per `DISCOVERY.md` section 2.5.2.
+
 The client-facing key request protocol is defined in `CLIENT.md` section 5.4.
 The home server acts as a proxy: it fetches keys from the remote domain's
 well-known URI (or from its cache), and returns them to the client with the

@@ -727,6 +727,11 @@ prone to circuit rotation disruptions. The handshake timeout of 30 seconds
 (per `HANDSHAKE.md` section 6.6) accommodates Tor's higher latency without
 adjustment.
 
+Tor-specific discovery, address form, and operator contracts for Tor-only
+versus dual-reachable deployments are defined in `DISCOVERY.md` section 2.5.
+Tor-routed key fetching for `.onion` recipients is defined in `KEY.md`
+section 6.4.
+
 ---
 
 ## 10. Conformance

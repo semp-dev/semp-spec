@@ -118,6 +118,115 @@ The `hash` strategy is RECOMMENDED. It is deterministically computable by
 any party from the address alone, so it leaks no information beyond what
 the address itself already carries.
 
+### 2.5 Tor-Reachable Deployments
+
+DNS-based discovery is inapplicable to domains that terminate in the
+`.onion` pseudo-TLD: the Tor network has no DNS SRV infrastructure and
+clearnet DNS MUST NOT be consulted for an onion name. This section
+defines how a sending server discovers a `.onion` SEMP deployment,
+and what operator contract distinguishes a Tor-only deployment from a
+dual-reachable one.
+
+#### 2.5.1 Address Form
+
+A `.onion` SEMP address has the form `user@<onion-name>.onion`, where
+`<onion-name>` is a 56-character version-3 onion service identifier
+per Tor's `rend-spec-v3`. Version-2 onion addresses (16 characters)
+MUST NOT be used; they are cryptographically deprecated. A server
+receiving an envelope whose `postmark.to_domain` is a 16-character
+onion label MUST reject it per the address canonicalization rules of
+`ENVELOPE.md` section 2.3.
+
+The entire `.onion` label, including the `.onion` suffix, is the
+domain for SEMP purposes and is lower-cased before comparison,
+matching the domain-canonicalization rules of `ENVELOPE.md`
+section 2.3.2.
+
+#### 2.5.2 Discovery Flow
+
+For a destination domain ending in `.onion`, a sending server MUST:
+
+1. Skip DNS lookups entirely. Any DNS query for a `.onion` name is a
+   protocol violation and MUST NOT be emitted.
+2. Open a Tor circuit to `<onion-name>.onion:443`. Standard three-hop
+   circuits are required; single-hop circuits MUST NOT be used.
+3. Fetch `https://<onion-name>.onion/.well-known/semp/configuration`
+   over the Tor circuit using HTTP/2 per section 3.
+4. Verify the configuration document's domain signature per section
+   3.3 against the domain key published in the document itself. DANE
+   cross-checks (`KEY.md` section 5.5) are inapplicable; onion
+   services have no DNS-based key attestation. The signature
+   self-verification is the assurance available to Tor-only
+   deployments, augmented by key transparency (`TRANSPORT.md`
+   section 9.4, `TRANSPARENCY.md`).
+5. Proceed with the federation handshake over the same or a fresh Tor
+   circuit per `TRANSPORT.md` section 9.4.
+
+A sending server that cannot reach Tor (no local Tor daemon, blocked
+Tor egress, offline node) MUST NOT fall back to clearnet discovery
+for a `.onion` recipient. It MUST surface the delivery as
+`server_unavailable` to the sending user and retry per
+`DELIVERY.md` section 2.3. Tor unreachability is a transient
+operational condition, not a license to bypass Tor.
+
+#### 2.5.3 Operator Contract for Tor-Only Deployments
+
+An operator that hosts a SEMP domain EXCLUSIVELY over Tor (intending
+that no clearnet observer can correlate the onion service with any
+clearnet identity or resource) MUST:
+
+- NOT publish DNS SRV, TXT, or well-known URI records under any
+  clearnet name that references, redirects to, or otherwise names
+  this domain's backend.
+- NOT run the domain's backend under a clearnet DNS name that resolves
+  to an IP address directly reachable from the clearnet.
+- NOT publish domain or user keys at any clearnet endpoint for this
+  domain. Key fetches MUST proceed per `KEY.md` section 6.4.
+- Configure the onion service with the standard three-hop topology
+  (`HiddenServiceSingleHopMode 0` in torrc). Single-hop onion services
+  weaken the anonymity of the hosting operator and MUST NOT be used
+  for a Tor-only SEMP deployment.
+
+A Tor-only deployment that violates any of the above forfeits the
+anonymity properties documented in `THREAT.md` section 6.7. A
+violation is not a protocol conformance failure, but a declared
+misconfiguration: operators MUST document their reachability posture
+and MUST NOT represent a mixed deployment as Tor-only.
+
+#### 2.5.4 Dual-Reachable Deployments
+
+An operator MAY intentionally publish both a clearnet and a Tor
+endpoint for the same domain, accepting that clearnet observers can
+correlate the two. In this case:
+
+- The clearnet name's SRV and TXT records point to the clearnet
+  endpoint.
+- The clearnet well-known URI's configuration document MAY list an
+  additional onion endpoint in its `servers` array.
+- The onion name's well-known URI is also served over Tor, following
+  the flow in section 2.5.2.
+
+Senders reaching the domain via either path receive the same domain
+keys (signatures verify identically) but see different `servers`
+entries. A sender's choice of path is an operator policy decision,
+often dictated by the sender's own reachability posture or the
+recipient's stated preference.
+
+#### 2.5.5 Sender-Side Tor Routing
+
+A sender on a clearnet-reachable domain that delivers to a `.onion`
+recipient exposes its own intent to the exit of its Tor circuit
+(which observes the onion destination) but preserves recipient
+anonymity against clearnet observers. A sender that wishes to
+additionally preserve its own intent from Tor circuit observation
+SHOULD additionally use Tor for its clearnet SEMP traffic, at the
+operator's discretion.
+
+A `.onion`-hosted sender delivering to a `.onion` recipient stays
+entirely within Tor; this is the strongest unlinkability mode SEMP
+supports and is the reason the Tor-only contract in section 2.5.3
+exists.
+
 The `alpha` strategy is PERMITTED and leaks only the alphabetical bucket
 of the recipient, which is a weak signal roughly equivalent to the first
 letter of the username.

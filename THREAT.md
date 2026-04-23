@@ -456,13 +456,25 @@ the scope of this specification.
 
 ### 6.7 Onion-Only Deployment Leakage via Clearnet Artifacts
 
-A `.onion` deployment that additionally serves clearnet artifacts
-(DNS SRV for a non-`.onion` name, a clearnet well-known URI, a
-clearnet key fetch) can be deanonymized by correlating those clearnet
-accesses. `DESIGN.md` section 2.2 permits `.onion` reachability and
-forbids IP-based trust, but does not specify an isolated Tor-only
-discovery and key-fetch flow. Operators requiring Tor isolation MUST
-NOT publish clearnet artifacts for the same domain.
+A `.onion` deployment's anonymity posture is defined by the operator
+contract in `DISCOVERY.md` section 2.5.3. Tor-only deployments MUST
+NOT publish DNS SRV, TXT, or well-known URI records under any
+clearnet name that references the same backend; MUST NOT publish
+domain or user keys at any clearnet endpoint; and MUST use standard
+three-hop onion services rather than single-hop variants. Key
+fetches for `.onion` recipients are restricted to Tor circuits per
+`KEY.md` section 6.4; a sender without Tor egress MUST NOT attempt
+clearnet fallback.
+
+Residual risk. A Tor-only deployment that violates the operator
+contract (by accident or misconfiguration) can still be deanonymized
+by correlating the offending clearnet access with the onion service.
+The specification names the contract and the consequences of
+violating it; it cannot technically prevent a misconfigured
+deployment. Operators requiring strong Tor isolation are the sole
+party capable of enforcing the contract; THREAT.md readers
+evaluating a specific deployment must confirm the contract is
+honored for that deployment.
 
 ### 6.8 Fan-Out Patterns from Large Recipient Sets
 
@@ -488,7 +500,6 @@ caveats on the security claims.
   normative enrollment and revocation protocol.
 - **SMTP fallback wire format.** Implementer's choice, no interop
   specification. Open question: normative SMTP mapping.
-- **Tor-isolated discovery and key fetch.** See section 6.7.
 - **Cover traffic and timing unlinkability.** Envelope and recipient
   size padding are specified (sections 2.4 and 4.4.1 of
   `ENVELOPE.md`), but timing correlation between send and receive
