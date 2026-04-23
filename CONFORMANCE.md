@@ -250,6 +250,15 @@ A conformant server MUST:
   identify the requester or the specific sender. (`DISCOVERY.md` §1.2)
 - Follow the discovery flow: DNS SRV/TXT first, well-known URI as fallback,
   then MX record check for legacy capability. (`DISCOVERY.md` §5.1)
+- Skip DNS lookups entirely for recipient domains ending in `.onion` and
+  fetch the well-known URI over a Tor circuit to the onion service per
+  `DISCOVERY.md` §2.5.2. MUST NOT emit a DNS query for a `.onion` name
+  under any circumstances.
+- Reject `.onion` addresses whose onion label is not a 56-character
+  version-3 identifier (`DISCOVERY.md` §2.5.1).
+- When Tor egress is unavailable, surface the delivery as
+  `server_unavailable` rather than attempting clearnet fallback for a
+  `.onion` recipient (`DISCOVERY.md` §2.5.2, `KEY.md` §6.4).
 - Perform an MX record lookup when SEMP discovery fails, to determine
   whether the domain supports SMTP. (`DISCOVERY.md` §7.1)
 - Not attempt an SMTP connection during discovery, since the MX record is
@@ -362,6 +371,13 @@ A conformant server MUST:
 - Retain revocation records indefinitely. (`KEY.md` §8.3)
 - Return revocation records when a revoked key is requested.
   (`KEY.md` §8.4)
+- Fetch keys for `.onion` recipients over Tor only, per `KEY.md` §6.4.
+  MUST NOT resolve or connect to any clearnet endpoint associated with a
+  `.onion` domain for key retrieval.
+- When operating as the home server of a `.onion`-hosted Tor-only
+  deployment, publish domain and user keys exclusively at the onion
+  well-known URI and MUST NOT publish keys at any clearnet endpoint
+  (`DISCOVERY.md` §2.5.3).
 - Reject device registrations without a valid authorization proof from an
   existing trusted device. (`CLIENT.md` §2.2)
 

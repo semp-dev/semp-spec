@@ -111,7 +111,9 @@ deliberately:
 - A SEMP domain MAY be reached exclusively over Tor via a `.onion`
   address. The source IP of incoming federation traffic is a Tor
   circuit exit, and the receiving server MUST NOT use that IP as a
-  trust signal.
+  trust signal. Tor-only deployments follow the discovery and
+  key-fetch rules defined in `DISCOVERY.md` section 2.5 and
+  `KEY.md` section 6.4.
 - A SEMP domain MAY rotate its hosting infrastructure (change IPs
   entirely) without disturbing its reputation. Conversely, an IP
   previously associated with an abusive SEMP domain MUST NOT
