@@ -484,6 +484,16 @@ user's identity key. The bundle, share records, and manifest issued in
 a given split share the same `bundle_id` and are mutually authoritative
 only as a matched set.
 
+The `contributors[i].device_identity_pubkey` values MUST match the
+`device_public_key` entries for the same `device_id` in the account's
+current device directory (`KEY.md` section 10.6) at manifest issuance.
+A restore client reconstructing the recovery set MUST cross-check
+each contributor against the directory revision active at
+`issued_at`: a contributor device that is not listed in that
+directory revision, or whose directory `device_public_key` does not
+match the manifest's `device_identity_pubkey`, indicates a stale or
+forged manifest and MUST be rejected.
+
 ### 5.3 Share Record
 
 Each share is transmitted as:

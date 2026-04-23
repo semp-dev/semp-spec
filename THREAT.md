@@ -293,13 +293,23 @@ enrolling adversary-controlled devices (`RECOVERY.md` section 8.7).
 - Scoped delegated certificates limit the blast radius of compromising
   a device that has only a delegated certificate (`KEY.md`
   section 10.3).
-- Device revocation and re-enrollment via primary-device-signed
-  certificate revocation.
+- Device revocation via `SEMP_DEVICE_REVOCATION` with
+  `reason: "key_compromise"` triggers mandatory identity-key rotation
+  and a successor record to correspondents (`KEY.md` section 10.5.5).
+  The revoked device cannot forge envelopes under the rotated identity
+  key.
+- The device directory (`KEY.md` section 10.6) is monotonically
+  versioned and identity-signed; correspondents and delegated
+  consumers reject device-scoped signatures from devices not listed in
+  the current directory.
 - Key transparency surfaces unauthorized key rotations.
 
 SEMP does not claim recovery from endpoint compromise without user
 intervention. Endpoint compromise is the dominant residual risk and is
-acknowledged as such.
+acknowledged as such. The mandatory-rotation rule ensures that
+detection-plus-revocation is sufficient to end the adversary's
+ability to act as the user, limited only by how quickly the user
+detects and revokes.
 
 ### 3.8 Key Compromise Scenarios
 
@@ -495,9 +505,6 @@ The following are known gaps that future revisions of the specification
 are expected to address. Implementers and operators SHOULD treat them as
 caveats on the security claims.
 
-- **Multi-device provisioning and revocation flow.** Partially specified
-  (`CLIENT.md` section 2, `KEY.md` section 10). Open question: full
-  normative enrollment and revocation protocol.
 - **SMTP fallback wire format.** Implementer's choice, no interop
   specification. Open question: normative SMTP mapping.
 - **Cover traffic and timing unlinkability.** Envelope and recipient

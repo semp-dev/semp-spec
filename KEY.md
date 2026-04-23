@@ -750,40 +750,207 @@ or gate recovery secrets.
 
 ## 10. Multi-Device Support
 
-### 10.1 Device Registration
+Every SEMP account MAY hold more than one device. Devices are
+categorized by authority:
+
+- **Full-access devices** share the user's identity private key and
+  encryption private key history. A full-access device can compose,
+  receive, manage block lists and keys, authorize new devices, and
+  revoke existing devices. The first device enrolled for an account is
+  a full-access device by default.
+- **Delegated devices** hold their own device key pair and a scoped
+  certificate issued by a full-access device. A delegated device
+  operates within the restricted permission scope of its certificate
+  (section 10.3) and does not hold the user's identity private key.
+
+The multi-device model is shared-identity with per-device authentication
+keys: every full-access device holds the user's identity private key so
+it can compose envelopes and sign identity proofs; each device also
+holds its own `device` key pair for authentication to the home server
+and for signing device-scoped artifacts (registration, revocation,
+directory records, delegated certificates, Shamir share records, and
+device-sync messages).
+
+### 10.1 Device Registration Message
+
+A device is registered by submitting a signed `SEMP_DEVICE` record to
+the account's home server. The registration record names the new
+device, carries its device public key, and is signed by an existing
+full-access device that authorized the enrollment.
 
 ```json
 {
     "type": "SEMP_DEVICE",
     "step": "register",
     "version": "1.0.0",
-    "user_id": "user@example.com",
-    "device_id": "device-ulid",
+    "user_id": "alice@example.com",
+    "device_id": "01JDEVICE00000000000000NEW0",
     "device_name": "Alice's Laptop",
     "device_type": "computer",
-    "device_public_key": "base64-device-public-key",
+    "device_public_key": "base64-ed25519-device-public-key",
+    "device_identity_pubkey_algorithm": "ed25519",
+    "enrolled_at": "2026-04-23T10:00:00Z",
+    "role": "full_access",
+    "certificate_id": null,
     "authorization": {
         "method": "qr_scan",
-        "proof_of_possession": "signature-from-existing-device-over-new-device-key"
+        "authorizing_device_id": "01JDEVICE00000000000000OLD0",
+        "authorizing_signature": {
+            "algorithm": "ed25519",
+            "key_id": "authorizing-device-key-fingerprint",
+            "value": "base64-signature"
+        }
     },
-    "timestamp": "2025-06-10T19:49:15Z"
+    "signature": {
+        "algorithm": "ed25519",
+        "key_id": "user-identity-key-fingerprint",
+        "value": "base64-signature"
+    }
 }
 ```
 
-### 10.2 Synchronization Flow
+| Field                              | Type             | Required | Description                                                                                             |
+|------------------------------------|------------------|----------|---------------------------------------------------------------------------------------------------------|
+| `type`                             | `string`         | Yes      | MUST be `"SEMP_DEVICE"`.                                                                                |
+| `step`                             | `string`         | Yes      | MUST be `"register"`.                                                                                   |
+| `version`                          | `string`         | Yes      | Record format version (semver).                                                                         |
+| `user_id`                          | `string`         | Yes      | The account's SEMP address, canonicalized per `ENVELOPE.md` section 2.3.                                |
+| `device_id`                        | `string`         | Yes      | Stable identifier for the new device. ULID RECOMMENDED. MUST NOT match any existing registered device. |
+| `device_name`                      | `string`         | Yes      | User-facing device name. Not protocol-significant; shown in device-management UIs.                      |
+| `device_type`                      | `string`         | Yes      | Short device category label (for example `computer`, `phone`, `tablet`, `server`). Advisory only.        |
+| `device_public_key`                | `string`         | Yes      | Base64-encoded device identity public key.                                                              |
+| `device_identity_pubkey_algorithm` | `string`         | Yes      | Signature algorithm identifier. MUST match an algorithm supported by the account's negotiated suite.    |
+| `enrolled_at`                      | `string`         | Yes      | ISO 8601 UTC enrollment timestamp.                                                                      |
+| `role`                             | `string`         | Yes      | One of `full_access`, `delegated`. `delegated` requires `certificate_id`; `full_access` requires `null`. |
+| `certificate_id`                   | `string \| null` | Yes      | For `delegated`: `device_id` matches a certificate issued per section 10.3; the field echoes the certificate's `device_id`. For `full_access`: `null`. |
+| `authorization`                    | `object`         | Yes      | Proof of user consent by an existing full-access device. See section 10.2.                              |
+| `signature`                        | `object`         | Yes      | Signature by the user's identity private key, over the canonical record bytes with `signature.value` set to `""`, prefixed with `SEMP-DEVICE-REGISTER:` per `ENVELOPE.md` section 4.3. |
 
-1. New device generates its own device key pair.
-2. User authorizes the new device from an existing trusted device via QR code
-   scan, verification code, or equivalent out-of-band confirmation.
-3. Existing device encrypts the user's identity key under the new device's
-   public key.
-4. New device receives and decrypts the identity key.
-5. New device generates its own encryption key pair and publishes it.
-6. All registered devices are updated with the new device's information.
+The home server MUST verify:
 
-The authorization proof in step 2 MUST be a signature from an existing trusted
-device over the new device's public key. A device registration without a valid
-authorization proof MUST be rejected by the home server.
+1. `signature` against the user's current identity public key.
+2. `authorization.authorizing_signature` against the authorizing
+   device's device public key, and that the authorizing device is
+   currently registered as `full_access` in the device directory
+   (section 10.6).
+3. `device_id` is not already present in the device directory.
+4. `role` and `certificate_id` are consistent.
+5. The `authorization.method` is one the server supports (section 10.2).
+6. For `delegated` role: a valid scoped certificate for the named
+   `certificate_id` is present and unexpired (section 10.3).
+
+If all checks succeed, the home server appends the new device to the
+device directory, publishes a new directory revision per section 10.6,
+and returns `step: accepted` to the registering party. Failure surfaces
+a structured rejection reason code per `ERRORS.md`.
+
+### 10.2 Enrollment Flow
+
+Device enrollment is the process of taking a fresh device (no prior
+account state) through authorization, identity-key transfer (for
+full-access enrollments), and registration publication. The flow is
+driven jointly by the new device (NEW), an existing full-access device
+(EXISTING), and the home server (HS).
+
+#### 10.2.1 Authorization Methods
+
+The authorization step proves that the user consents to add NEW to
+the account. A conformant implementation MUST support both of the
+following methods and let the user choose:
+
+- `qr_scan`: NEW displays a QR code containing its device public key
+  and a fresh 32-byte nonce. EXISTING scans the QR code.
+- `numeric_code`: NEW displays a 6-digit code derived from the first
+  20 bits of `SHA-256(device_public_key || nonce)` (encoded as a zero-
+  padded decimal). The user reads the code into EXISTING; EXISTING
+  recomputes the same hash after receiving the underlying public key
+  over a local pairing channel (Bluetooth, local HTTP, USB) and
+  compares.
+
+Either method suffices. `qr_scan` is RECOMMENDED as the default path.
+`numeric_code` exists as a fallback for devices without cameras or
+displays capable of rendering QR codes. Additional methods MAY be
+defined by future revisions; implementations MUST NOT enroll a device
+via a method EXISTING does not support.
+
+The nonce MUST be freshly generated on every enrollment attempt and
+MUST NOT be reused. Stale nonces prevent replay of captured QR codes.
+
+#### 10.2.2 Flow Sequence
+
+For full-access enrollment:
+
+1. **NEW**: generate device key pair (`K_device_new`). Generate 32-byte
+   `enroll_nonce`. Display QR and 6-digit numeric code simultaneously.
+2. **EXISTING**: scan QR or receive pubkey over local channel and user
+   enters numeric code. Verify the pubkey/code correspondence.
+3. **EXISTING**: construct `SEMP_DEVICE` record per section 10.1,
+   signing `authorization.authorizing_signature` with the existing
+   device's device private key over the canonical bytes of
+   `device_id || device_public_key || enrolled_at || enroll_nonce`,
+   domain-separated with `SEMP-DEVICE-AUTHORIZE:`.
+4. **EXISTING**: sign the outer `signature` field with the user's
+   identity private key per section 10.1.
+5. **EXISTING**: transmit to NEW, over the local pairing channel, a
+   sealed bundle containing:
+   - The finalized registration record.
+   - The user's identity private key, wrapped under `K_device_new` per
+     the KEM of the account's negotiated suite.
+   - The user's encryption private key history, wrapped under
+     `K_device_new`.
+   - A snapshot of the account's block list.
+6. **NEW**: unwrap the identity private key and encryption key history
+   with `K_device_new`. Verify that the wrapped identity pubkey matches
+   the user's currently published identity key. If not, abort with
+   `identity_mismatch` and notify the user of a probable MITM attempt.
+7. **NEW**: submit the registration record to HS per section 10.1.
+8. **HS**: verify and publish per section 10.1. HS publishes a new
+   `SEMP_DEVICE_DIRECTORY` revision (section 10.6) with NEW included.
+9. **EXISTING**: receives the updated directory and records NEW as
+   enrolled in local state.
+
+For delegated enrollment (scoped device cert), step 5 omits the
+identity-private-key and encryption-key-history wrapping; NEW receives
+only the certificate and continues with the scope authorized by that
+certificate (section 10.3).
+
+#### 10.2.3 Enrollment Window
+
+EXISTING MUST treat the enrollment as valid only if the outer
+`signature` is produced within 5 minutes of `enroll_nonce` generation.
+HS MUST reject registration records whose `enrolled_at` is more than
+15 minutes before the submission time (absolute skew accounts for
+clock-skew bounds in `CONFORMANCE.md` section 9.3).
+
+#### 10.2.4 MITM Protection
+
+The `qr_scan` path binds the authorization signature to the new
+device's public key, carried in the QR code. An attacker who
+intercepts the QR-derived bytes over an untrusted medium cannot
+substitute a different `device_public_key`; substitution would fail
+verification in step 6 because the identity-key wrapping is bound to
+`K_device_new` and the attacker does not hold the matching private
+key.
+
+The `numeric_code` path assumes a low-bandwidth but user-observable
+channel (read aloud, typed) for the 6-digit value. The 20-bit
+equivalent entropy MAY be brute-forced offline; real protection comes
+from the user confirming that EXISTING and NEW display the same code
+in real time, which an online active attacker cannot satisfy.
+
+Users MUST be instructed that any device they authorize will receive
+the account's identity private key. Enrollment is not delegation;
+full-access enrollments transfer full account authority to NEW.
+
+#### 10.2.5 Enrollment Failure Recovery
+
+If any step fails after step 4 but before step 8, the identity key
+material wrapped under `K_device_new` is not yet in the account's
+device directory and is not in use. NEW MUST erase
+`K_device_new` and any received key material. A fresh enrollment
+attempt generates a new key pair and starts over. Partial registrations
+that reach HS and are rejected MUST NOT appear in the device
+directory; rejected registrations do not create a residual state.
 
 ### 10.3 Scoped Device Certificates
 
@@ -1372,6 +1539,252 @@ To detect unauthorized key use, all key operations SHOULD be logged locally
 on each registered device. Usage records include the key ID, device ID,
 timestamp, and purpose. Clients SHOULD surface anomalous key usage (such as
 a key being used from an unrecognized device) to the user as an alert.
+
+### 10.5 Device Revocation
+
+A device is removed from the account's effective set by publishing a
+signed `SEMP_DEVICE_REVOCATION` record. Revocation terminates the
+device's ability to authenticate to the home server, issue scoped
+certificates, authorize new enrollments, or act on the account in any
+capacity. Revocation is monotonic: once published, a revocation record
+MUST be retained indefinitely (same rule as key revocation per
+section 8.3).
+
+#### 10.5.1 Revocation Record Schema
+
+```json
+{
+    "type": "SEMP_DEVICE_REVOCATION",
+    "version": "1.0.0",
+    "user_id": "alice@example.com",
+    "device_id": "01JDEVICE00000000000000REV0",
+    "reason": "key_compromise",
+    "revoked_at": "2026-04-23T10:00:00Z",
+    "revoked_by_device_id": "01JDEVICE00000000000000OTH0",
+    "replacement_device_id": null,
+    "signature": {
+        "algorithm": "ed25519",
+        "key_id": "user-identity-key-fingerprint",
+        "value": "base64-signature"
+    }
+}
+```
+
+| Field                    | Type             | Required | Description                                                                                      |
+|--------------------------|------------------|----------|--------------------------------------------------------------------------------------------------|
+| `type`                   | `string`         | Yes      | MUST be `"SEMP_DEVICE_REVOCATION"`.                                                              |
+| `version`                | `string`         | Yes      | Record format version (semver).                                                                  |
+| `user_id`                | `string`         | Yes      | The account's SEMP address, canonicalized per `ENVELOPE.md` section 2.3.                         |
+| `device_id`              | `string`         | Yes      | Identifier of the device being revoked. MUST correspond to a device currently in the directory (section 10.6). |
+| `reason`                 | `string`         | Yes      | Revocation reason. See section 10.5.2.                                                           |
+| `revoked_at`             | `string`         | Yes      | ISO 8601 UTC revocation timestamp.                                                               |
+| `revoked_by_device_id`   | `string`         | Yes      | `device_id` of the device that signed the revocation. Authorizing authority rules in section 10.5.3. |
+| `replacement_device_id`  | `string \| null` | Yes      | For `reason: "superseded"`: the `device_id` that replaces this one. For other reasons: `null`.    |
+| `signature`              | `object`         | Yes      | Signature by the user's identity private key, over canonical bytes with `signature.value` set to `""`, prefixed with `SEMP-DEVICE-REVOCATION:` per `ENVELOPE.md` section 4.3. |
+
+#### 10.5.2 Revocation Reasons
+
+| Reason           | Meaning                                                                                                    |
+|------------------|------------------------------------------------------------------------------------------------------------|
+| `key_compromise` | The device's key material is known or suspected to be under adversary control. Triggers identity-key rotation per section 10.5.5. |
+| `lost`           | The device is physically lost or unreachable but no evidence of active compromise. Device certificate is revoked; identity key is NOT automatically rotated. |
+| `retired`        | The user is decommissioning the device voluntarily (upgrade, resale, disposal).                            |
+| `superseded`     | The device is being replaced by a specific new device. `replacement_device_id` names the replacement.      |
+
+Additional reasons MAY be defined by extensions using the namespace
+convention in `ERRORS.md` section 13.
+
+#### 10.5.3 Revocation Authority
+
+Any full-access device MAY revoke any other device of the account,
+including itself (self-revoke), and MAY revoke delegated devices
+unconditionally. A delegated device MUST NOT revoke any device other
+than itself; if a delegated device is not granted
+`devices.write` scope (section 10.3.3.2), its self-revoke submission
+MUST be rejected with `reason_code: "scope_exceeded"`.
+
+A compromised device that the user believes is still under adversary
+control SHOULD be revoked from another device rather than
+self-revoked, because the adversary could submit a contradictory
+record from the compromised device. Home servers MUST accept the
+first submitted revocation with a valid signature: later records for
+the same `device_id` MUST be ignored. The user is responsible for
+publishing the revocation before the adversary can; in practice the
+home server enforcing single-accept protects the user from the
+adversary reversing a published revocation.
+
+#### 10.5.4 Publication and Propagation
+
+Revocation records are published at the account's home server via the
+same mechanism as key revocations (section 8.3). The home server MUST:
+
+- Publish the revocation record at the user's key endpoint.
+- Increment the device directory revision (section 10.6) to remove
+  the revoked device from the active set.
+- Invalidate any active sessions associated with the revoked
+  `device_id` per `SESSION.md` section 2.5.
+- Reject any incoming authentication that presents the revoked
+  device's device key.
+
+Third-party domains that cache the user's device directory MUST
+invalidate their cache on learning of a revocation (same cache
+invalidation rules as section 12.3 for revoked keys).
+
+#### 10.5.5 Mandatory Identity-Key Rotation on Compromise
+
+A revocation with `reason: "key_compromise"` REQUIRES that the
+account's identity key and encryption key be rotated immediately.
+Because the revoked device held the shared identity private key, the
+adversary holds it too, and continued use of the same identity key
+leaves the adversary able to forge envelopes and authorize new
+devices.
+
+The full rotation procedure is:
+
+1. The revoking device generates a new identity key pair and a new
+   encryption key pair.
+2. The revoking device publishes the revocation record per
+   section 10.5.4 and, in the same operation, publishes a
+   successor record per `RECOVERY.md` section 7 linking the prior
+   identity key to the new one.
+3. The revoking device publishes the new identity and encryption
+   public keys via the account's key endpoint (`CLIENT.md` section
+   2.2).
+4. The revoking device publishes a revocation record for the prior
+   identity key per section 8.1, signed by the prior identity key
+   (which the revoking device still holds).
+5. Remaining full-access devices receive the new identity and
+   encryption private keys over the device-sync channel
+   (`CLIENT.md` section 4.5.4) and MUST rotate their local state
+   accordingly.
+
+If the revoking device is itself the only remaining full-access
+device, steps 1 through 4 still apply; there are no remaining
+devices to receive the new key material via sync, and subsequent
+enrollments (section 10.2) transfer the new key material.
+
+Revocations with any other reason (`lost`, `retired`, `superseded`)
+do NOT trigger identity-key rotation by default. The user MAY
+nonetheless initiate rotation at any time through the successor-record
+flow in `RECOVERY.md` section 7.
+
+A conformant implementation MUST refuse to complete a `key_compromise`
+revocation without simultaneously completing the identity-key
+rotation. A partial revocation (device cert revoked, identity key
+not rotated) leaves the account vulnerable and is a specification
+violation.
+
+### 10.6 Device Directory Record
+
+The device directory is the signed list of all active devices on the
+account. It is the authoritative source for "which devices currently
+represent this user". Correspondents, the account's own devices, and
+Shamir recovery manifests (`RECOVERY.md` section 5.2) reference the
+directory when validating device-scoped signatures.
+
+#### 10.6.1 Directory Record Schema
+
+```json
+{
+    "type": "SEMP_DEVICE_DIRECTORY",
+    "version": "1.0.0",
+    "user_id": "alice@example.com",
+    "revision": 17,
+    "issued_at": "2026-04-23T10:00:00Z",
+    "devices": [
+        {
+            "device_id": "01JDEVICE00000000000000PRM0",
+            "device_public_key": "base64-ed25519-device-public-key",
+            "device_identity_pubkey_algorithm": "ed25519",
+            "role": "full_access",
+            "certificate_id": null,
+            "enrolled_at": "2025-12-01T08:00:00Z",
+            "device_name": "Alice's Laptop",
+            "device_type": "computer"
+        },
+        {
+            "device_id": "01JDEVICE00000000000000PHN0",
+            "device_public_key": "base64-ed25519-device-public-key",
+            "device_identity_pubkey_algorithm": "ed25519",
+            "role": "full_access",
+            "certificate_id": null,
+            "enrolled_at": "2026-01-15T12:30:00Z",
+            "device_name": "Alice's Phone",
+            "device_type": "phone"
+        },
+        {
+            "device_id": "01JDEVICE00000000000000BOT0",
+            "device_public_key": "base64-ed25519-device-public-key",
+            "device_identity_pubkey_algorithm": "ed25519",
+            "role": "delegated",
+            "certificate_id": "01JCERT000000000000000SPAM",
+            "enrolled_at": "2026-03-01T09:00:00Z",
+            "device_name": "Spam Filter",
+            "device_type": "server"
+        }
+    ],
+    "signature": {
+        "algorithm": "ed25519",
+        "key_id": "user-identity-key-fingerprint",
+        "value": "base64-signature"
+    }
+}
+```
+
+| Field                                          | Type      | Required | Description                                                                                     |
+|------------------------------------------------|-----------|----------|-------------------------------------------------------------------------------------------------|
+| `type`                                         | `string`  | Yes      | MUST be `"SEMP_DEVICE_DIRECTORY"`.                                                              |
+| `version`                                      | `string`  | Yes      | Record format version (semver).                                                                 |
+| `user_id`                                      | `string`  | Yes      | The account's SEMP address, canonicalized.                                                      |
+| `revision`                                     | `integer` | Yes      | Monotonically increasing revision number. Consumers MUST reject a fetched directory whose `revision` is less than a previously cached one for the same `user_id`. |
+| `issued_at`                                    | `string`  | Yes      | ISO 8601 UTC issuance timestamp.                                                                |
+| `devices`                                      | `array`   | Yes      | One entry per active device. Order within the array is not semantic; consumers MUST sort by `device_id` before comparison. |
+| `devices[i].device_id`                         | `string`  | Yes      | Stable device identifier.                                                                       |
+| `devices[i].device_public_key`                 | `string`  | Yes      | Base64-encoded device identity public key.                                                      |
+| `devices[i].device_identity_pubkey_algorithm`  | `string`  | Yes      | Signature algorithm identifier.                                                                 |
+| `devices[i].role`                              | `string`  | Yes      | One of `full_access`, `delegated`.                                                              |
+| `devices[i].certificate_id`                    | `string \| null` | Yes | For `delegated`: the scoped certificate's identifier; for `full_access`: `null`.                |
+| `devices[i].enrolled_at`                       | `string`  | Yes      | ISO 8601 UTC enrollment timestamp.                                                              |
+| `devices[i].device_name`                       | `string`  | Yes      | User-facing name.                                                                               |
+| `devices[i].device_type`                       | `string`  | Yes      | Device category label.                                                                          |
+| `signature`                                    | `object`  | Yes      | Signature by the user's identity private key over the canonical record bytes with `signature.value` set to `""`, prefixed with `SEMP-DEVICE-DIRECTORY:` per `ENVELOPE.md` section 4.3. |
+
+#### 10.6.2 Publication
+
+The home server MUST expose the device directory at the account's
+key endpoint as part of the response for `key_types` that includes
+`"device"` in the `SEMP_KEYS` request (section 4). The home server
+MUST serve the most recent directory revision; stale directories
+beyond the advertised TTL MUST NOT be returned.
+
+The directory is versioned. Every enrollment (section 10.1) and
+revocation (section 10.5) causes the home server to publish a new
+directory revision. A monotonically increasing `revision` field
+allows consumers to detect rollback attempts: a home server that
+serves a directory with `revision` less than a previously observed
+one for the same `user_id` is presumed to be attempting an
+equivocation and MUST be treated with the same suspicion rules as a
+key-substitution attempt (`TRANSPARENCY.md`).
+
+#### 10.6.3 Consumer Verification
+
+A consumer of the device directory (another user's home server,
+a correspondent's client, the Shamir recovery manifest validator)
+MUST verify:
+
+- `signature` against the user's identity public key published at
+  the same key endpoint.
+- `revision` is greater than or equal to any previously cached
+  revision for this `user_id`.
+- Every `devices[i].device_id` is unique within the array.
+- For entries with `role: "delegated"`, the scoped certificate with
+  `certificate_id` is published and unexpired.
+
+A consumer MUST treat a device not present in the directory as
+unauthorized. A signature produced by a device key not present in the
+current directory, for any device-scoped artifact (scoped
+certificate, recovery share, delivery-disposition marker,
+device-sync message), MUST be rejected.
 
 ---
 

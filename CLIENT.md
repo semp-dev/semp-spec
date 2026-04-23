@@ -91,22 +91,44 @@ Clients authenticate to their home server using the handshake defined in
 
 ### 2.2 Key Registration
 
-On first launch or new device addition:
+#### 2.2.a First-Device Registration
 
-1. The client generates an identity key pair (Ed25519) if this is the user's
-   first device.
+For the account's very first device (no existing device directory
+entry for the account):
+
+1. The client generates an identity key pair (Ed25519).
 2. The client generates an encryption key pair (suite-specific KEM).
-3. The client generates a device key pair per `KEY.md` section 10.1.
+3. The client generates its device key pair per `KEY.md` section 10.1.
 4. The client registers with the home server via `POST` to the URL
    advertised as `endpoints.register` in the server's configuration
    document (`DISCOVERY.md` section 3.1.1), submitting its public keys
    and account credentials.
-5. The server stores the public keys and returns its domain signing and
-   encryption keys. The client caches these locally for handshake verification.
+5. The server stores the public keys, creates the initial device
+   directory record (`KEY.md` section 10.6) with this device as the
+   sole full-access entry, and returns its domain signing and
+   encryption keys. The client caches the server keys locally for
+   handshake verification.
 
-The identity private key MUST NOT transit the network. The server receives
-only the public key. Private keys are generated on the client device and
-MUST never leave it.
+Account-credential semantics (password, invite token, administratively
+provisioned identity) are operator policy and out of scope for this
+specification.
+
+#### 2.2.b Subsequent-Device Enrollment
+
+For every device after the first, the client MUST follow the
+enrollment flow in `KEY.md` section 10.2 rather than the first-device
+flow above. The new device does not generate a fresh identity key;
+it receives the existing identity private key from an authorizing
+full-access device. The home server MUST reject a fresh
+`endpoints.register` submission that names an account already
+present in the device directory: subsequent devices enroll via
+section 10.2, not via re-registration.
+
+The identity private key MUST NOT transit the network in plaintext.
+In first-device registration the server receives only public key
+material. In subsequent-device enrollment the identity private key
+travels between devices only in KEM-wrapped form per `KEY.md`
+section 10.2.2 step 5, carried over a local pairing channel.
 
 #### 2.2.1 Registration Endpoint
 
