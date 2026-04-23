@@ -215,7 +215,7 @@ keeps the reporting relationship within the existing trust boundary.
 | `harassment`        | Targeted abusive or threatening content.                             |
 | `phishing`          | Impersonation or credential harvesting attempts.                     |
 | `malware`           | Messages containing or linking to malicious software.                |
-| `protocol_abuse`    | Malformed envelopes, enumeration, handshake flooding, unreasonable challenge issuance (section 8.3.6), or similar. |
+| `protocol_abuse`    | Malformed envelopes, enumeration, handshake flooding, unreasonable challenge issuance (section 8.3.3), or similar. |
 | `impersonation`     | Sender falsely represents their identity or affiliation.             |
 | `other`             | Abuse not covered by defined categories.                             |
 
@@ -458,19 +458,23 @@ Response format:
 
 ```json
 {
-    "type": "SEMP_TRUST_OBSERVATIONS",
-    "version": "1.0.0",
     "subject": "observed-domain.com",
     "observations": [
         { }
-    ],
-    "signature": {
-        "algorithm": "ed25519",
-        "key_id": "observer-domain-key-fingerprint",
-        "value": "base64-signature-over-response"
-    }
+    ]
 }
 ```
+
+Each element of `observations` is a complete `SEMP_TRUST_OBSERVATION`
+record as defined in section 4.2, carrying its own `signature` field
+over the observer's domain key. The response body itself is not
+separately signed: the per-record signatures are sufficient to
+authenticate each observation, and the fetching server MUST verify
+every record's signature before use regardless of how the response was
+transmitted. The top-level `subject` field is an integrity hint that
+lets the consumer cross-check the URL-indicated subject against the
+returned contents; it is not independently authenticated and MUST NOT
+be relied upon in place of verifying each record.
 
 A server MAY publish multiple non-overlapping observation records for the same
 subject, covering different time windows.
@@ -995,10 +999,20 @@ Reputation accrues from sustained, observed behavior.
 
 ### 8.3 Proof of Work
 
-SEMP defines a standard proof-of-work challenge-response mechanism for use
-during the handshake. PoW imposes a per-envelope computational cost on the
-sender that is negligible for low-volume senders and prohibitive for bulk
-senders.
+SEMP defines `proof_of_work` as a challenge type usable by receiving servers
+to impose a per-envelope computational cost on the sender. The cost is
+negligible for low-volume senders and prohibitive for bulk senders.
+
+The `proof_of_work` challenge type, its parameter schema, its solution
+submission format, and the verification procedure are defined normatively
+in `HANDSHAKE.md` section 2.2a.2. The difficulty cap of 28 and the minimum
+expiry floor table are likewise defined there. The challenge and solution
+are carried as sub-structures of the `SEMP_HANDSHAKE` message during the
+handshake (`step: "challenge"` and `step: "challenge_response"`
+respectively) and as fields of a `policy_forbidden` rejection during
+first-contact gating (`DELIVERY.md` section 6.4, `HANDSHAKE.md` section
+2.2a.3). This section specifies only the reputation-facing considerations
+that apply when a server chooses to require `proof_of_work`.
 
 PoW is not scoped to zero-reputation or new domains. Any receiving server MAY
 require PoW from any sender as a matter of operator policy, including
@@ -1008,34 +1022,7 @@ subject to additional friction. The domain age gate (section 2.1) is the most
 common trigger, but it is not the only one. PoW is a general-purpose cost
 imposition tool available across the full reputation spectrum.
 
-#### 8.3.1 Challenge
-
-A receiving server that requires PoW MUST issue a challenge in its handshake
-response before accepting envelopes. The challenge format:
-
-```json
-{
-    "type": "SEMP_POW_CHALLENGE",
-    "version": "1.0.0",
-    "id": "challenge-ulid",
-    "algorithm": "sha256",
-    "prefix": "base64-random-bytes",
-    "difficulty": 20,
-    "expires": "2025-06-10T20:35:00Z"
-}
-```
-
-| Field        | Type     | Required | Description                                                         |
-|--------------|----------|----------|---------------------------------------------------------------------|
-| `type`       | `string` | Yes      | MUST be `"SEMP_POW_CHALLENGE"`                                      |
-| `version`    | `string` | Yes      | SEMP protocol version (semver)                                      |
-| `id`         | `string` | Yes      | Unique challenge identifier. ULID RECOMMENDED.                      |
-| `algorithm`  | `string` | Yes      | Hash algorithm. MUST be `sha256`. Future versions MAY add others.   |
-| `prefix`     | `string` | Yes      | Base64-encoded random bytes. Minimum 16 bytes of entropy.           |
-| `difficulty` | `integer`| Yes      | Number of leading zero bits required in the solution hash.          |
-| `expires`    | `string` | Yes      | ISO 8601 UTC timestamp. Solution MUST be submitted before expiry.   |
-
-#### 8.3.2 Difficulty Calibration
+#### 8.3.1 Difficulty Calibration
 
 Difficulty is expressed as a number of leading zero bits required in the
 SHA-256 hash of the solution. Each additional bit doubles the expected
@@ -1076,54 +1063,7 @@ Suggested difficulty by condition:
 | Established domain, `hostile` assessment         | 24 to 28             |
 | Operator policy (any domain)                     | Operator-configured, capped at 28 |
 
-#### 8.3.3 Solution
-
-The sender computes a solution by finding a nonce such that:
-
-```
-SHA-256(prefix || ":" || challenge_id || ":" || nonce)
-```
-
-produces a hash with at least `difficulty` leading zero bits. The nonce is an
-arbitrary byte string chosen by the sender. The solution is submitted as:
-
-```json
-{
-    "type": "SEMP_POW_SOLUTION",
-    "version": "1.0.0",
-    "challenge_id": "challenge-ulid",
-    "nonce": "base64-encoded-nonce",
-    "hash": "hex-encoded-sha256-hash"
-}
-```
-
-| Field          | Type     | Required | Description                                              |
-|----------------|----------|----------|----------------------------------------------------------|
-| `type`         | `string` | Yes      | MUST be `"SEMP_POW_SOLUTION"`                            |
-| `version`      | `string` | Yes      | SEMP protocol version (semver)                           |
-| `challenge_id` | `string` | Yes      | The `id` from the corresponding challenge.               |
-| `nonce`        | `string` | Yes      | Base64-encoded nonce that produces the valid hash.       |
-| `hash`         | `string` | Yes      | Hex-encoded SHA-256 hash of the full preimage.           |
-
-#### 8.3.4 Verification
-
-The receiving server verifies the solution by:
-
-1. Confirming the `challenge_id` matches an issued, unexpired challenge.
-2. Recomputing `SHA-256(prefix || ":" || challenge_id || ":" || nonce)`.
-3. Confirming the result matches the submitted `hash`.
-4. Confirming the hash has at least `difficulty` leading zero bits.
-
-A solution that fails any of these checks MUST be rejected. A challenge that
-has expired MUST NOT be accepted even with a valid solution; the sender must
-request a new challenge.
-
-Each challenge MUST be single-use. The receiving server MUST record used
-challenge IDs and reject duplicate submissions. Challenge IDs MAY be pruned
-after their expiry time plus the clock skew tolerance defined in
-`CONFORMANCE.md` section 9.3.1.
-
-#### 8.3.5 PoW and Reputation
+#### 8.3.2 PoW and Reputation
 
 A valid PoW solution does not grant trust. It grants permission to proceed with
 the handshake. The sender's envelope is still subject to normal delivery policy,
@@ -1132,7 +1072,7 @@ rate limiting, and reputation evaluation.
 Servers MUST NOT treat PoW completion as evidence of legitimacy. A bulk spammer
 with sufficient compute can satisfy PoW, but doing so at scale is expensive.
 
-#### 8.3.6 Challenge Issuance Observations
+#### 8.3.3 Challenge Issuance Observations
 
 A server that issues challenges MUST itself behave reasonably. The difficulty
 cap (`HANDSHAKE.md` section 2.2a.2) and the minimum expiry table bound each

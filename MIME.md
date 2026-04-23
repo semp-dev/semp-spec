@@ -1,18 +1,25 @@
-# SEMP Media Type and File Format
+# SEMP Media Types and File Formats
 
 **Sealed Envelope Messaging Protocol**  
 Status: Internet-Draft  
 Version: 0.2.0-draft  
-Related: `DESIGN.md`, `ENVELOPE.md`
+Related: `DESIGN.md`, `ENVELOPE.md`, `DELIVERY.md`, `RECOVERY.md`, `MIGRATION.md`
 
 ---
 
 ## Abstract
 
-This specification defines the media type registration and file format for
-SEMP envelopes. It establishes `application/semp-envelope` as the MIME type
-for SEMP envelopes on the wire and at rest, and `.semp` as the file extension
-for serialized envelope files.
+This specification defines media type registrations and file formats for
+user-facing SEMP artifacts. It establishes `application/semp-envelope` and
+`.semp` for envelope files, `application/semp-receipt` and `.semp-receipt`
+for signed delivery receipts, `application/semp-recovery` and
+`.semp-recovery` for recovery bundles, and `application/semp-migration`
+and `.semp-migration` for migration records.
+
+Only user-facing artifacts receive media types. Handshake traffic,
+discovery configuration documents, key records, and other live-fetch
+artifacts are JSON documents exchanged over HTTP with `application/json`
+or as payloads within a session, and do not define independent media types.
 
 ---
 
@@ -258,14 +265,189 @@ size limits defined in `ENVELOPE.md` and `EXTENSIONS.md` section 4.
 
 ---
 
-## 6. Relationship to Other Specifications
+## 6. Delivery Receipt Media Type
+
+### 6.1 MIME Type and File Extension
+
+| Attribute           | Value                            |
+|---------------------|----------------------------------|
+| MIME type           | `application/semp-receipt`       |
+| File extension      | `.semp-receipt`                  |
+| UTI (Apple)         | `org.semp.receipt`               |
+| File description    | "SEMP Delivery Receipt"          |
+
+A `.semp-receipt` file contains exactly one signed delivery receipt as
+defined in `DELIVERY.md` section 1.1.1, serialized as a UTF-8 JSON object.
+One receipt per file.
+
+### 6.2 Registration Template
+
+| Field                  | Value                                                    |
+|------------------------|----------------------------------------------------------|
+| Type name              | `application`                                            |
+| Subtype name           | `semp-receipt`                                           |
+| Required parameters    | None                                                     |
+| Optional parameters    | `version` — receipt format version (semver). Defaults to the version declared in the receipt's `version` field. |
+| Encoding considerations| 8bit. UTF-8 JSON object. Signature bytes are base64-encoded within the JSON structure. |
+| Security considerations| See section 6.4.                                         |
+| Interoperability considerations | The receipt format is defined in `DELIVERY.md` section 1.1.1.1 and is stable across SEMP versions per the extensibility rules in `DESIGN.md` section 2.5. |
+| Published specification| This document and `DELIVERY.md`.                         |
+| Fragment identifier    | None                                                     |
+
+### 6.3 File Semantics
+
+A `.semp-receipt` file is a portable evidence artifact. The holder of the
+file, together with the recipient domain's published signing key, can
+verify per `DELIVERY.md` section 1.1.1.7 that the recipient domain
+accepted a specific envelope at a specific time.
+
+Clients SHOULD offer an export action that writes a received receipt as a
+`.semp-receipt` file. Clients SHOULD offer a verification action that
+opens a `.semp-receipt` file and reports the receipt's signature status,
+recipient domain, accepted-at time, and envelope hash.
+
+A `.semp-receipt` file does not contain the envelope it attests to. A
+holder who also possesses the `.semp` envelope file can additionally
+confirm that the receipt's `envelope_hash` matches the canonical envelope
+bytes.
+
+### 6.4 Security Considerations
+
+A `.semp-receipt` file is a cryptographically binding statement by the
+recipient domain that it accepted the referenced envelope. Distribution
+of the file is uncontrolled by the recipient domain once issued. Operator
+liability considerations are documented in `DELIVERY.md` section 9.4.
+
+The receipt exposes the recipient domain, the canonical envelope hash,
+and the accepted-at time. It does not expose postmark contents, brief
+contents, enclosure contents, or any identifiers beyond the canonical
+hash. A holder who does not also hold the envelope cannot reconstruct
+what the envelope contained.
+
+---
+
+## 7. Recovery Bundle Media Type
+
+### 7.1 MIME Type and File Extension
+
+| Attribute           | Value                            |
+|---------------------|----------------------------------|
+| MIME type           | `application/semp-recovery`      |
+| File extension      | `.semp-recovery`                 |
+| UTI (Apple)         | `org.semp.recovery`              |
+| File description    | "SEMP Recovery Bundle"           |
+
+A `.semp-recovery` file contains one recovery bundle as defined in
+`RECOVERY.md`. The bundle is a user-exportable artifact used to restore
+identity key material after device loss.
+
+### 7.2 Registration Template
+
+| Field                  | Value                                                    |
+|------------------------|----------------------------------------------------------|
+| Type name              | `application`                                            |
+| Subtype name           | `semp-recovery`                                          |
+| Required parameters    | None                                                     |
+| Optional parameters    | `version` — recovery bundle format version (semver).     |
+| Encoding considerations| 8bit. UTF-8 JSON object. Binary fields are base64-encoded within the JSON structure. |
+| Security considerations| See section 7.4.                                         |
+| Interoperability considerations | The bundle format is defined in `RECOVERY.md`. |
+| Published specification| This document and `RECOVERY.md`.                         |
+| Fragment identifier    | None                                                     |
+
+### 7.3 File Semantics
+
+A recovery bundle contains key material protected by user-supplied
+passphrase derivation and, for server-assisted bundles, by server-held
+unlock material. Possession of the file alone is insufficient to recover
+the identity; the recovery flow requires additional inputs per
+`RECOVERY.md`.
+
+Clients SHOULD offer an export action that writes a recovery bundle as a
+`.semp-recovery` file. Clients SHOULD offer an import action that accepts
+a `.semp-recovery` file and initiates the restore flow.
+
+### 7.4 Security Considerations
+
+A `.semp-recovery` file contains protected key material. A holder with
+sufficient resources and access to additional recovery inputs (passphrase,
+Shamir shares, server cooperation) may be able to recover the associated
+identity keys. Users SHOULD store recovery bundles on encrypted media and
+SHOULD NOT transmit them over unauthenticated channels.
+
+The protection model and attack boundary for recovery bundles are defined
+in `RECOVERY.md`.
+
+---
+
+## 8. Migration Record Media Type
+
+### 8.1 MIME Type and File Extension
+
+| Attribute           | Value                            |
+|---------------------|----------------------------------|
+| MIME type           | `application/semp-migration`     |
+| File extension      | `.semp-migration`                |
+| UTI (Apple)         | `org.semp.migration`             |
+| File description    | "SEMP Migration Record"          |
+
+A `.semp-migration` file contains one migration record as defined in
+`MIGRATION.md` section 3. The record is a signed, publicly verifiable
+artifact linking an old address and identity key to a new address and
+identity key.
+
+### 8.2 Registration Template
+
+| Field                  | Value                                                    |
+|------------------------|----------------------------------------------------------|
+| Type name              | `application`                                            |
+| Subtype name           | `semp-migration`                                         |
+| Required parameters    | None                                                     |
+| Optional parameters    | `version` — migration record format version (semver).    |
+| Encoding considerations| 8bit. UTF-8 JSON object. Signature bytes are base64-encoded within the JSON structure. |
+| Security considerations| See section 8.4.                                         |
+| Interoperability considerations | The record format is defined in `MIGRATION.md` section 3.1. |
+| Published specification| This document and `MIGRATION.md`.                        |
+| Fragment identifier    | None                                                     |
+
+### 8.3 File Semantics
+
+A `.semp-migration` file is independently verifiable against the published
+domain signing keys of the old and new providers and the identity keys
+named in the record. Users MAY distribute the file out of band to
+correspondents who wish to verify continuity without performing a live
+fetch from the new provider's `migration` endpoint.
+
+Clients SHOULD offer an export action that writes a verified migration
+record as a `.semp-migration` file. Clients SHOULD offer an import action
+that opens a `.semp-migration` file and performs verification per
+`MIGRATION.md` section 7.1 before presenting the record to the user.
+
+### 8.4 Security Considerations
+
+A migration record is a public artifact by design. Its contents expose the
+old and new addresses, the old and new identity key identifiers, and the
+timestamps of the migration. Users requiring migration without public
+announcement MUST NOT use this mechanism, per `MIGRATION.md` section 10.1.
+
+Verification of a `.semp-migration` file establishes continuity of identity
+only if every signature in the record verifies against the appropriate
+published key. A file whose signatures do not verify MUST NOT be treated
+as authoritative.
+
+---
+
+## 9. Relationship to Other Specifications
 
 | Specification  | Relationship                                                                     |
 |----------------|----------------------------------------------------------------------------------|
-| `DESIGN.md`    | The envelope model (section 4) defines the conceptual structure that this file format serializes. |
+| `DESIGN.md`    | The envelope model (section 4) defines the conceptual structure that `.semp` files serialize. Evidence properties (section 4.5) define what each artifact proves. |
 | `ENVELOPE.md`  | Defines the envelope schema, field semantics, canonicalization, and encryption model that `.semp` files contain. |
-| `SESSION.md`   | Session key ephemerality (section 2) explains why `seal.session_mac` cannot be verified from a file at rest. |
-| `KEY.md`       | Domain key publication (section 2) enables seal verification on `.semp` files by third parties. |
+| `DELIVERY.md`  | Defines the signed delivery receipt schema (section 1.1.1) that `.semp-receipt` files contain. |
+| `RECOVERY.md`  | Defines the recovery bundle schema that `.semp-recovery` files contain.          |
+| `MIGRATION.md` | Defines the migration record schema (section 3) that `.semp-migration` files contain. |
+| `SESSION.md`   | Session key ephemerality (section 2) explains why `seal.session_mac` cannot be verified from a `.semp` file at rest. |
+| `KEY.md`       | Domain key publication (section 2) enables verification of `.semp`, `.semp-receipt`, and `.semp-migration` files by third parties. |
 | `TRANSPORT.md` | Transport bindings (section 4) use `application/semp-envelope` as the content type for envelope transmission. |
 | `EXTENSIONS.md`| Extension size limits (section 4) apply to envelopes within `.semp` files. |
 

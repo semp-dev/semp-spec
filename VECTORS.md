@@ -1242,6 +1242,19 @@ priority order:
   `CLIENT.md` §6.6): backoff schedule sanity, effective deadline
   computation, cancellation race with in-flight delivery, terminal
   state transitions.
+- **Signed delivery receipt** (`DELIVERY.md` §1.1.1): canonical
+  envelope-bytes digest, canonical receipt-bytes form with
+  `signature.value` blanked, `SEMP-DELIVERY-RECEIPT:` prefix
+  application, valid verification case, and failure cases (wrong
+  envelope hash, wrong `key_id`, modified `accepted_at`, signature by
+  non-recipient domain).
+- **User policy synchronization** (`DELIVERY.md` §7): signed
+  `SEMP_USER_POLICY` message with operations across multiple `kind`
+  values (`semp.dev/block`, `semp.dev/accepted_sender`,
+  `semp.dev/first_contact`), monotonic `policy_version` enforcement,
+  atomic rejection on unknown `kind` (`policy_kind_unsupported`),
+  verb+kind validity (`policy_op_invalid` for `add` on singleton
+  kinds), and stale-version rejection (`policy_version_stale`).
 - **Session resumption** (`HANDSHAKE.md` §2.8): ticket round-trip,
   resumption key derivation mixing `K_resumption` with fresh DH, and
   `resumption_failed` fallback cases.

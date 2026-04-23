@@ -774,7 +774,7 @@ An implementation advertising an extended or custom transport binding MUST:
 | `HANDSHAKE.md` | Transport declared in init `transport` field (section 2.2.1). Handshake timeout (section 6.6) bounds transport-level delays. |
 | `SESSION.md`   | TLS independence (section 5.5). Transport reconnection does not resume SEMP sessions. |
 | `CONFORMANCE.md` | Transport support requirement (section 9.2).                                      |
-| `ERRORS.md`    | Transport-layer status codes and connection failure conditions registered in section 11. |
+| `ERRORS.md`    | Transport-layer status codes and connection failure conditions registered in section 12. |
 
 ---
 

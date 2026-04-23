@@ -13,7 +13,7 @@ The SEMP delivery specification defines the three acknowledgment types a
 recipient server may return for any envelope delivery attempt, the obligations
 of the sending server in tracking and surfacing delivery outcomes, queuing and
 retry behavior for non-terminal outcomes, the block list structure and
-enforcement, and multi-device block list synchronization.
+enforcement, and multi-device synchronization of user policy state.
 
 ---
 
@@ -43,6 +43,151 @@ marks the delivery as confirmed and informs the sending user.
 A server MUST NOT return `delivered` for an envelope it does not intend to
 deliver to the recipient. Returning a false acknowledgment of delivery is
 prohibited.
+
+#### 1.1.1 Signed Delivery Receipt
+
+Every `delivered` acknowledgment MUST carry a signed delivery receipt. The
+receipt is a portable artifact the sending server retains and the sending
+user MAY export. It proves that a specific recipient domain accepted a
+specific envelope at a specific time.
+
+The receipt is not sender-requested and is not optional. Conditioning the
+receipt on a sender signal would constitute an observable difference between
+receipts-requested and receipts-not-requested code paths at the recipient
+server, and between deliveries that produced a receipt and deliveries that
+did not at the sending server.
+
+##### 1.1.1.1 Receipt Schema
+
+```json
+{
+    "type": "SEMP_DELIVERY_RECEIPT",
+    "version": "1.0.0",
+    "envelope_hash": {
+        "algorithm": "sha-256",
+        "value": "base64-digest-of-canonical-envelope-bytes"
+    },
+    "recipient_domain": "recipient.example",
+    "accepted_at": "2026-04-21T10:15:32Z",
+    "signature": {
+        "algorithm": "ed25519",
+        "key_id": "recipient-domain-key-fingerprint",
+        "value": "base64-signature"
+    }
+}
+```
+
+##### 1.1.1.2 Receipt Fields
+
+| Field              | Type     | Required | Description                                                                 |
+|--------------------|----------|----------|-----------------------------------------------------------------------------|
+| `type`             | `string` | Yes      | MUST be `"SEMP_DELIVERY_RECEIPT"`.                                          |
+| `version`          | `string` | Yes      | Receipt format version (semver).                                            |
+| `envelope_hash`    | `object` | Yes      | Hash of the canonical envelope bytes. See section 1.1.1.3.                  |
+| `recipient_domain` | `string` | Yes      | The recipient server's domain, as published in its discovery configuration. |
+| `accepted_at`      | `string` | Yes      | ISO 8601 UTC timestamp, second precision, of the recipient server's accept decision. |
+| `signature`        | `object` | Yes      | Recipient domain's signature over the receipt. See section 1.1.1.4.         |
+
+##### 1.1.1.3 Envelope Hash
+
+`envelope_hash.value` is the SHA-256 digest of the canonical envelope bytes as
+defined in `ENVELOPE.md` section 4.3. It is the same canonical form that
+`seal.signature` is computed over: lexicographically sorted keys at every
+level, no insignificant whitespace, and with `postmark.hop_count` excluded.
+`envelope_hash.algorithm` MUST be `"sha-256"` for version 1.0.0 receipts.
+
+The digest binds the receipt to a specific envelope. A verifier that holds
+both the receipt and the envelope reproduces the canonical bytes, computes
+the digest, and compares. A verifier that holds only the receipt cannot
+reconstruct the envelope but can confirm the receipt's signature and the
+asserted accepted-at time.
+
+##### 1.1.1.4 Receipt Signature
+
+The signature is produced by the recipient server's domain signing key as
+published per `KEY.md` section 2. `signature.key_id` MUST identify the exact
+key used, so that a verifier can select the correct published key without
+probing.
+
+The signed input is:
+
+```
+SEMP-DELIVERY-RECEIPT: || canonical_receipt_bytes
+```
+
+where `canonical_receipt_bytes` is the canonical UTF-8 JSON encoding of the
+receipt with `signature.value` set to `""` and all other fields at their
+final values, following the canonicalization rules in `ENVELOPE.md`
+section 4.3.
+
+The domain-separation prefix `SEMP-DELIVERY-RECEIPT:` is registered in
+`ENVELOPE.md` section 4.3.
+
+##### 1.1.1.5 Recipient Server Obligations
+
+The recipient server MUST produce and return the receipt inline in the
+`delivered` acknowledgment response, in a `receipt` field alongside the
+existing acknowledgment body:
+
+```json
+{
+    "acknowledgment": "delivered",
+    "receipt": { "type": "SEMP_DELIVERY_RECEIPT", "...": "..." },
+    "recipient_status": { "...": "..." }
+}
+```
+
+The recipient server MUST NOT issue a receipt for an envelope it has not
+actually accepted for delivery. The receipt is a non-repudiable artifact;
+its semantics are "this server committed to making this envelope available
+to its recipient." Issuing receipts for rejected, silent, or discarded
+envelopes is prohibited.
+
+The recipient server's clock skew relative to true UTC SHOULD be bounded to
+within 60 seconds. Operators SHOULD run NTP or an equivalent time source.
+Verifiers MUST NOT reject a receipt solely because `accepted_at` is within
+120 seconds of their own current time in either direction.
+
+##### 1.1.1.6 Sending Server Obligations
+
+The sending server MUST verify the receipt's signature against the recipient
+domain's published signing key before treating the acknowledgment as a
+terminal `delivered` outcome. A `delivered` acknowledgment that arrives
+without a verifiable receipt MUST be treated as a transport failure and
+retried per section 2.
+
+The sending server MUST store the receipt in a receipts archive keyed by
+`envelope_id`, separate from the queue state record in section 2.5. The
+sending server MUST retain receipts for at least 90 days after issuance.
+Operators MAY retain receipts longer as part of their retention policy.
+Receipt storage is distinct from queue state retention because receipts are
+evidence artifacts with long-lived value, whereas queue state records reveal
+correspondent-graph metadata and are pruned aggressively per section 2.5.
+
+The sending server MUST expose the receipt to the sending client through the
+delivery event notification defined in `CLIENT.md` section 6.5, so the
+client can retain its own copy and export it as a `.semp-receipt` file per
+`MIME.md`.
+
+##### 1.1.1.7 Receipt Verification by Third Parties
+
+A party that holds a `.semp-receipt` file and the corresponding envelope can
+verify end to end:
+
+1. Parse the receipt and confirm `type` is `"SEMP_DELIVERY_RECEIPT"`.
+2. Fetch the recipient domain's signing key by `signature.key_id` from the
+   endpoint advertised at `endpoints.domain_keys`
+   (`DISCOVERY.md` section 3.3).
+3. Reconstruct `canonical_receipt_bytes` and verify `signature.value` over
+   `SEMP-DELIVERY-RECEIPT: || canonical_receipt_bytes`.
+4. If the verifier also holds the envelope, compute the canonical envelope
+   digest per section 1.1.1.3 and compare against `envelope_hash.value`.
+
+A successful verification proves that the recipient domain acknowledged
+receipt of the envelope at `accepted_at`. It does not prove that the
+recipient user read the envelope, that the envelope was delivered to any
+specific device, or that the envelope was not subsequently deleted. Evidence
+properties are enumerated in `DESIGN.md` section 4.5.
 
 ### 1.2 Rejected
 
@@ -181,7 +326,7 @@ if any rule matches the sender, the status is included.
 ```
 
 Status updates are transmitted from the client to the home server as signed
-messages, following the same authentication model as block list sync messages
+messages, following the same authentication model as user policy sync messages
 (section 7). The server stores the current status and applies visibility rules
 at delivery time.
 
@@ -474,7 +619,7 @@ there for acknowledgment observations.
 A queued envelope sits at rest on the sending server for up to the effective
 deadline. The sending server MUST store queued envelopes encrypted at rest
 with a key not accessible to ordinary server processes, consistent with the
-block list storage requirement (section 7.3). The enclosure remains sealed to
+user policy storage requirement (section 7.5). The enclosure remains sealed to
 the recipient and MUST NOT be decrypted by the sending server at any point in
 the queue lifecycle.
 
@@ -821,8 +966,8 @@ following conditions hold:
 The recipient server MAY observe condition 1 from `brief.from` of
 outbound envelopes and condition 2 from `brief.in_reply_to` correlated
 with the originating envelope's stored metadata. Condition 3 requires a
-client-initiated update transmitted as a signed message in the same
-manner as block list sync messages (section 7.1).
+client-initiated update transmitted as a `SEMP_USER_POLICY` operation
+with `kind: "semp.dev/accepted_sender"` per section 7.
 
 The recipient server MUST treat a sender as known correspondent at the
 domain granularity (`brief.from`'s domain) by default. Operators MAY
@@ -933,34 +1078,53 @@ or deliveries. The new occupant is a distinct identity per
 
 ---
 
-## 7. Multi-Device Synchronization
+## 7. User Policy Synchronization
 
-A user's block list must be consistent across all their registered devices.
-Changes made on one device are propagated through the user's home server.
+A user's policy state (block list, accepted-senders list, first-contact
+policy, and any future rule kinds) must be consistent across all their
+registered devices. Changes made on one device are propagated through
+the user's home server.
+
+User policy updates share a single signed-update wire frame,
+`SEMP_USER_POLICY`, which carries a heterogeneous list of operations
+discriminated by a `kind` field. Each `kind` identifies a rule category
+whose entry schema is defined elsewhere (block entries in section 5,
+accepted-sender entries in section 7.3, first-contact policy in
+`KEY.md` section 3.2). New rule kinds MAY be added in subsequent
+protocol revisions or through registered extensions without introducing
+new message types.
 
 ### 7.1 Sync Message Schema
 
 ```json
 {
-    "type": "SEMP_BLOCK",
+    "type": "SEMP_USER_POLICY",
     "step": "update",
     "version": "1.0.0",
     "user_id": "user@example.com",
     "device_id": "originating-device-ulid",
-    "list_version": 42,
+    "policy_version": 42,
     "timestamp": "2025-06-10T20:17:10Z",
     "operations": [
         {
             "op": "add",
+            "kind": "semp.dev/block",
             "entry": {}
         },
         {
             "op": "remove",
+            "kind": "semp.dev/block",
             "entry_id": "block-entry-ulid"
         },
         {
             "op": "modify",
-            "entry_id": "block-entry-ulid",
+            "kind": "semp.dev/accepted_sender",
+            "entry_id": "accepted-sender-ulid",
+            "entry": {}
+        },
+        {
+            "op": "modify",
+            "kind": "semp.dev/first_contact",
             "entry": {}
         }
     ],
@@ -976,28 +1140,96 @@ Changes made on one device are propagated through the user's home server.
 
 - Updates MUST be signed by the originating device's key.
 - The home server MUST verify the signature before storing or propagating.
-- `list_version` is a monotonically increasing counter per user. Updates with
-  a lower version than the current known version MUST be rejected as stale.
+- `policy_version` is a monotonically increasing counter per user across
+  all rule kinds. Updates with a lower version than the current known
+  version MUST be rejected as stale.
 - Conflicts (two devices modifying the same entry concurrently) are resolved
-  by higher `list_version`. Equal versions resolve by later `timestamp`.
+  by higher `policy_version`. Equal versions resolve by later `timestamp`.
 - The home server propagates accepted updates to all other registered devices
   on next connection.
+- The `op` vocabulary is a closed set: `add`, `remove`, `modify`. New
+  verbs MUST NOT be introduced at the operation level. Extensibility is
+  achieved by registering new `kind` values.
+- The `kind` field MUST be a namespaced identifier per `EXTENSIONS.md`
+  section 2.3. The home server MUST reject operations whose `kind` it
+  does not recognize with `reason_code: "policy_kind_unsupported"`,
+  identifying the offending `kind`. A single unrecognized operation MUST
+  NOT cause unrelated operations in the same message to be applied; the
+  message MUST be rejected atomically.
+- A message MAY carry operations across multiple `kind` values. All
+  operations in a single message are applied atomically with respect to
+  `policy_version` advancement: either all operations apply and the
+  version advances, or none apply.
 
-### 7.3 Storage Requirements
+### 7.3 Defined Rule Kinds
 
-Block lists MUST be stored encrypted at rest. The server MUST NOT be able to
-read block list contents in plaintext. This protects the user in the event of
-a server compromise.
+This revision defines three rule kinds. The set extends over time.
+
+| `kind`                        | Entry schema defined in           | Entry shape    |
+|-------------------------------|-----------------------------------|----------------|
+| `semp.dev/block`              | Section 5.1 (block entry)         | Per-entity list item. |
+| `semp.dev/accepted_sender`    | Section 7.4                       | Per-entity list item. |
+| `semp.dev/first_contact`      | `KEY.md` section 3.2              | Singleton policy object. |
+
+For list-shaped kinds (`semp.dev/block`, `semp.dev/accepted_sender`),
+each `entry` is identified by a unique `id` (ULID RECOMMENDED), and
+`remove` and `modify` operations reference the entry by `entry_id`.
+
+For singleton-shaped kinds (`semp.dev/first_contact`), only `modify` is
+meaningful; `add` and `remove` MUST be rejected with
+`reason_code: "policy_op_invalid"`. The singleton's value is carried in
+the `entry` field.
+
+### 7.4 Accepted-Sender Entry Schema
+
+An accepted-sender entry allows an entity to bypass first-contact gating
+when sending to the owning recipient (`DELIVERY.md` section 6.4.1
+condition 3). The schema mirrors the block entry schema in section 5.1,
+without the `acknowledgment` field (accepted-sender entries do not
+control acknowledgment type) and without the `scope` field (acceptance
+applies to all envelopes from the entity).
+
+```json
+{
+    "id": "accepted-sender-ulid",
+    "entity": {
+        "type": "user",
+        "address": "trusted@example.com"
+    },
+    "created_at": "2025-06-10T20:17:10Z",
+    "expires_at": null,
+    "created_by_device_id": "device-ulid",
+    "extensions": {}
+}
+```
+
+| Field                  | Type           | Required | Description                                                        |
+|------------------------|----------------|----------|--------------------------------------------------------------------|
+| `id`                   | `string`       | Yes      | Unique identifier for this entry. ULID RECOMMENDED.                |
+| `entity`               | `object`       | Yes      | The entity whose first-contact gating is being bypassed. Same shape and granularity rules as block entry `entity` (section 5.3). |
+| `created_at`           | `string`       | Yes      | ISO 8601 UTC creation timestamp.                                   |
+| `expires_at`           | `string\|null` | No       | ISO 8601 UTC expiry. `null` for permanent entries.                 |
+| `created_by_device_id` | `string`       | Yes      | Device that created this entry.                                    |
+| `extensions`           | `object`       | No       | Application-defined metadata. Never transmitted externally.        |
+
+### 7.5 Storage Requirements
+
+User policy state MUST be stored encrypted at rest. The server MUST NOT
+be able to read policy contents in plaintext. This protects the user in
+the event of a server compromise and applies uniformly to all rule
+kinds.
 
 ---
 
 ## 8. Privacy Considerations
 
-### 8.1 Block List Confidentiality
+### 8.1 User Policy Confidentiality
 
-A user's block list is private. It reveals sensitive information: harassment
-situations, personal conflicts, security concerns. Servers MUST NOT disclose
-block list contents to any party other than the owning user's authenticated
+A user's policy state (block list, accepted-senders list, first-contact
+mode, and any other rule kinds per section 7) is private. It reveals
+sensitive information: harassment situations, personal conflicts,
+invite-only relationships, security concerns. Servers MUST NOT disclose
+policy contents to any party other than the owning user's authenticated
 devices.
 
 ### 8.2 Acknowledgment Type and Block Detection
@@ -1013,11 +1245,12 @@ means a delivery policy decision, the recipient is offline, or network failure.
 Implementations MUST maintain consistent timing in silent mode; timing
 variations that correlate with delivery policy would leak information.
 
-### 8.3 Block List as an Attack Surface
+### 8.3 User Policy as an Attack Surface
 
-Block list size or contents could be inferred through side channels.
-Implementations SHOULD use encrypted storage and MUST NOT expose block list
-size or contents through any observable interface.
+The size or contents of any rule list (block list, accepted-senders
+list, and any future list-shaped kinds) could be inferred through side
+channels. Implementations SHOULD use encrypted storage and MUST NOT
+expose list size or contents through any observable interface.
 
 ### 8.4 Status Disclosure
 
@@ -1047,17 +1280,46 @@ addresses from that domain.
 
 ### 9.2 Sync Integrity
 
-Block list sync messages MUST be signed by the originating device. The home
-server and receiving devices MUST verify signatures before applying updates.
-Unsigned or unverifiable sync messages MUST be rejected.
+User policy sync messages (`SEMP_USER_POLICY`, section 7) MUST be signed
+by the originating device. The home server and receiving devices MUST
+verify signatures before applying updates. Unsigned or unverifiable sync
+messages MUST be rejected.
 
 ### 9.3 Rate Limiting
 
-Servers SHOULD rate-limit block list operations per user to prevent abuse,
+Servers SHOULD rate-limit user policy operations per user to prevent abuse,
 for example automated mass operations that could be used to manipulate
 delivery behavior at scale.
 
-### 9.4 Delegated Client Scope Enforcement
+### 9.4 Receipt Non-Repudiation and Operator Liability
+
+A signed delivery receipt (section 1.1.1) is a non-repudiable statement by
+the recipient domain that it accepted a specific envelope at a specific
+time. This is a deliberate property: the sending user needs a portable
+artifact, independent of the sending server's queue state, to prove
+attempted correspondence reached the recipient domain.
+
+The property has consequences for recipient-domain operators:
+
+- A receipt is evidence that the recipient domain processed the envelope.
+  In jurisdictions with civil discovery or regulatory subpoena, the
+  recipient operator may be compelled to confirm receipt semantics. The
+  receipt does not expose envelope contents (the enclosure remains
+  sealed), but its existence is itself a data point.
+- A receipt MUST NOT be issued for an envelope the recipient server did
+  not in fact accept for delivery. Operators that return a spurious
+  `delivered` acknowledgment to suppress retry pressure are producing a
+  cryptographically binding false statement and are non-conformant.
+- Recipient operators cannot opt out of receipt issuance without becoming
+  non-conformant. Making receipts optional would create an observable
+  difference between receipt-issuing and non-issuing deliveries, which
+  would in turn leak policy state to senders.
+
+Operators concerned about the liability surface should apply their
+delivery policy upstream of the receipt: reject envelopes they do not
+wish to stand behind, rather than accepting and then issuing a receipt.
+
+### 9.5 Delegated Client Scope Enforcement
 
 The sender's home server enforces permission scopes on delegated clients at
 envelope submission time, before the envelope enters the delivery pipeline.
@@ -1082,6 +1344,8 @@ domain with a valid seal, regardless of which client composed it.
 | `DISCOVERY.md` | Internal route enforcement for same-domain multi-server delivery defined in section 5.4. Acknowledgment schema in section 5.4.1. |
 | `CLIENT.md` | Submission response and queued-state visibility to the client defined in section 6 of that document. |
 | `SESSION.md` | Federation session rekey behavior during retry defined in section 3. |
+| `MIME.md` | The delivery receipt media type `application/semp-receipt` and file extension `.semp-receipt` are registered in section 6. |
+| `DESIGN.md` | Evidence properties enumerated in section 4.5 bound what a delivery receipt proves. |
 
 ---
 

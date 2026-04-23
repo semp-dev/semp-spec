@@ -258,6 +258,42 @@ The enclosure contains the message body and any attachments. It is encrypted
 under the recipient's key. Content type negotiation occurs within the enclosure.
 The enclosure is never visible to routing infrastructure.
 
+### 4.5 Evidence Properties
+
+SEMP is explicit about what each party can and cannot prove from the
+artifacts they hold. An evidence claim is a statement a party can back with
+cryptographic verification against published keys, independent of any
+server's continued cooperation.
+
+The following table enumerates what the protocol establishes.
+
+| Party                                                       | What the artifacts prove                                                                                                                                                         | Relevant artifact                                                                 |
+|-------------------------------------------------------------|----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|-----------------------------------------------------------------------------------|
+| Sender                                                      | Authorship of the plaintext brief and enclosure by the sender's identity key.                                                                                                    | Inner signature over the enclosure plaintext (`ENVELOPE.md` section 6.5).         |
+| Sender                                                      | That the envelope was constructed and signed by the sender domain at the time indicated in the postmark.                                                                         | `seal.signature` over the canonical envelope (`ENVELOPE.md` section 4.3).         |
+| Sender, post-delivery                                       | That a specific recipient domain accepted the envelope identified by canonical hash at a specific time.                                                                          | Signed delivery receipt (`DELIVERY.md` section 1.1.1).                            |
+| Sender, during the delivery session                         | That the envelope was delivered within a valid federation session between specific sender and recipient domains.                                                                 | `seal.session_mac` (`ENVELOPE.md` section 4.4).                                   |
+| Recipient                                                   | That the envelope was signed by the claimed sender domain and, if the inner signature is present, by the claimed sender identity.                                                | `seal.signature` plus inner signature.                                            |
+| Third party holding a forwarded enclosure                   | Authorship of the forwarded plaintext by the original sender identity, independent of the forwarding path.                                                                       | Inner signature preserved across forwarding (`ENVELOPE.md` section 6.6.4).        |
+| Third party holding a `.semp` envelope file                 | That the envelope was produced by the claimed sender domain and has not been altered since.                                                                                      | `seal.signature` (`MIME.md` section 3.1).                                         |
+| Any party holding a migration record                        | That the old identity key, the new identity key, and (in cooperative mode) both provider domains co-authorized the address change.                                               | Migration record signatures (`MIGRATION.md` section 3).                           |
+
+The following claims the protocol deliberately does not establish.
+
+| Claim                                                                                       | Why not                                                                                                                                   |
+|---------------------------------------------------------------------------------------------|-------------------------------------------------------------------------------------------------------------------------------------------|
+| That the recipient user read the envelope.                                                  | Read status is an application concern and intentionally unobservable on the wire. See `DELIVERY.md` section 1.                            |
+| That the envelope was delivered to a specific device within the recipient's account.        | Per-device delivery events are private sync state (`CLIENT.md` section 4.5) and do not produce federation-visible artifacts.              |
+| That the envelope was not subsequently deleted by the recipient.                            | SEMP does not model retention at the recipient. A receipt attests to acceptance, not persistence.                                         |
+| That a recipient address does or does not exist on a domain.                                | Per-address existence is not observable by design. See section 2.7.                                                                       |
+| That a given sender or recipient was not also corresponding with other parties.             | Correspondent-graph privacy is a goal. Envelopes do not reveal other correspondents.                                                      |
+| That two envelopes are part of the same conversation to an outside observer.                | Thread identifiers live in the encrypted brief and are not visible to routing infrastructure.                                             |
+
+Implementations and higher-level protocols built on SEMP MUST NOT claim
+evidence properties beyond those enumerated above. In particular, a receipt
+MUST NOT be described to users as proof of read, proof of response, or proof
+of any application-layer action the recipient took.
+
 ---
 
 ## 5. Trust and Reputation Model

@@ -307,7 +307,7 @@ baseline challenge type and MUST be supported by all implementations.
 |-------------|-----------|----------|--------------------------------------------------------------------------|
 | `algorithm` | `string`  | Yes      | Hash algorithm. MUST be `sha256`.                                        |
 | `prefix`    | `string`  | Yes      | Base64-encoded random bytes. Minimum 16 bytes of entropy.                |
-| `difficulty`| `integer` | Yes      | Leading zero bits required in the solution hash. MUST be in the range 0 to 28 inclusive. See `REPUTATION.md` section 8.3.2. |
+| `difficulty`| `integer` | Yes      | Leading zero bits required in the solution hash. MUST be in the range 0 to 28 inclusive. See `REPUTATION.md` section 8.3.1. |
 
 **Difficulty cap.** A conformant server MUST NOT issue a `proof_of_work`
 challenge with `difficulty` greater than 28. A conformant handshake
@@ -508,7 +508,10 @@ If verification passes, the handshake continues to step 2 (`response`). If
 verification fails or the challenge has expired, the server MUST respond with
 `step=rejected` and `reason_code: "challenge_failed"`. Each challenge MUST be
 single-use: the server MUST reject a duplicate `challenge_id` submission even
-if the solution is valid.
+if the solution is valid. The server MUST record used `challenge_id` values
+to enforce single-use. Used `challenge_id` values MAY be pruned after their
+`expires` time plus the clock skew tolerance defined in `CONFORMANCE.md`
+section 9.3.1.
 
 A valid challenge solution permits the handshake to proceed. It does not grant
 trust or bypass any subsequent identity verification steps.
