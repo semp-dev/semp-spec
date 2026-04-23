@@ -1106,12 +1106,59 @@ A conformant client MUST:
 A conformant client MUST:
 
 - Surface the encryption degradation to the user before proceeding with SMTP
-  fallback when `legacy_required` is received. (`CLIENT.md` §6.4)
+  fallback when `legacy_required` is received. (`CLIENT.md` §6.4.1)
 - Require explicit user confirmation before sending via SMTP.
-  (`CLIENT.md` §6.4)
+  (`CLIENT.md` §6.4.1)
 - Not transmit SMTP credentials to the home server. (`CLIENT.md` §10.5)
 - Not automatically send via SMTP without user awareness.
-  (`CLIENT.md` §6.4)
+  (`CLIENT.md` §6.4.1)
+- Produce MIME messages for SMTP fallback per `CLIENT.md` §6.4.2,
+  with all listed headers at minimum. MUST NOT include postmark, seal,
+  or encrypted brief/enclosure artifacts in the MIME message. MUST NOT
+  emit `Bcc` headers; blind recipients are carried only via SMTP
+  `RCPT TO`.
+- Record a fresh RFC 5322 `Message-ID` for every SMTP send in the
+  local legacy-threading map (`CLIENT.md` §6.4.4).
+- Use the A-label form of IDN domains in SMTP envelope addresses
+  (`CLIENT.md` §6.4.2).
+
+A conformant client SHOULD:
+
+- Include the SEMP upgrade-signal headers (`SEMP-Capability`,
+  `SEMP-Identity`, `SEMP-Domain`, `SEMP-Address`) on outbound SMTP
+  messages, unless the user has opted out for the sending identity.
+  (`CLIENT.md` §6.4.3)
+- Inspect upgrade-signal headers on inbound legacy messages and cache
+  verified SEMP-capability hints after completing the four-step
+  verification in `CLIENT.md` §4.3.1. MUST NOT treat the signal as
+  authoritative without verification.
+- Default to SEMP routing on replies to senders whose SEMP-capability
+  is in the verified cache (`CLIENT.md` §4.3.2), while surfacing the
+  routing choice to the user.
+
+For mixed-recipient composes (some SEMP-reachable, some
+`legacy_required`), a conformant client MUST:
+
+- Split the send into a SEMP envelope for the SEMP-reachable group
+  and an SMTP message for the legacy group (`CLIENT.md` §6.4.5).
+- Surface the split to the user with the degradation warning attached
+  to the SMTP group, and require explicit confirmation before
+  transmission.
+- Record both outbound artifacts under the same `thread_key` in the
+  local threading map.
+- Not silently downgrade SEMP-reachable recipients to SMTP.
+- Not combine encrypted and plaintext renditions of the same content
+  into a single MIME message.
+
+For legacy-origin inbound messages, a conformant client MUST:
+
+- Distinguish legacy messages from SEMP messages with a persistent,
+  unambiguous origin indicator visible without additional user
+  interaction. The indicator MUST distinguish at least three states:
+  SEMP, legacy, and legacy-with-verified-SEMP-capable-sender.
+  (`CLIENT.md` §4.3, §4.3.3)
+- Not present legacy and SEMP messages in a unified inbox without
+  such an indicator. (`CLIENT.md` §4.3)
 
 ### 5.8 Key Management (Client)
 

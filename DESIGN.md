@@ -403,6 +403,14 @@ The SEMP server is never involved in legacy mail retrieval.
 SMTP credentials are held by the client only and MUST NOT be transmitted to the
 SEMP server.
 
+Outbound SMTP messages MAY carry `SEMP-Capability`, `SEMP-Identity`,
+`SEMP-Domain`, and `SEMP-Address` upgrade-signal headers so that a SEMP-capable
+recipient client can offer a thread upgrade on reply. The signal is
+advisory; recipient clients verify the advertised identity against SEMP
+discovery before acting. Thread continuity across mixed SEMP and legacy
+correspondence is maintained client-side via a local Message-ID to
+`brief.message_id` mapping. Full rules in `CLIENT.md` sections 4.3 and 6.4.
+
 ---
 
 ## 9. Relationship to Existing Standards
