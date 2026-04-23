@@ -999,6 +999,13 @@ A conformant client MUST:
   source and MUST be indistinguishable from real entries. The single-domain,
   non-group one-recipient exception MAY be applied per §4.4.1.
 
+A conformant client MAY apply send-time obfuscation per `CLIENT.md`
+§3.8, delaying initial envelope submission by a random interval
+drawn from `[0, D]` where `D` is operator-configurable and SHOULD
+NOT exceed 60 seconds by default. A client applying the delay MUST
+NOT push submission past `postmark.expires` and MUST NOT apply the
+delay to envelopes flagged time-sensitive by the user.
+
 For forward composition, a conformant client MUST:
 
 - Preserve the original received enclosure plaintext verbatim, including

@@ -393,6 +393,64 @@ inner `original_enclosure_plaintext` MAY itself contain a non-null
 `forwarded_from`, preserving the full chain. Clients MUST NOT collapse,
 truncate, or reorder a forwarding chain.
 
+### 3.8 Send-Time Obfuscation
+
+An envelope's submission time is observable to any passive network
+observer of the sending client's home-server session. When the same
+observer can also see the recipient server's session, the two
+timestamps correlate and expose correspondent pairs even though
+envelope sizes are padded (`ENVELOPE.md` section 2.4) and postmark
+metadata is domain-level only. Timing is a side channel that size
+padding does not address.
+
+Clients MAY mitigate this side channel by delaying submission. Once
+the user triggers a send and the client has produced a fully composed
+envelope per section 3.1, the client MAY hold the envelope in a local
+outbound queue for a bounded random interval before submitting it to
+the home server. The interval SHOULD be drawn uniformly at random
+from `[0, D]`, where `D` is an operator-configurable ceiling.
+
+#### 3.8.1 Bounds
+
+- `D` SHOULD NOT exceed 60 seconds by default. Longer delays degrade
+  user-perceived responsiveness without proportionally improving
+  unlinkability.
+- The chosen delay MUST NOT push the submission past
+  `postmark.expires`. The client MUST reduce `D` for any envelope
+  whose expiry window is shorter than `D`, or MUST recompose the
+  envelope with a longer expiry before queuing.
+- Delay applies only to the first submission. Retry scheduling
+  (`DELIVERY.md` section 2.3) governs subsequent attempts and is
+  unaffected.
+- Clients SHOULD NOT apply delay to envelopes the user has
+  explicitly flagged as time-sensitive. A verification code the
+  user is actively reading, a just-in-time reply to a live
+  conversation, or similar interactions are poor candidates for
+  obfuscation.
+- Device-sync envelopes (`semp.dev/device-sync` marker) MAY be
+  batched and delayed more aggressively than user-visible sends,
+  since their timing is not directly observable to correspondents.
+
+#### 3.8.2 Scope of Protection
+
+Send-time obfuscation reduces the temporal resolution at which a
+passive observer can link a submission to a later delivery. It does
+not:
+
+- Hide correspondent pairs from the sender's home server, which sees
+  every outbound envelope regardless of submission timing
+  (`ENVELOPE.md` section 10.6).
+- Hide correspondent pairs from the recipient's home server, which
+  sees every inbound envelope after routing.
+- Defeat active adversaries who can correlate cross-session traffic
+  at resolutions finer than the delay bound.
+- Provide mixnet-class unlinkability. Users requiring mixnet-class
+  protection SHOULD use a mixnet rather than SEMP; systems such as
+  Nym and Katzenpost are designed for that threat model.
+
+The mechanism is a modest defense against casual traffic analysis.
+It is not a substitute for architectural anonymity.
+
 ---
 
 ## 4. Envelope Receipt and Decryption

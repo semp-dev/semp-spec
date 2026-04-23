@@ -432,10 +432,28 @@ attached document) only at the bucket resolution defined in
 `ENVELOPE.md` section 2.4. Wire sizes are padded to powers of two
 between 1 KB and `max_envelope_size`, so every envelope is
 indistinguishable in size from every other envelope in the same
-bucket. Send timing correlates to user activity. The specification
-does not mandate cover traffic. Operators requiring timing
-unlinkability SHOULD batch outbound sends or introduce randomized
-delays; these remain operator-layer techniques.
+bucket.
+
+Send timing correlates to user activity. Clients MAY apply the
+send-time obfuscation mechanism in `CLIENT.md` section 3.8, which
+delays submission by an operator-configurable random interval up to
+60 seconds by default. The mechanism reduces the temporal resolution
+available to a passive network observer but is not sufficient to
+defeat active adversaries or observers with large-window correlation
+capabilities. SEMP does not provide mixnet-class timing
+unlinkability; section 6.3.1 states the bounds.
+
+#### 6.3.1 What Timing Obfuscation Does Not Do
+
+The send-time delay mechanism is bounded in what it defeats. It
+does not hide correspondent pairs from the sender's or recipient's
+home server (either observes every envelope it routes regardless of
+when it was submitted). It does not hide aggregate activity patterns
+over windows larger than the delay bound. It does not provide the
+unlinkability properties of a mix network: mixing across many
+concurrent senders with cryptographic reordering is out of scope.
+Users with threat models that require those properties SHOULD use a
+purpose-built mixnet for the affected correspondence.
 
 ### 6.4 Social-Graph Inference from Reputation Gossip
 
@@ -501,15 +519,29 @@ distinguishable from one with 4.
 
 ## 7. Residual Risks and Open Problems
 
-The following are known gaps that future revisions of the specification
-are expected to address. Implementers and operators SHOULD treat them as
-caveats on the security claims.
+No known gaps remain from the original gap-review punch list. All
+acknowledged residual risks are scoped and mitigated to the extent
+that this specification addresses them:
 
-- **Cover traffic and timing unlinkability.** Envelope and recipient
-  size padding are specified (sections 2.4 and 4.4.1 of
-  `ENVELOPE.md`), but timing correlation between send and receive
-  events remains an open problem. Operator-layer batching or delayed
-  sending is out of scope.
+- Envelope size (section 6.3) is padded to power-of-two buckets per
+  `ENVELOPE.md` section 2.4.
+- Recipient-count leakage (section 6.8) is padded to power-of-two
+  entry counts per `ENVELOPE.md` section 4.4.1.
+- Reputation-count leakage (section 6.4) is bucketed per
+  `REPUTATION.md` section 4.5.1.
+- Timing correlation (section 6.3) is mitigated at the client layer
+  via the OPTIONAL send-time delay mechanism in `CLIENT.md`
+  section 3.8. Mixnet-class unlinkability is out of scope and is
+  named as such in section 6.3.1.
+- Onion-only leakage (section 6.7) is scoped to operator-contract
+  violations per `DISCOVERY.md` section 2.5.3.
+- Endpoint compromise (section 6.1) is bounded by mandatory
+  identity-key rotation on `key_compromise` device revocation per
+  `KEY.md` section 10.5.5.
+
+Future specification revisions MAY narrow these further if
+implementation experience identifies new mitigations. The
+specification does not claim protections beyond those named here.
 
 ---
 
