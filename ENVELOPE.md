@@ -161,21 +161,41 @@ bytes toward `max_envelope_size` enforcement.
 
 The size of the canonical envelope, measured in bytes of UTF-8
 encoded JSON (the same canonical form defined in section 4.3, with
-`padding` included), MUST equal a value in the following sequence
-after padding:
+`padding` included), MUST equal a value in the chosen bucket
+sequence after padding.
+
+**Default sequence.** Conformant implementations use the following
+power-of-two sequence unless the operator configures an alternative:
 
 ```
-1024, 2048, 4096, 8192, 16384, 32768, 65536, 131072,
-262144, 524288, 1048576, 2097152, 4194304, 8388608,
-16777216, max_envelope_size
+4096, 8192, 16384, 32768, 65536, 131072, 262144, 524288,
+1048576, 2097152, 4194304, 8388608, 16777216, max_envelope_size
 ```
 
-The smallest bucket is 1024 bytes. Each subsequent bucket is twice
+The smallest bucket is 4096 bytes. Each subsequent bucket is twice
 the previous, up to `max_envelope_size` (the session-negotiated
 ceiling, see `HANDSHAKE.md` section 2.3.1). A sender MUST pick the
 smallest bucket whose value is at least the unpadded envelope size.
 An envelope whose unpadded size exceeds `max_envelope_size` MUST be
 recomposed; padding is not a remedy for over-limit content.
+
+**Operator tuning.** An operator MAY configure a custom bucket
+sequence for their deployment when the default power-of-two curve is
+a poor match for their traffic. Any custom sequence MUST satisfy:
+
+- Be monotonically strictly increasing.
+- Have its first element at or above 4096 bytes (the protocol floor).
+- Have its last element at or below the session-negotiated
+  `max_envelope_size`.
+
+A finer-grained sequence (for example `{4096, 6144, 8192, 12288,
+16384, ...}` with 1.5x steps instead of 2x) reduces the worst-case
+bandwidth overhead at the cost of exposing more bucket indices to
+observers. A coarser sequence does the opposite. The default is
+chosen as the spec's universal fallback; operator-tuned sequences
+are a local optimization that does not affect interoperability (each
+envelope still occupies exactly one bucket on the wire; the receiver
+does not need to know the sender's bucket sequence).
 
 #### 2.4.2 Padding Content
 
@@ -197,12 +217,31 @@ mechanism, not an integrity mechanism.
 
 #### 2.4.4 Minimum Floor
 
-The 1024-byte floor means every envelope, including the smallest
-plaintext-only messages, occupies at least 1 KB on the wire. This
-floor obscures the lower end of the size distribution where
-short-message signals would otherwise be most distinguishable.
-Operators that require stricter unlinkability MAY configure a
-higher floor; the 1024-byte floor is the protocol minimum.
+The 4096-byte floor means every envelope, including the smallest
+plaintext-only messages, occupies at least 4 KB on the wire. A
+minimal SEMP envelope (postmark, seal with one recipient's wrapped
+keys, short encrypted brief, short encrypted enclosure) is
+typically around 1.5 to 2.5 KB before padding, so the 4 KB floor
+consolidates all short messages into one indistinguishable bucket
+rather than leaking a fine-grained short-message signal. Operators
+that require stricter unlinkability MAY configure a higher floor;
+the 4096-byte floor is the protocol minimum.
+
+#### 2.4.5 Device-Sync Envelopes
+
+Device-sync envelopes (carrying the `semp.dev/device-sync` marker,
+`CLIENT.md` section 4.5.4) follow the same padding rules as any
+other envelope. They travel over the public internet to the user's
+home server and MAY pass through the same routing infrastructure a
+cross-domain envelope would; a passive observer could otherwise
+distinguish device-sync traffic from correspondent traffic by size
+pattern alone.
+
+The more-aggressive-batching language in `CLIENT.md` section 3.8.1
+applies to the send-time delay mechanism, not to size padding.
+Device-sync envelopes MAY be delayed longer than user-visible sends
+because their timing is not observable to correspondents; their
+size padding is unchanged.
 
 ---
 
