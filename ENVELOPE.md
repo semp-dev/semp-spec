@@ -56,7 +56,7 @@ recipient identity, subject, timestamp) from exposure to intermediaries.
     "seal": { },
     "brief": "<base64-encoded-encrypted-bytes>",
     "enclosure": "<base64-encoded-encrypted-bytes>",
-    "padding": "<base64-encoded-random-bytes-or-empty>"
+    "padding": "<base64-alphabet-filler-or-empty>"
 }
 ```
 
@@ -74,7 +74,7 @@ is only meaningful after decryption by the recipient.
 | `seal`      | `object` | Yes      | Cryptographic integrity proof                            |
 | `brief`     | `string` | Yes      | Encrypted inner header (base64)                          |
 | `enclosure` | `string` | Yes      | Encrypted message body and attachments (base64)          |
-| `padding`   | `string` | Yes      | Base64-encoded padding bytes. See section 2.4. MAY be the empty string. |
+| `padding`   | `string` | Yes      | Opaque base64-alphabet filler. See section 2.4. MAY be the empty string. |
 
 ### 2.3 Address Canonicalization
 
@@ -199,11 +199,25 @@ does not need to know the sender's bucket sequence).
 
 #### 2.4.2 Padding Content
 
-`padding` contains random bytes drawn from a cryptographically
-secure source, base64-encoded. Senders MUST NOT reuse padding bytes
-across envelopes; each envelope receives fresh randomness. Zero
-bytes are PERMITTED but NOT RECOMMENDED because they leak the
-padding boundary under compression.
+`padding` is a string of characters drawn from the base64 alphabet
+(`A-Z`, `a-z`, `0-9`, `+`, `/`, and `=`). Its sole purpose is to
+adjust the envelope's wire size; the bytes have no internal
+structure and MUST NOT be decoded or interpreted by any party.
+
+Senders MUST derive the characters from a cryptographically secure
+source (typically by base64-encoding CSPRNG output and, when needed
+to hit the bucket exactly, extending the result with 1 to 3
+additional base64-alphabet characters drawn from the same CSPRNG).
+The reason the string is NOT required to be a valid base64 encoding
+of an integer number of bytes is that base64 has a 4-character
+granularity while buckets require byte-level alignment; senders
+MUST be able to choose any string length consistent with the
+JSON-safe alphabet above.
+
+Senders MUST NOT reuse padding characters across envelopes; each
+envelope receives fresh randomness. Zero bytes are PERMITTED but
+NOT RECOMMENDED because they leak the padding boundary under
+compression.
 
 #### 2.4.3 Interaction with the Seal
 
