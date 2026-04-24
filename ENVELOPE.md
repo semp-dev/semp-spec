@@ -403,6 +403,8 @@ where a signature valid in one context could be misinterpreted in another.
 | Device enrollment authorization (authorizing device key) | `SEMP-DEVICE-AUTHORIZE:` |
 | Device revocation signature (identity key) | `SEMP-DEVICE-REVOCATION:` |
 | Device directory signature (identity key) | `SEMP-DEVICE-DIRECTORY:` |
+| Enclosure sender signature (sender identity key) | `SEMP-ENCLOSURE-SENDER:` |
+| Forwarder attestation signature (forwarder identity key) | `SEMP-FORWARDER-ATTESTATION:` |
 
 The signed input is always `prefix || canonical_bytes`. Verification MUST
 reconstruct the same prefixed input before calling Ed25519 Verify.
@@ -725,8 +727,10 @@ The sender computes the signature as follows:
 3. Set `enclosure.sender_signature.value` to the empty string `""`.
 4. Compute the canonical JSON serialization of the entire enclosure object
    per section 4.3 canonicalization rules.
-5. Sign the canonical bytes with the identity private key.
-6. Replace `enclosure.sender_signature.value` with the base64-encoded
+5. Prefix the canonical bytes with `SEMP-ENCLOSURE-SENDER:` per the
+   signature domain separation table in section 4.3.
+6. Sign the prefixed bytes with the identity private key.
+7. Replace `enclosure.sender_signature.value` with the base64-encoded
    signature.
 
 Every other field of the enclosure (`subject`, `content_type`, `body`,
@@ -738,10 +742,11 @@ A recipient client MUST verify `enclosure.sender_signature` after decrypting
 the enclosure and before rendering any content to the user. Verification:
 
 1. Reconstruct the canonical bytes by setting `sender_signature.value` to
-   `""` and re-serializing per section 4.3.
+   `""` and re-serializing per section 4.3, then prefixing the result with
+   `SEMP-ENCLOSURE-SENDER:`.
 2. Fetch the sender's identity key indicated by `sender_signature.key_id`,
    sourced from the sender's published key set (`KEY.md` section 3).
-3. Verify the signature against the canonical bytes.
+3. Verify the signature against the prefixed canonical bytes.
 
 If verification fails, the recipient client MUST NOT display the enclosure
 content as authored by the claimed sender. The client SHOULD surface the
@@ -826,7 +831,9 @@ it.
 
 `forwarded_from.forwarder_attestation` is a signature produced by the
 forwarder's identity key over the canonical bytes of the
-`forwarded_from` object with `forwarder_attestation.value` set to `""`.
+`forwarded_from` object with `forwarder_attestation.value` set to `""`,
+prefixed with `SEMP-FORWARDER-ATTESTATION:` per the signature domain
+separation table in section 4.3.
 
 The attestation binds:
 
