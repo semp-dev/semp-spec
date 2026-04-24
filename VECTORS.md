@@ -520,10 +520,10 @@ are concatenated directly with no separator.
 **Expected confirmation_hash:**
 
 ```
-SHA-256 (hex): 81208e0db84224eef8a6bde1510f119e
-               34e4b910d63bcbb01e1e40504e851ab1
+SHA-256 (hex): 1c23b09f9c0e93dbc1dc31a9d9dc4c68
+               006191b5c12d3dffa0a153f5e972cc3d
 
-Base64:        gSCODbhCJO74pr3hUQ8RnjTkuRDWO8uwHh5AUE6FGrE=
+Base64:        HCOwn5wOk9vB3DGp2dxMaABhkbXBLT3/oKFT9elyzD0=
 ```
 
 The client then signs `session_id || confirmation_hash` with its long-term
