@@ -459,6 +459,72 @@ server side verification procedure. All challenge types share the same
 `challenge` / `challenge_response` message structure and the same lifecycle
 rules (single use, expiry, signature verification).
 
+#### 2.2a.6 Initiator Aborts
+
+When the initiator rejects a server-issued challenge (per the rules in
+section 2.2a.2 or per a future challenge type's rules), the initiator
+MUST send a `rejected` handshake message to the issuing server before
+closing the transport. The abort message carries a `reason_code` so the
+issuer learns the specific rule it violated, consistent with the
+explicit-rejection principle in `DESIGN.md` section 2.3.
+
+Client-initiator abort schema (client-to-server handshake):
+
+```json
+{
+    "type": "SEMP_HANDSHAKE",
+    "step": "rejected",
+    "party": "client",
+    "version": "1.0.0",
+    "reason_code": "challenge_invalid",
+    "reason": "difficulty 30 exceeds protocol cap of 28",
+    "extensions": {}
+}
+```
+
+A client-initiator abort is NOT signed. Signing would require a
+`key_id` identifying the client's identity key, defeating the
+anonymous-init property of section 2.2. The initiator has not yet
+authenticated to the server and MUST NOT do so as part of an abort.
+An honest server MAY log the abort for diagnostics; a compromised
+server cannot forge an unsigned message back-dated against the
+initiator.
+
+Federation-initiator abort schema (server-to-server handshake):
+
+```json
+{
+    "type": "SEMP_HANDSHAKE",
+    "step": "rejected",
+    "party": "server",
+    "version": "1.0.0",
+    "reason_code": "challenge_invalid",
+    "reason": "difficulty 30 exceeds protocol cap of 28",
+    "server_signature": "signature-over-entire-message",
+    "extensions": {}
+}
+```
+
+A federation-initiator abort IS signed with the initiator's domain
+key, matching the signed abort produced by federation responders
+(section 5.7). Federation peer identities are public by nature, so
+signing imposes no anonymity cost.
+
+Reason codes that an initiator may emit so far:
+
+| Reason code          | Trigger                                                                        |
+|----------------------|--------------------------------------------------------------------------------|
+| `challenge_invalid`  | Server issued a challenge violating the cap or expiry floor in section 2.2a.2. |
+
+Future challenge types MAY define additional initiator-abort reason
+codes; they MUST register the code in `ERRORS.md` section 2 and update
+this table.
+
+After sending the abort, the initiator MUST close the transport and
+MUST NOT retry under the same conditions. The initiator SHOULD retain
+the signed `challenge` message that triggered the abort for potential
+inclusion in a `protocol_abuse` report (`REPUTATION.md` section 8.3.3).
+
 ### 2.2b Message 1c: challenge_response / client (conditional)
 
 The client submits its solution to the challenge. The `challenge_type` field
