@@ -337,13 +337,13 @@ The receiving server interprets these signals according to its own policy.
         "end": "2025-06-01T00:00:00Z"
     },
     "metrics": {
-        "envelopes_received": 12400,
-        "envelopes_rejected": 23,
-        "abuse_reports": 5,
-        "abuse_categories": ["spam", "spam", "phishing", "spam", "spam"],
-        "unique_senders_observed": 340,
-        "handshakes_completed": 890,
-        "handshakes_rejected": 12
+        "envelopes_received": 16384,
+        "envelopes_rejected": 32,
+        "abuse_reports": 8,
+        "abuse_categories": ["spam", "phishing"],
+        "unique_senders_observed": 512,
+        "handshakes_completed": 1024,
+        "handshakes_rejected": 16
     },
     "assessment": "neutral",
     "evidence_available": true,
@@ -395,7 +395,7 @@ absent, not as evidence of continued behavior.
 | `envelopes_received`      | `integer` | Yes      | Count bucket of envelopes received from the subject domain. See section 4.5.1. |
 | `envelopes_rejected`      | `integer` | Yes      | Count bucket of envelopes rejected for any reason. See section 4.5.1. |
 | `abuse_reports`           | `integer` | Yes      | Count bucket of abuse reports filed by users against the subject domain. See section 4.5.1. |
-| `abuse_categories`        | `array`   | No       | List of abuse categories reported. May contain duplicates.|
+| `abuse_categories`        | `array`   | No       | Deduplicated set of abuse categories observed at least once during the window. See section 4.5.2. |
 | `unique_senders_observed` | `integer` | No       | Count bucket of distinct sender addresses observed from the domain. See section 4.5.1. |
 | `handshakes_completed`    | `integer` | No       | Count bucket of successful handshakes with the subject domain. See section 4.5.1. |
 | `handshakes_rejected`     | `integer` | No       | Count bucket of handshakes rejected from the subject domain. See section 4.5.1. |
@@ -444,6 +444,28 @@ Observers that historically published exact counts MUST transition to
 bucketed counts at their next observation window. A record MUST NOT
 mix exact and bucketed values across fields; all count fields in a
 given record use the same bucketing rule.
+
+#### 4.5.2 Abuse Categories Field
+
+`abuse_categories` is a deduplicated set of category identifiers
+observed at least once during the window. The published array MUST
+NOT contain duplicates: each category appears zero or one times. The
+order of elements is not significant; receivers MUST treat the array
+as a set.
+
+The earlier draft of this section permitted one entry per abuse
+report, including duplicates. That form defeated the §4.5.1 count
+bucketing because a receiver could read `len(abuse_categories)` and
+recover the exact raw `abuse_reports` count. Set semantics close that
+channel: the array's length is now bounded by the size of the
+abuse-category enumeration, which carries no count signal.
+
+The qualitative breakdown a receiver typically wants ("did this
+domain see spam, or did it see phishing, or both?") is preserved by
+the set form. The bucketed `abuse_reports` count carries the
+quantitative magnitude. Observers that need a per-category count
+breakdown SHOULD publish that data via `evidence_uri` rather than
+inline in the observation record.
 
 ### 4.6 Assessment Values
 
