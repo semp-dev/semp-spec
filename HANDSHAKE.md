@@ -378,14 +378,27 @@ tuple by including those values in the `prefix` derivation. The exact
 binding is defined as:
 
 ```
-prefix = base64( random_bytes(16) || H( sender_domain || recipient_address || postmark_id ) )
+prefix = base64( random_bytes(16) || H(
+    "SEMP-FIRST-CONTACT-V1:" || sender_domain || 0x00 ||
+    recipient_address || 0x00 || postmark_id
+) )
 ```
 
-Where `postmark_id` is the `postmark.id` of the envelope that triggered the
-`policy_forbidden` rejection, `H` is SHA-256, and `||` denotes byte
-concatenation. Binding to `postmark.id` ensures that a solved token is valid
-only for the specific envelope it was issued against, and cannot be reused
-across envelopes.
+Where `H` is SHA-256, `||` denotes byte concatenation, and `0x00` is a
+single NUL octet. The leading ASCII tag `"SEMP-FIRST-CONTACT-V1:"`
+provides domain separation from any other SHA-256 use in this protocol.
+The NUL separators between the three input fields prevent
+boundary-shift collisions: `sender_domain` MUST NOT contain NUL by
+section 2.3.2 of `ENVELOPE.md` (domain is lowercase ASCII), and
+`recipient_address` and `postmark_id` MUST NOT contain NUL by
+sections 2.3.1 and 2.2 of `ENVELOPE.md` respectively. Without the
+separators, an attacker controlling part of any field could craft a
+different tuple that produces the same hash.
+
+`postmark_id` is the `postmark.id` of the envelope that triggered the
+`policy_forbidden` rejection. Binding to `postmark.id` ensures that a
+solved token is valid only for the specific envelope it was issued
+against, and cannot be reused across envelopes.
 
 The recipient server MUST NOT vary `difficulty` based on whether the
 recipient address exists. The same difficulty MUST be issued for
