@@ -111,11 +111,19 @@ and MUST NOT appear on the wire. A conformant implementation receiving a
 domain that contains any code point outside the ASCII range 0x00 to 0x7F
 MUST reject the address as malformed.
 
-Domain matching is case-insensitive per DNS convention: a conformant
+Domain matching is case-insensitive per DNS convention. An
 implementation MUST fold the domain to lower case before comparison,
-signing, or hashing. On the wire, the domain SHOULD be transmitted in
-lower case; an implementation MUST accept mixed-case domains and fold
-them before use.
+signing, or hashing.
+
+On the wire (in any SEMP message between SEMP nodes) the domain MUST
+be lower case. A SEMP node receiving a mixed-case domain in any
+protocol field MUST reject the address as malformed per section 2.3.
+
+Non-protocol layers, including user-interface forms, command-line
+input, address-book imports, and legacy-interop gateways
+(`CLIENT.md` section 4.5), MAY accept mixed-case domains from
+non-SEMP sources but MUST fold to lower case before placing the
+address into any SEMP message.
 
 The fully qualified domain including its terminating dot MUST NOT appear
 in SEMP addresses; a trailing `.` is a DNS presentation form and is not
