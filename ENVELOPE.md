@@ -466,6 +466,7 @@ where a signature valid in one context could be misinterpreted in another.
 | Device directory signature (identity key) | `SEMP-DEVICE-DIRECTORY:` |
 | Enclosure sender signature (sender identity key) | `SEMP-ENCLOSURE-SENDER:` |
 | Forwarder attestation signature (forwarder identity key) | `SEMP-FORWARDER-ATTESTATION:` |
+| User policy update signature (originating device key) | `SEMP-USER-POLICY:` |
 
 The signed input is always `prefix || canonical_bytes`. Verification MUST
 reconstruct the same prefixed input before calling Ed25519 Verify.
