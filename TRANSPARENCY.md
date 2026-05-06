@@ -154,8 +154,10 @@ The domain publishes a Signed Tree Head (STH) periodically:
 ```
 
 The `signature` covers the canonical JSON encoding of the STH object
-with `signature.value` set to `""`. The signing key is the domain's
-current signing key published per `KEY.md` section 2.
+with `signature.value` set to `""`, prefixed with
+`SEMP-TRANSPARENCY-STH:` per `ENVELOPE.md` section 4.3. The signing
+key is the domain's current signing key published per `KEY.md`
+section 2.
 
 Domains MUST publish a fresh STH at least every hour. A stale STH
 (timestamp older than 1 hour by the clock tolerance in

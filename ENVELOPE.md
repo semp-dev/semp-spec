@@ -468,6 +468,7 @@ where a signature valid in one context could be misinterpreted in another.
 | Forwarder attestation signature (forwarder identity key) | `SEMP-FORWARDER-ATTESTATION:` |
 | User policy update signature (originating device key) | `SEMP-USER-POLICY:` |
 | Account closure request/cancel signature (full-access device key) | `SEMP-ACCOUNT-CLOSURE:` |
+| Transparency Signed Tree Head signature (domain signing key) | `SEMP-TRANSPARENCY-STH:` |
 
 The signed input is always `prefix || canonical_bytes`. Verification MUST
 reconstruct the same prefixed input before calling Ed25519 Verify.
