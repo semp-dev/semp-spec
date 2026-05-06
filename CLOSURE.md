@@ -95,7 +95,7 @@ do not use the wire-level extension framework in `EXTENSIONS.md`.
 | `requested_at`          | `string`  | Yes      | ISO 8601 UTC timestamp of the request.                                                      |
 | `grace_period_seconds`  | `integer` | Yes      | User-requested grace period in seconds. Subject to operator bounds per section 3.1.         |
 | `issued_by`             | `string`  | Yes      | `device_id` of the issuing full-access device.                                              |
-| `signature`             | `object`  | Yes      | Signature over the canonical bytes of the request with `signature.value` set to `""`.       |
+| `signature`             | `object`  | Yes      | Signature over the canonical bytes of the request with `signature.value` set to `""`, prefixed with `SEMP-ACCOUNT-CLOSURE:` per `ENVELOPE.md` section 4.3. |
 
 ### 2.3 Authentication
 
