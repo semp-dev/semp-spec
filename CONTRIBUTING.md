@@ -4,7 +4,7 @@
 
 ## Code of Conduct
 
-Participation in this project is governed by the [Code of Conduct](CODE_OF_CONDUCT.md). By contributing, you agree to abide by its terms. Report concerns to `conduct@semp.dev`.
+Participation in this project is governed by the [Code of Conduct](CODE_OF_CONDUCT.md). By contributing, you agree to abide by its terms. Report concerns to `hello@semp.dev`.
 
 ## What lives here vs. in `semp-go`
 
@@ -87,7 +87,7 @@ The spec's version is independent of `semp-go`'s version.
 
 ## Security disclosures
 
-If you believe you have found a security issue with the protocol design (not a library bug), please email `security@semp.dev` instead of filing a public issue. We will respond within 48 hours.
+If you believe you have found a security issue with the protocol design (not a library bug), please email `hello@semp.dev` instead of filing a public issue. We will respond within 48 hours.
 
 ## License
 
