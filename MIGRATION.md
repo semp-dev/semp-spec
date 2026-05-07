@@ -143,7 +143,8 @@ new address.
         "algorithm": "ed25519",
         "key_id": "new-domain-key-fingerprint",
         "value": "base64-signature"
-    }
+    },
+    "extensions": {}
 }
 ```
 
@@ -166,6 +167,7 @@ new address.
 | `new_identity_signature`   | `object`       | Yes      | Signature produced by the new identity private key.                               |
 | `old_domain_signature`     | `object`       | When `mode == cooperative` | Signature produced by the old provider's domain signing key.          |
 | `new_domain_signature`     | `object`       | Yes      | Signature produced by the new provider's domain signing key.                      |
+| `extensions`               | `object`       | No       | Optional extension entries per `EXTENSIONS.md` section 2.1. Every signature in the section 3.3 chain covers `extensions`, so any content captured here is attested by all four signers. Defaults to `{}` when absent. |
 
 ### 3.3 Canonical Bytes and Signature Order
 
@@ -281,9 +283,14 @@ provider acts as a forwarder:
 2. If no client is authenticated, the old provider MAY perform a
    delegated forward on behalf of the user. Delegated forwarding
    requires a signed authorization produced by the user's identity key
-   at migration time. The authorization SHOULD be carried in the
-   migration record as an optional `forwarding_authorization` extension
-   field.
+   at migration time. The authorization MAY be carried in the migration
+   record's `extensions` map under a key defined in a future revision
+   of this specification, or delivered through a separate mechanism
+   that future revision defines. The exact authorization schema and
+   delivery mechanism are deferred. When the authorization is carried
+   in `extensions`, the section 3.3 four-signature chain attests to it,
+   including the old provider's countersignature acknowledging the
+   delegation it will later honor.
 
 In both cases, the forward carries `enclosure.forwarded_from.original_enclosure_plaintext`
 with the original sender's inner signature intact. The new recipient at
