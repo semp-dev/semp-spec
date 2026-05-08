@@ -1,7 +1,7 @@
 {
   "version": "1.0.0",
   "category": "transparency",
-  "description": "Layer 5 vectors for TRANSPARENCY.md: domain-signed tree heads and RFC 6962 Merkle inclusion proofs. Consistency proofs and the §4 augmented key-fetch path are TODO.",
+  "description": "Layer 5 vectors for TRANSPARENCY.md: domain-signed tree heads plus RFC 6962 inclusion and consistency proofs. The §4 augmented key-fetch path is TODO.",
   "spec_reference": "VECTORS.md §17.10; TRANSPARENCY.md §2-§3",
   "construction": {
     "merkle_leaf_hash": "SHA-256(0x00 || leaf_data) per RFC 6962 §2.1",
@@ -89,6 +89,28 @@
       "expected": {
         "valid_path_verifies": true,
         "tampered_path_first_element_hex": "95a10f99b02dc48c44e12476d706622cdb274c98b4daa197f7a17553f85f1fa4",
+        "tampered_path_verifies": false
+      }
+    },
+    {
+      "id": "transparency-consistency-proof",
+      "description": "RFC 6962 §2.1.2 consistency proof showing that the 5-leaf earlier tree is a prefix of the §17.10 8-leaf tree. The verifier holds two STHs (one for n1=5, one for n2=8) and the proof; verification recomputes both roots from the proof path and confirms they match. Tampering one bit of the path causes verification to reject, the property an honest log relies on to detect equivocation.",
+      "spec_reference": "VECTORS.md §17.10; TRANSPARENCY.md §3.2; RFC 6962 §2.1.2",
+      "inputs": {
+        "n1": 5,
+        "n2": 8,
+        "root_n1_hex": "976a791dbea98707b23a109a9be73f43d116c35f35a362fe176a761ce981a094",
+        "root_n2_hex": "377f81df6527ab60b28884219579d412fdcf06730cc95004011c2cc6920dab81",
+        "path_hex": [
+          "c4993a66c85be234afa8209ebde81bdba0bbe748d8c39013dac5f104509ed3b8",
+          "94a10f99b02dc48c44e12476d706622cdb274c98b4daa197f7a17553f85f1fa4",
+          "4af880659da29e1ddda7ceb23b5cfb0d2a81e7bcadc31e1f67e4960e817813c9",
+          "81c9a73e15ab5537e8128e4a54d96e20ab4bf0957de703c99d6c2234a5e90953"
+        ]
+      },
+      "expected": {
+        "valid_path_verifies": true,
+        "tampered_path_first_element_hex": "c5993a66c85be234afa8209ebde81bdba0bbe748d8c39013dac5f104509ed3b8",
         "tampered_path_verifies": false
       }
     }

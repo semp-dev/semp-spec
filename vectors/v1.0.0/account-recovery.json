@@ -1,0 +1,84 @@
+{
+  "version": "1.0.0",
+  "category": "account-recovery",
+  "description": "RECOVERY.md §2: backup-bundle construction. Argon2id derives K_bundle from the recovery secret and the bundle's KDF parameters; XChaCha20-Poly1305 encrypts the payload under K_bundle; the user's currently active identity key signs the canonical bundle with the SEMP-RECOVERY-BUNDLE: prefix. Round-trip (KDF re-derive, AEAD decrypt, signature verify) is asserted at generation time.",
+  "spec_reference": "VECTORS.md §17.13; RECOVERY.md §2",
+  "construction": {
+    "kdf": "Argon2id (RFC 9106) via libsodium's crypto_pwhash_argon2id13",
+    "payload_aead": "XChaCha20-Poly1305 with empty AAD and 24-byte nonce",
+    "domain_separation_prefix_utf8": "SEMP-RECOVERY-BUNDLE:",
+    "signing_key": "user's currently active identity key"
+  },
+  "vectors": [
+    {
+      "id": "recovery-bundle-roundtrip",
+      "description": "Pinned recovery secret derives K_bundle through Argon2id with modest parameters (64 MiB, 3 iterations); production deployments use §2.5's RECOMMENDED 256 MiB. The encrypted payload contains the user's identity keypair (a real Ed25519 seed/public key for the same identity that signs the outer bundle).",
+      "spec_reference": "VECTORS.md §17.13; RECOVERY.md §2.4, §2.5",
+      "inputs": {
+        "recovery_secret_utf8": "correct-horse-battery-staple-vector-input",
+        "kdf_salt_hex": "81818181818181818181818181818181",
+        "kdf_memory_kb": 65536,
+        "kdf_iterations": 3,
+        "kdf_parallelism": 1,
+        "identity_seed_hex": "8282828282828282828282828282828282828282828282828282828282828282",
+        "identity_pub_hex": "fa01347a991e04ae0f1a6d81db29a5ea4eeb5965f577ac9efb44e7b1f2fbb028",
+        "identity_key_id": "b53624136d179a954de56dc5b2ae533dfd1799795c17ddc1999277e8a7653bcd",
+        "payload_nonce_hex": "838383838383838383838383838383838383838383838383",
+        "payload_pre_encrypt_json": {
+          "identity_key": {
+            "algorithm": "ed25519",
+            "public_key": "+gE0epkeBK4PGm2B2yml6k7rWWX1d6ye+0TnsfL7sCg=",
+            "private_key": "goKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoI=",
+            "created": "2025-01-15T08:30:00Z",
+            "expires": "2026-01-15T08:30:00Z"
+          },
+          "encryption_keys": [],
+          "metadata": {
+            "accepted_senders_version": 0
+          }
+        }
+      },
+      "intermediates": {
+        "K_bundle_hex": "83986165248db482d3eeffeec27131b4cd63ad2974f51f91f4544fd394a55d71",
+        "payload_canonical_utf8": "{\"encryption_keys\":[],\"identity_key\":{\"algorithm\":\"ed25519\",\"created\":\"2025-01-15T08:30:00Z\",\"expires\":\"2026-01-15T08:30:00Z\",\"private_key\":\"goKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoI=\",\"public_key\":\"+gE0epkeBK4PGm2B2yml6k7rWWX1d6ye+0TnsfL7sCg=\"},\"metadata\":{\"accepted_senders_version\":0}}",
+        "encrypted_payload_hex": "c36146e5c515ac1921948c70053b839210dacd8e94d41a9b297f15f7814aeec22ffcb003157acd25fe2f3c55cc7df845fcc91006200cf132845e01da999371fe05a3d917d96dcf55c5c7a1a3e931025e0c53b60a772bbe8de9f6ea516245551fa8781f77e04b0da9f89f455f2f31a726d3961c62a4e4373685a51995c25a59cd5d5aaab8d52229c09ee40bbcfb4a6e10fe74e89aaa913fbacd284b2f3b9acbdd7077aed5de76506adcef16a27c6afd4c3636a88bbec74af5ce8227ce277425fb25f021a8a12da2da257458f7f46cde31216753873709041a96dc68f50620e90d8c98d675ed33695387cd8b500ceeb086963d6bf8028ffc43d004fd71c173420f86e47c4e3a46987471e7caeb964aefaa99c3dd90fbaa6e986ee3433a83533d9ec8a5b830eb9a27701c505b979889590cb8b6",
+        "canonical_with_blanked_signature_utf8": "{\"bundle_id\":\"01J7BUNDLE0000000000000000\",\"created_at\":\"2026-04-18T10:00:00Z\",\"encrypted_payload\":\"w2FG5cUVrBkhlIxwBTuDkhDazY6U1BqbKX8V94FK7sIv/LADFXrNJf4vPFXMffhF/MkQBiAM8TKEXgHamZNx/gWj2RfZbc9Vxceho+kxAl4MU7YKdyu+jen26lFiRVUfqHgfd+BLDan4n0VfLzGnJtOWHGKk5Dc2haUZlcJaWc1dWqq41SIpwJ7kC7z7Sm4Q/nTomqqRP7rNKEsvO5rL3XB3rtXedlBq3O8Wonxq/Uw2NqiLvsdK9c6CJ84ndCX7JfAhqKEtotoldFj39GzeMSFnU4c3CQQaltxo9QYg6Q2MmNZ17TNpU4fNi1AM7rCGlj1r+AKP/EPQBP1xwXNCD4bkfE46Rph0cefK65ZK76qZw92Q+6pumG7jQzqDUz2eyKW4MOuaJ3AcUFuXmIlZDLi2\",\"kdf\":{\"algorithm\":\"argon2id\",\"iterations\":3,\"memory_kb\":65536,\"parallelism\":1,\"salt\":\"gYGBgYGBgYGBgYGBgYGBgQ==\"},\"payload_algorithm\":\"xchacha20-poly1305\",\"payload_nonce\":\"g4ODg4ODg4ODg4ODg4ODg4ODg4ODg4OD\",\"recovery_verify_pk\":{\"algorithm\":\"ed25519\",\"public_key\":\"+gE0epkeBK4PGm2B2yml6k7rWWX1d6ye+0TnsfL7sCg=\"},\"signature\":{\"algorithm\":\"ed25519\",\"key_id\":\"b53624136d179a954de56dc5b2ae533dfd1799795c17ddc1999277e8a7653bcd\",\"value\":\"\"},\"supersedes\":null,\"type\":\"SEMP_BACKUP_BUNDLE\",\"user_id\":\"alice@example.com\",\"version\":\"1.0.0\"}",
+        "signing_input_prefix_utf8": "SEMP-RECOVERY-BUNDLE:",
+        "signing_input_hex": "53454d502d5245434f564552592d42554e444c453a7b2262756e646c655f6964223a2230314a3742554e444c4530303030303030303030303030303030222c22637265617465645f6174223a22323032362d30342d31385431303a30303a30305a222c22656e637279707465645f7061796c6f6164223a22773246473563555672426b686c497877425475446b6844617a593655314271624b5838563934464b377349762f4c41444658724e4a6634765046584d666668462f4d6b514269414d38544b45586748616d5a4e782f67576a3252665a62633956786365686f2b6b78416c344d5537594b6479752b6a656e32366c46695256556671486766642b424c44616e346e3056664c7a476e4a744f5748474b6b354463326861555a6c634a61576331645771713431534970774a376b43377a37536d34512f6e546f6d7171525037724e4b4573764f35724c3358423372745865646c4271334f38576f6e78712f5577324e71694c7673644b396336434a38346e644358374a664168714b45746f746f6c64466a3339477a654d53466e55346333435151616c74786f395159673651324d6d4e5a3137544e705534664e6931414d377243476c6a31722b414b502f4550514250317877584e434434626b66453436527068306365664b36355a4b3736715a773932512b3670756d47376a517a7144557a3265794b57344d4f75614a334163554675586d496c5a444c6932222c226b6466223a7b22616c676f726974686d223a226172676f6e326964222c22697465726174696f6e73223a332c226d656d6f72795f6b62223a36353533362c22706172616c6c656c69736d223a312c2273616c74223a22675947426759474267594742675947426759474267513d3d227d2c227061796c6f61645f616c676f726974686d223a227863686163686132302d706f6c7931333035222c227061796c6f61645f6e6f6e6365223a2267344f4467344f4467344f4467344f4467344f4467344f4467344f4467344f44222c227265636f766572795f7665726966795f706b223a7b22616c676f726974686d223a2265643235353139222c227075626c69635f6b6579223a222b67453065706b65424b3450476d324232796d6c366b377257575831643679652b30546e73664c377343673d227d2c227369676e6174757265223a7b22616c676f726974686d223a2265643235353139222c226b65795f6964223a2262353336323431333664313739613935346465353664633562326165353333646664313739393739356331376464633139393932373765386137363533626364222c2276616c7565223a22227d2c2273757065727365646573223a6e756c6c2c2274797065223a2253454d505f4241434b55505f42554e444c45222c22757365725f6964223a22616c696365406578616d706c652e636f6d222c2276657273696f6e223a22312e302e30227d",
+        "signature_hex": "c0681ccdb30b4defbb6b0d47d92ef43d89d5fee2adf46b8365445b142968a3ea436451b95fa1b486507cc05b6af1feec8c3dca3e7339e76f47eed32b09f84406"
+      },
+      "expected": {
+        "signed_bundle_json": {
+          "type": "SEMP_BACKUP_BUNDLE",
+          "version": "1.0.0",
+          "user_id": "alice@example.com",
+          "bundle_id": "01J7BUNDLE0000000000000000",
+          "created_at": "2026-04-18T10:00:00Z",
+          "supersedes": null,
+          "kdf": {
+            "algorithm": "argon2id",
+            "salt": "gYGBgYGBgYGBgYGBgYGBgQ==",
+            "memory_kb": 65536,
+            "iterations": 3,
+            "parallelism": 1
+          },
+          "payload_algorithm": "xchacha20-poly1305",
+          "payload_nonce": "g4ODg4ODg4ODg4ODg4ODg4ODg4ODg4OD",
+          "encrypted_payload": "w2FG5cUVrBkhlIxwBTuDkhDazY6U1BqbKX8V94FK7sIv/LADFXrNJf4vPFXMffhF/MkQBiAM8TKEXgHamZNx/gWj2RfZbc9Vxceho+kxAl4MU7YKdyu+jen26lFiRVUfqHgfd+BLDan4n0VfLzGnJtOWHGKk5Dc2haUZlcJaWc1dWqq41SIpwJ7kC7z7Sm4Q/nTomqqRP7rNKEsvO5rL3XB3rtXedlBq3O8Wonxq/Uw2NqiLvsdK9c6CJ84ndCX7JfAhqKEtotoldFj39GzeMSFnU4c3CQQaltxo9QYg6Q2MmNZ17TNpU4fNi1AM7rCGlj1r+AKP/EPQBP1xwXNCD4bkfE46Rph0cefK65ZK76qZw92Q+6pumG7jQzqDUz2eyKW4MOuaJ3AcUFuXmIlZDLi2",
+          "recovery_verify_pk": {
+            "algorithm": "ed25519",
+            "public_key": "+gE0epkeBK4PGm2B2yml6k7rWWX1d6ye+0TnsfL7sCg="
+          },
+          "signature": {
+            "algorithm": "ed25519",
+            "key_id": "b53624136d179a954de56dc5b2ae533dfd1799795c17ddc1999277e8a7653bcd",
+            "value": "wGgczbMLTe+7aw1H2S70PYnV/uKt9GuDZURbFCloo+pDZFG5X6G0hlB8wFtq8f7sjD3KPnM5529H7tMrCfhEBg=="
+          }
+        },
+        "round_trip_decrypts_payload": true,
+        "kdf_redeterms_K_bundle": true,
+        "signature_verifies": true
+      }
+    }
+  ]
+}

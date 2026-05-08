@@ -1170,10 +1170,16 @@ Head per `TRANSPARENCY.md` §2.3, plus an RFC 6962 inclusion proof.
   one-bit-flipped variant; verification rejects the latter,
   demonstrating the proof's integrity.
 
+- `transparency-consistency-proof`: RFC 6962 §2.1.2 consistency proof
+  from an earlier 5-leaf tree to the current 8-leaf tree. Holding two
+  STHs and the proof, the verifier recomputes both roots and confirms
+  they match. Tampering one bit of the proof rejects, demonstrating
+  the append-only-log property.
+
 The Merkle hash construction follows RFC 6962:
 `leaf_hash = SHA-256(0x00 || leaf_data)` and
-`internal_hash = SHA-256(0x01 || left || right)`. Consistency proofs
-and the §4 augmented key-fetch path are TODO.
+`internal_hash = SHA-256(0x01 || left || right)`. The §4 augmented
+key-fetch path is TODO.
 
 **Bytes:** see [`vectors/v1.0.0/discovery-signed.json`](vectors/v1.0.0/discovery-signed.json),
 [`vectors/v1.0.0/transparency.json`](vectors/v1.0.0/transparency.json).
@@ -1222,6 +1228,28 @@ where the spec uses MUST vs SHOULD vs MAY differently.
 
 **Bytes:** see [`vectors/v1.0.0/first-contact-token.json`](vectors/v1.0.0/first-contact-token.json),
 [`vectors/v1.0.0/clock-tolerance.json`](vectors/v1.0.0/clock-tolerance.json).
+
+### 17.13 Account Recovery Bundle
+
+Reference: `RECOVERY.md` §2.
+
+`account-recovery.json` covers the backup-bundle round-trip end to end.
+Argon2id (RFC 9106, via libsodium's crypto_pwhash_argon2id13) derives
+`K_bundle` from the recovery secret and the bundle's KDF parameters;
+XChaCha20-Poly1305 encrypts the payload under `K_bundle`; the user's
+currently active identity key signs the canonical bundle bytes with
+the `SEMP-RECOVERY-BUNDLE:` prefix.
+
+The vector pins the recovery secret, the Argon2id parameters (modest
+64 MiB / 3 iterations so it regenerates quickly; production deployments
+follow §2.5's RECOMMENDED 256 MiB), the payload nonce, and the
+identity Ed25519 seed. Round-trip is asserted at generation time:
+re-deriving `K_bundle` from the same inputs yields the same key, the
+AEAD decrypts, and the bundle signature verifies.
+
+Shamir device-split backup (§2 alternative recovery mechanism) is TODO.
+
+**Bytes:** see [`vectors/v1.0.0/account-recovery.json`](vectors/v1.0.0/account-recovery.json).
 
 ---
 

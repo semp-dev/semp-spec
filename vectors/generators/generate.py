@@ -3755,6 +3755,171 @@ def build_forwarding_json() -> dict:
     }
 
 
+# ---- Account recovery bundle (Layer 5) -------------------------------------
+
+
+RECOVERY_BUNDLE_PREFIX = b"SEMP-RECOVERY-BUNDLE:"
+
+
+def argon2id_kdf(
+    secret: bytes, salt: bytes, memory_kb: int, iterations: int, length: int = 32
+) -> bytes:
+    """RECOVERY.md §2.5: K_bundle = Argon2id(secret, salt, memory, iterations,
+    parallelism). PyNaCl wraps libsodium's crypto_pwhash with the
+    argon2id13 algorithm (RFC 9106 Argon2id v1.3)."""
+    from nacl.pwhash.argon2id import kdf as _kdf
+
+    return _kdf(
+        length,
+        secret,
+        salt,
+        opslimit=iterations,
+        memlimit=memory_kb * 1024,
+    )
+
+
+def build_account_recovery_json() -> dict:
+    """RECOVERY.md §2: backup-bundle round-trip. Argon2id derives K_bundle,
+    XChaCha20-Poly1305 encrypts the payload, the user's identity key signs
+    the canonical bundle bytes with the SEMP-RECOVERY-BUNDLE: prefix.
+    Modest Argon2id parameters chosen so the vector regenerates in a
+    fraction of a second; production deployments use the §2.5
+    recommendations."""
+    import base64
+
+    recovery_secret = b"correct-horse-battery-staple-vector-input"
+    salt = bytes([0x81] * 16)
+    memory_kb = 65536  # 64 MiB; below the §2.5 RECOMMENDED but enough for vectors
+    iterations = 3
+
+    K_bundle = argon2id_kdf(recovery_secret, salt, memory_kb, iterations, 32)
+
+    identity_seed = bytes([0x82] * 32)
+    identity_pub = ed25519_pubkey_from_priv(identity_seed)
+    identity_fp = fingerprint_hex(identity_pub)
+
+    # Pinned payload. In production this also carries every encryption key
+    # the user has ever held; we keep it small for byte determinism.
+    payload = {
+        "identity_key": {
+            "algorithm": "ed25519",
+            "public_key": base64.b64encode(identity_pub).decode("ascii"),
+            "private_key": base64.b64encode(identity_seed).decode("ascii"),
+            "created": "2025-01-15T08:30:00Z",
+            "expires": "2026-01-15T08:30:00Z",
+        },
+        "encryption_keys": [],
+        "metadata": {
+            "accepted_senders_version": 0,
+        },
+    }
+    payload_bytes = canonical_json(payload)
+    payload_nonce = bytes([0x83] * 24)
+    encrypted_payload = xchacha20_poly1305_seal(
+        K_bundle, payload_nonce, payload_bytes, b""
+    )
+
+    bundle_pre_sign = {
+        "type": "SEMP_BACKUP_BUNDLE",
+        "version": "1.0.0",
+        "user_id": "alice@example.com",
+        "bundle_id": "01J7BUNDLE0000000000000000",
+        "created_at": "2026-04-18T10:00:00Z",
+        "supersedes": None,
+        "kdf": {
+            "algorithm": "argon2id",
+            "salt": base64.b64encode(salt).decode("ascii"),
+            "memory_kb": memory_kb,
+            "iterations": iterations,
+            "parallelism": 1,
+        },
+        "payload_algorithm": "xchacha20-poly1305",
+        "payload_nonce": base64.b64encode(payload_nonce).decode("ascii"),
+        "encrypted_payload": base64.b64encode(encrypted_payload).decode("ascii"),
+        "recovery_verify_pk": {
+            "algorithm": "ed25519",
+            "public_key": base64.b64encode(identity_pub).decode("ascii"),
+        },
+        "signature": {
+            "algorithm": "ed25519",
+            "key_id": identity_fp,
+            "value": "",
+        },
+    }
+    signed_bundle, sig_inter = _sign_doc(
+        bundle_pre_sign, identity_seed, RECOVERY_BUNDLE_PREFIX, ["signature"]
+    )
+    assert _verify_doc(signed_bundle, identity_pub, RECOVERY_BUNDLE_PREFIX, ["signature"])
+
+    # Round-trip: re-derive K_bundle, decrypt, parse payload, recover the
+    # identity_key. Fail fast at generation time on any mismatch.
+    K_bundle_again = argon2id_kdf(recovery_secret, salt, memory_kb, iterations, 32)
+    assert K_bundle_again == K_bundle
+    plaintext = xchacha20_poly1305_open(
+        K_bundle, payload_nonce, encrypted_payload, b""
+    )
+    assert json.loads(plaintext.decode("utf-8")) == payload
+
+    return {
+        "version": "1.0.0",
+        "category": "account-recovery",
+        "description": (
+            "RECOVERY.md §2: backup-bundle construction. Argon2id derives "
+            "K_bundle from the recovery secret and the bundle's KDF "
+            "parameters; XChaCha20-Poly1305 encrypts the payload under "
+            "K_bundle; the user's currently active identity key signs the "
+            "canonical bundle with the SEMP-RECOVERY-BUNDLE: prefix. "
+            "Round-trip (KDF re-derive, AEAD decrypt, signature verify) "
+            "is asserted at generation time."
+        ),
+        "spec_reference": "VECTORS.md §17.13; RECOVERY.md §2",
+        "construction": {
+            "kdf": "Argon2id (RFC 9106) via libsodium's crypto_pwhash_argon2id13",
+            "payload_aead": "XChaCha20-Poly1305 with empty AAD and 24-byte nonce",
+            "domain_separation_prefix_utf8": "SEMP-RECOVERY-BUNDLE:",
+            "signing_key": "user's currently active identity key",
+        },
+        "vectors": [
+            {
+                "id": "recovery-bundle-roundtrip",
+                "description": (
+                    "Pinned recovery secret derives K_bundle through "
+                    "Argon2id with modest parameters (64 MiB, 3 iterations); "
+                    "production deployments use §2.5's RECOMMENDED 256 MiB. "
+                    "The encrypted payload contains the user's identity "
+                    "keypair (a real Ed25519 seed/public key for the same "
+                    "identity that signs the outer bundle)."
+                ),
+                "spec_reference": "VECTORS.md §17.13; RECOVERY.md §2.4, §2.5",
+                "inputs": {
+                    "recovery_secret_utf8": recovery_secret.decode("utf-8"),
+                    "kdf_salt_hex": salt.hex(),
+                    "kdf_memory_kb": memory_kb,
+                    "kdf_iterations": iterations,
+                    "kdf_parallelism": 1,
+                    "identity_seed_hex": identity_seed.hex(),
+                    "identity_pub_hex": identity_pub.hex(),
+                    "identity_key_id": identity_fp,
+                    "payload_nonce_hex": payload_nonce.hex(),
+                    "payload_pre_encrypt_json": payload,
+                },
+                "intermediates": {
+                    "K_bundle_hex": K_bundle.hex(),
+                    "payload_canonical_utf8": payload_bytes.decode("utf-8"),
+                    "encrypted_payload_hex": encrypted_payload.hex(),
+                    **sig_inter,
+                },
+                "expected": {
+                    "signed_bundle_json": signed_bundle,
+                    "round_trip_decrypts_payload": True,
+                    "kdf_redeterms_K_bundle": True,
+                    "signature_verifies": True,
+                },
+            },
+        ],
+    }
+
+
 # ---- First-contact token + clock tolerance ---------------------------------
 
 
@@ -4228,6 +4393,82 @@ def merkle_inclusion_path(leaves: list[bytes], leaf_index: int) -> list[bytes]:
     return helper(0, len(leaves), leaf_index)
 
 
+def merkle_consistency_proof(leaves: list[bytes], n1: int, n2: int) -> list[bytes]:
+    """RFC 6962 §2.1.2 consistency proof from tree size n1 to n2 (n2 >= n1)."""
+    if not (0 < n1 <= n2 <= len(leaves)):
+        raise ValueError("require 0 < n1 <= n2 <= len(leaves)")
+    if n1 == n2:
+        return []
+
+    def subproof(m: int, start: int, end: int, b: bool) -> list[bytes]:
+        # m is the size of the smaller tree we're proving consistency from;
+        # start/end define the current subtree window over the larger tree;
+        # b is True iff we are at the original "right edge" path of the
+        # smaller tree.
+        n = end - start
+        if m == n:
+            if b:
+                return []
+            return [merkle_root(leaves[start:end])]
+        k = 1
+        while k * 2 < n:
+            k *= 2
+        if m <= k:
+            return subproof(m, start, start + k, b) + [merkle_root(leaves[start + k : end])]
+        else:
+            return subproof(m - k, start + k, end, False) + [merkle_root(leaves[start : start + k])]
+
+    return subproof(n1, 0, n2, True)
+
+
+def merkle_verify_consistency(
+    n1: int,
+    n2: int,
+    proof: list[bytes],
+    root1: bytes,
+    root2: bytes,
+) -> bool:
+    """RFC 6962 §2.1.2 consistency-proof verification."""
+    if n1 == 0 or n1 == n2:
+        return n1 != 0 or len(proof) == 0
+    if n1 > n2 or n2 == 0:
+        return False
+    if (n1 == n2) and len(proof) > 0:
+        return False
+
+    # If n1 is a power of two not equal to n2, prepend root1 to the proof.
+    if (n1 & (n1 - 1)) == 0:
+        path = [root1] + list(proof)
+    else:
+        path = list(proof)
+
+    if not path:
+        return False
+
+    fn = n1 - 1
+    sn = n2 - 1
+    while fn % 2 == 1:
+        fn //= 2
+        sn //= 2
+
+    fr = sr = path[0]
+    for c in path[1:]:
+        if sn == 0:
+            return False
+        if fn % 2 == 1 or fn == sn:
+            fr = merkle_internal_hash(c, fr)
+            sr = merkle_internal_hash(c, sr)
+            while not (fn == 0 or fn % 2 == 1):
+                fn //= 2
+                sn //= 2
+        else:
+            sr = merkle_internal_hash(sr, c)
+        fn //= 2
+        sn //= 2
+
+    return sn == 0 and fr == root1 and sr == root2
+
+
 def merkle_verify_inclusion(
     leaf_hash: bytes,
     leaf_index: int,
@@ -4365,13 +4606,64 @@ def build_transparency_json() -> dict:
         },
     }
 
+    # Consistency proof from a smaller earlier tree (5 leaves) to the
+    # current 8-leaf tree. The earlier tree is a prefix of the current
+    # tree if and only if any append-only log has been honestly extended.
+    n1 = 5
+    leaves_n1 = leaves[:n1]
+    root_n1 = merkle_root(leaves_n1)
+    consistency_path = merkle_consistency_proof(leaves, n1, log_size)
+    consistency_verifies = merkle_verify_consistency(
+        n1, log_size, consistency_path, root_n1, root
+    )
+    assert consistency_verifies
+
+    # Tampered consistency: flip a bit on one path element.
+    bad_consistency_path = list(consistency_path)
+    if bad_consistency_path:
+        first = bytearray(bad_consistency_path[0])
+        first[0] ^= 0x01
+        bad_consistency_path[0] = bytes(first)
+    bad_consistency_verifies = merkle_verify_consistency(
+        n1, log_size, bad_consistency_path, root_n1, root
+    )
+    assert not bad_consistency_verifies
+
+    consistency_vector = {
+        "id": "transparency-consistency-proof",
+        "description": (
+            "RFC 6962 §2.1.2 consistency proof showing that the 5-leaf "
+            "earlier tree is a prefix of the §17.10 8-leaf tree. The "
+            "verifier holds two STHs (one for n1=5, one for n2=8) and "
+            "the proof; verification recomputes both roots from the "
+            "proof path and confirms they match. Tampering one bit of "
+            "the path causes verification to reject, the property an "
+            "honest log relies on to detect equivocation."
+        ),
+        "spec_reference": "VECTORS.md §17.10; TRANSPARENCY.md §3.2; RFC 6962 §2.1.2",
+        "inputs": {
+            "n1": n1,
+            "n2": log_size,
+            "root_n1_hex": root_n1.hex(),
+            "root_n2_hex": root.hex(),
+            "path_hex": [h.hex() for h in consistency_path],
+        },
+        "expected": {
+            "valid_path_verifies": consistency_verifies,
+            "tampered_path_first_element_hex": (
+                bad_consistency_path[0].hex() if consistency_path else None
+            ),
+            "tampered_path_verifies": bad_consistency_verifies,
+        },
+    }
+
     return {
         "version": "1.0.0",
         "category": "transparency",
         "description": (
             "Layer 5 vectors for TRANSPARENCY.md: domain-signed tree heads "
-            "and RFC 6962 Merkle inclusion proofs. Consistency proofs and "
-            "the §4 augmented key-fetch path are TODO."
+            "plus RFC 6962 inclusion and consistency proofs. The §4 "
+            "augmented key-fetch path is TODO."
         ),
         "spec_reference": "VECTORS.md §17.10; TRANSPARENCY.md §2-§3",
         "construction": {
@@ -4380,7 +4672,7 @@ def build_transparency_json() -> dict:
             "sth_signature_prefix_utf8": "SEMP-TRANSPARENCY-STH:",
             "canonical_form": "ENVELOPE.md §4.3 with signature.value blanked",
         },
-        "vectors": [sth_vector, inclusion_vector],
+        "vectors": [sth_vector, inclusion_vector, consistency_vector],
     }
 
 
@@ -5465,6 +5757,7 @@ def main() -> int:
         (OUTDIR / "session-resumption.json", build_session_resumption_json()),
         (OUTDIR / "first-contact-token.json", build_first_contact_token_json()),
         (OUTDIR / "clock-tolerance.json", build_clock_tolerance_json()),
+        (OUTDIR / "account-recovery.json", build_account_recovery_json()),
     ]
 
     ok = True
