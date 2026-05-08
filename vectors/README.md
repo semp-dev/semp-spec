@@ -116,7 +116,7 @@ A runner is a small, language-idiomatic test harness — typically a few hundred
 | 2     | Recipient status visibility     | `recipient-status.json`    | seeded        |
 | 3     | Seal wrap / unwrap (round-trip) | `seal-roundtrip.json`      | seeded (baseline; PQ pending) |
 | 3     | Envelope compose / open         | `envelope-roundtrip.json`  | TODO          |
-| 3     | Sender identity signature       | `sender-signature.json`    | TODO          |
+| 3     | Sender identity signature       | `sender-signature.json`    | seeded        |
 | 3     | Forwarding primitive (3-step)   | `forwarding.json`          | TODO          |
 | 3     | Signed delivery receipt         | `delivery-receipt.json`    | TODO          |
 | 3     | Large-attachment AEAD           | `large-attachment.json`    | TODO          |

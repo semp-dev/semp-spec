@@ -1984,6 +1984,240 @@ def build_seal_roundtrip_json() -> dict:
     }
 
 
+# ---- Sender-signature vectors (Layer 3) -------------------------------------
+#
+# Implements ENVELOPE.md §6.5: Ed25519 signature over the canonical enclosure
+# with the SEMP-ENCLOSURE-SENDER: domain-separation prefix.
+
+
+def ed25519_pubkey_from_priv(priv_bytes: bytes) -> bytes:
+    """Derive the 32-byte Ed25519 public key from a 32-byte seed."""
+    from cryptography.hazmat.primitives import serialization
+    from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
+
+    priv = Ed25519PrivateKey.from_private_bytes(priv_bytes)
+    return priv.public_key().public_bytes(
+        encoding=serialization.Encoding.Raw,
+        format=serialization.PublicFormat.Raw,
+    )
+
+
+def ed25519_sign(priv_bytes: bytes, message: bytes) -> bytes:
+    from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
+
+    return Ed25519PrivateKey.from_private_bytes(priv_bytes).sign(message)
+
+
+def ed25519_verify(pub_bytes: bytes, signature: bytes, message: bytes) -> bool:
+    from cryptography.exceptions import InvalidSignature
+    from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PublicKey
+
+    try:
+        Ed25519PublicKey.from_public_bytes(pub_bytes).verify(signature, message)
+        return True
+    except InvalidSignature:
+        return False
+
+
+def fingerprint_hex(pub_bytes: bytes) -> str:
+    """KEY.md §4.4: lowercase hex of SHA-256(public_key)."""
+    return hashlib.sha256(pub_bytes).hexdigest()
+
+
+SENDER_SIGNATURE_PREFIX = b"SEMP-ENCLOSURE-SENDER:"
+
+
+def sender_signature_canonical(enclosure: dict) -> bytes:
+    """Per ENVELOPE.md §6.5.2 step 4: canonical JSON of the enclosure with
+    sender_signature.value blanked."""
+    e = copy.deepcopy(enclosure)
+    if "sender_signature" not in e:
+        raise ValueError("enclosure missing sender_signature block")
+    e["sender_signature"]["value"] = ""
+    return canonical_json(e)
+
+
+def sender_signature_compute(enclosure: dict, identity_priv: bytes) -> tuple[dict, dict]:
+    """Apply ENVELOPE.md §6.5.2 to produce a signed enclosure.
+
+    Returns (signed_enclosure, intermediates).
+    """
+    canonical = sender_signature_canonical(enclosure)
+    prefixed = SENDER_SIGNATURE_PREFIX + canonical
+    sig = ed25519_sign(identity_priv, prefixed)
+
+    import base64
+
+    signed = copy.deepcopy(enclosure)
+    signed["sender_signature"]["value"] = base64.b64encode(sig).decode("ascii")
+
+    inter = {
+        "canonical_enclosure_with_blanked_signature_utf8": canonical.decode("utf-8"),
+        "signing_input_prefix_utf8": SENDER_SIGNATURE_PREFIX.decode("utf-8"),
+        "signing_input_hex": prefixed.hex(),
+        "signature_hex": sig.hex(),
+    }
+    return signed, inter
+
+
+def sender_signature_verify(signed_enclosure: dict, sender_identity_pub: bytes) -> bool:
+    """Per ENVELOPE.md §6.5.3."""
+    import base64
+
+    sig_b64 = signed_enclosure["sender_signature"]["value"]
+    sig = base64.b64decode(sig_b64)
+    canonical = sender_signature_canonical(signed_enclosure)
+    prefixed = SENDER_SIGNATURE_PREFIX + canonical
+    return ed25519_verify(sender_identity_pub, sig, prefixed)
+
+
+def build_sender_signature_json() -> dict:
+    """Three pinned-input cases for §6.5: a valid signature, a body-tampered
+    failure, and a wrong-key failure."""
+
+    # Pinned identity key A (the legitimate sender).
+    seed_a = bytes([0x11] * 32)
+    pub_a = ed25519_pubkey_from_priv(seed_a)
+    fp_a = fingerprint_hex(pub_a)
+
+    # Pinned identity key B (a different sender; used to demonstrate that
+    # signing with B and verifying as A fails).
+    seed_b = bytes([0x22] * 32)
+    pub_b = ed25519_pubkey_from_priv(seed_b)
+    fp_b = fingerprint_hex(pub_b)
+
+    base_enclosure = {
+        "subject": "Layer 3 vector check",
+        "content_type": "text/plain",
+        "body": {
+            "text/plain": "VGhlIHF1aWNrIGJyb3duIGZveCBqdW1wcyBvdmVyIHRoZSBsYXp5IGRvZy4=",
+        },
+        "attachments": [],
+        "forwarded_from": None,
+        "extensions": {},
+        "sender_signature": {
+            "algorithm": "ed25519",
+            "key_id": fp_a,
+            "value": "",
+        },
+    }
+
+    # Case 1: valid signature.
+    signed_valid, inter_valid = sender_signature_compute(base_enclosure, seed_a)
+    assert sender_signature_verify(signed_valid, pub_a)
+
+    # Case 2: same as case 1 but with the body altered after signing. The
+    # verification reconstructs the canonical bytes from the tampered
+    # enclosure, which differ from the bytes that were signed, so Ed25519
+    # verify rejects.
+    tampered = copy.deepcopy(signed_valid)
+    tampered["body"]["text/plain"] = (
+        "VGhlIHF1aWNrIGJyb3duIGZveCBqdW1wcyBvdmVyIHRoZSBaYXp5IGRvZy4="
+    )  # one byte differs
+    assert not sender_signature_verify(tampered, pub_a)
+
+    # Case 3: enclosure signed by B but presented with key_id pointing at A
+    # (or attempted verification against A). Verification fails because the
+    # signature was produced by a different private key. We model this as
+    # producing a signature with seed_b and presenting the enclosure with
+    # sender_signature.key_id still claiming key A; verification against
+    # pub_a fails.
+    enclosure_for_wrong_key = copy.deepcopy(base_enclosure)
+    enclosure_for_wrong_key["sender_signature"]["key_id"] = fp_a  # claims A
+    signed_with_b, inter_wrong = sender_signature_compute(
+        enclosure_for_wrong_key, seed_b
+    )
+    assert not sender_signature_verify(signed_with_b, pub_a)
+    # Sanity: it WOULD verify against pub_b, since seed_b actually signed it.
+    assert sender_signature_verify(signed_with_b, pub_b)
+
+    return {
+        "version": "1.0.0",
+        "category": "sender-signature",
+        "description": (
+            "Layer 3 round-trip vectors for the enclosure sender_signature "
+            "construction in ENVELOPE.md §6.5: Ed25519 over the canonical "
+            "enclosure (with sender_signature.value blanked) prefixed with "
+            "the SEMP-ENCLOSURE-SENDER: domain separator."
+        ),
+        "spec_reference": "VECTORS.md §17.2; ENVELOPE.md §6.5; KEY.md §4.4",
+        "construction": {
+            "signature_algorithm": "Ed25519",
+            "domain_separation_prefix_utf8": "SEMP-ENCLOSURE-SENDER:",
+            "canonical_form": (
+                "Per ENVELOPE.md §4.3: sorted keys at every nesting level, "
+                "no insignificant whitespace, UTF-8 encoding. Apply with "
+                "enclosure.sender_signature.value set to \"\"."
+            ),
+            "signing_input": "prefix || canonical_enclosure_bytes",
+            "key_id_construction": "lowercase hex of SHA-256(public_key) per KEY.md §4.4",
+        },
+        "vectors": [
+            {
+                "id": "sender-signature-valid",
+                "description": (
+                    "Pinned identity key signs a pinned enclosure. "
+                    "Verification with the matching public key succeeds."
+                ),
+                "spec_reference": "VECTORS.md §17.2; ENVELOPE.md §6.5.2, §6.5.3",
+                "inputs": {
+                    "identity_private_seed_hex": seed_a.hex(),
+                    "identity_public_key_hex": pub_a.hex(),
+                    "identity_key_id": fp_a,
+                    "enclosure_pre_sign_json": base_enclosure,
+                },
+                "intermediates": inter_valid,
+                "expected": {
+                    "signed_enclosure_json": signed_valid,
+                    "signature_b64": signed_valid["sender_signature"]["value"],
+                    "verifies_with_correct_key": True,
+                },
+            },
+            {
+                "id": "sender-signature-tampered-body",
+                "description": (
+                    "Take the §17.2/sender-signature-valid output and change "
+                    "one byte of the body text/plain. The reconstructed "
+                    "canonical bytes differ from what was signed, so Ed25519 "
+                    "verify MUST reject."
+                ),
+                "spec_reference": "VECTORS.md §17.2; ENVELOPE.md §6.5.3",
+                "inputs": {
+                    "identity_public_key_hex": pub_a.hex(),
+                    "tampered_signed_enclosure_json": tampered,
+                },
+                "expected": {
+                    "verifies_with_correct_key": False,
+                    "rejection_reason": "ed25519 signature mismatch after canonical reconstruction",
+                },
+            },
+            {
+                "id": "sender-signature-wrong-key",
+                "description": (
+                    "Enclosure has key_id pointing at identity A but was "
+                    "actually signed by identity B's private key. Verification "
+                    "against A's public key MUST fail; sanity-check that the "
+                    "signature DOES verify against B's public key, isolating "
+                    "the failure to the key-mismatch path."
+                ),
+                "spec_reference": "VECTORS.md §17.2; ENVELOPE.md §6.5.3",
+                "inputs": {
+                    "claimed_identity_key_id": fp_a,
+                    "claimed_identity_public_key_hex": pub_a.hex(),
+                    "actual_signer_private_seed_hex": seed_b.hex(),
+                    "actual_signer_public_key_hex": pub_b.hex(),
+                    "signed_enclosure_json": signed_with_b,
+                },
+                "expected": {
+                    "verifies_with_claimed_key": False,
+                    "verifies_with_actual_signer_key": True,
+                    "rejection_reason": "key_id does not match the public key that produced the signature",
+                },
+            },
+        ],
+    }
+
+
 # ---- Recipient status vectors (§15) -----------------------------------------
 
 
@@ -2134,6 +2368,7 @@ def main() -> int:
         (OUTDIR / "device-certificates.json", build_device_certificates_json()),
         (OUTDIR / "recipient-status.json", build_recipient_status_json()),
         (OUTDIR / "seal-roundtrip.json", build_seal_roundtrip_json()),
+        (OUTDIR / "sender-signature.json", build_sender_signature_json()),
     ]
 
     ok = True

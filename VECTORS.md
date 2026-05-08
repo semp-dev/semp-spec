@@ -826,6 +826,47 @@ construction.
 The post-quantum suite (`pq-kyber768-x25519`) hybrid wrap will land in a
 follow-up vector once the Python generator wires up Kyber768 support.
 
+### 17.2 Sender Signature
+
+Reference: `ENVELOPE.md` §6.5.
+
+`enclosure.sender_signature` is an Ed25519 signature produced by the sending
+user's published identity key over the canonical bytes of the enclosure.
+It binds the enclosure plaintext to the sender's identity independently of
+`seal.signature` (which binds ciphertext at the sender's domain) and is the
+foundation of forward provenance per §6.6.
+
+Construction: blank `enclosure.sender_signature.value` to `""`, canonicalize
+the enclosure per §4.3 (sorted keys, no whitespace, UTF-8), prefix the
+result with the literal UTF-8 bytes `SEMP-ENCLOSURE-SENDER:`, sign with the
+identity private key, base64-encode the signature, and place it back in
+`sender_signature.value`. Verification reverses the construction and uses
+the sender's published identity key indicated by `sender_signature.key_id`
+(a lowercase hex SHA-256 fingerprint per `KEY.md` §4.4).
+
+Three vectors:
+
+- `sender-signature-valid`: pinned identity key signs a pinned enclosure;
+  verification with the matching public key MUST succeed.
+- `sender-signature-tampered-body`: the previous case's signed enclosure
+  with one byte of the body altered. The reconstructed canonical bytes
+  differ from what was signed; verification MUST reject.
+- `sender-signature-wrong-key`: an enclosure whose `sender_signature.key_id`
+  points at identity A but was actually signed by identity B's private
+  key. Verification against A's public key MUST reject; the JSON also
+  records that verification against B's public key succeeds, isolating
+  the failure to the key-mismatch path rather than a corruption issue.
+
+A receiving client that observes a verification failure MUST NOT render
+the enclosure content as authored by the claimed sender (`ENVELOPE.md`
+§6.5.3).
+
+**Bytes:** see [`vectors/v1.0.0/sender-signature.json`](vectors/v1.0.0/sender-signature.json).
+Each vector also lists `intermediates` (the canonical enclosure bytes with
+the signature blanked, the prefixed signing input, and the raw signature
+bytes) so an implementer who fails byte equality can localise the
+divergence to a specific construction step.
+
 ---
 
 ## 18. Relationship to Other Specifications

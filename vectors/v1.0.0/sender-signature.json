@@ -1,0 +1,123 @@
+{
+  "version": "1.0.0",
+  "category": "sender-signature",
+  "description": "Layer 3 round-trip vectors for the enclosure sender_signature construction in ENVELOPE.md §6.5: Ed25519 over the canonical enclosure (with sender_signature.value blanked) prefixed with the SEMP-ENCLOSURE-SENDER: domain separator.",
+  "spec_reference": "VECTORS.md §17.2; ENVELOPE.md §6.5; KEY.md §4.4",
+  "construction": {
+    "signature_algorithm": "Ed25519",
+    "domain_separation_prefix_utf8": "SEMP-ENCLOSURE-SENDER:",
+    "canonical_form": "Per ENVELOPE.md §4.3: sorted keys at every nesting level, no insignificant whitespace, UTF-8 encoding. Apply with enclosure.sender_signature.value set to \"\".",
+    "signing_input": "prefix || canonical_enclosure_bytes",
+    "key_id_construction": "lowercase hex of SHA-256(public_key) per KEY.md §4.4"
+  },
+  "vectors": [
+    {
+      "id": "sender-signature-valid",
+      "description": "Pinned identity key signs a pinned enclosure. Verification with the matching public key succeeds.",
+      "spec_reference": "VECTORS.md §17.2; ENVELOPE.md §6.5.2, §6.5.3",
+      "inputs": {
+        "identity_private_seed_hex": "1111111111111111111111111111111111111111111111111111111111111111",
+        "identity_public_key_hex": "d04ab232742bb4ab3a1368bd4615e4e6d0224ab71a016baf8520a332c9778737",
+        "identity_key_id": "10ba682c8ad13513971e8b56881aab8bd702bb807796eca81932c735a94d6e6d",
+        "enclosure_pre_sign_json": {
+          "subject": "Layer 3 vector check",
+          "content_type": "text/plain",
+          "body": {
+            "text/plain": "VGhlIHF1aWNrIGJyb3duIGZveCBqdW1wcyBvdmVyIHRoZSBsYXp5IGRvZy4="
+          },
+          "attachments": [],
+          "forwarded_from": null,
+          "extensions": {},
+          "sender_signature": {
+            "algorithm": "ed25519",
+            "key_id": "10ba682c8ad13513971e8b56881aab8bd702bb807796eca81932c735a94d6e6d",
+            "value": ""
+          }
+        }
+      },
+      "intermediates": {
+        "canonical_enclosure_with_blanked_signature_utf8": "{\"attachments\":[],\"body\":{\"text/plain\":\"VGhlIHF1aWNrIGJyb3duIGZveCBqdW1wcyBvdmVyIHRoZSBsYXp5IGRvZy4=\"},\"content_type\":\"text/plain\",\"extensions\":{},\"forwarded_from\":null,\"sender_signature\":{\"algorithm\":\"ed25519\",\"key_id\":\"10ba682c8ad13513971e8b56881aab8bd702bb807796eca81932c735a94d6e6d\",\"value\":\"\"},\"subject\":\"Layer 3 vector check\"}",
+        "signing_input_prefix_utf8": "SEMP-ENCLOSURE-SENDER:",
+        "signing_input_hex": "53454d502d454e434c4f535552452d53454e4445523a7b226174746163686d656e7473223a5b5d2c22626f6479223a7b22746578742f706c61696e223a225647686c4948463161574e7249474a796233647549475a76654342716457317763794276646d56794948526f5a53427359587035494752765a79343d227d2c22636f6e74656e745f74797065223a22746578742f706c61696e222c22657874656e73696f6e73223a7b7d2c22666f727761726465645f66726f6d223a6e756c6c2c2273656e6465725f7369676e6174757265223a7b22616c676f726974686d223a2265643235353139222c226b65795f6964223a2231306261363832633861643133353133393731653862353638383161616238626437303262623830373739366563613831393332633733356139346436653664222c2276616c7565223a22227d2c227375626a656374223a224c61796572203320766563746f7220636865636b227d",
+        "signature_hex": "a9c7f4156a88cacf7297b10a0fe90209f6d1a3a14528b719cb6c8d9888e9fb32e046a099a1974ba6618cc4fad651fec1f80b1aaa6baaaf1aace88ce3ed686f07"
+      },
+      "expected": {
+        "signed_enclosure_json": {
+          "subject": "Layer 3 vector check",
+          "content_type": "text/plain",
+          "body": {
+            "text/plain": "VGhlIHF1aWNrIGJyb3duIGZveCBqdW1wcyBvdmVyIHRoZSBsYXp5IGRvZy4="
+          },
+          "attachments": [],
+          "forwarded_from": null,
+          "extensions": {},
+          "sender_signature": {
+            "algorithm": "ed25519",
+            "key_id": "10ba682c8ad13513971e8b56881aab8bd702bb807796eca81932c735a94d6e6d",
+            "value": "qcf0FWqIys9yl7EKD+kCCfbRo6FFKLcZy2yNmIjp+zLgRqCZoZdLpmGMxPrWUf7B+Asaqmuqrxqs6Izj7WhvBw=="
+          }
+        },
+        "signature_b64": "qcf0FWqIys9yl7EKD+kCCfbRo6FFKLcZy2yNmIjp+zLgRqCZoZdLpmGMxPrWUf7B+Asaqmuqrxqs6Izj7WhvBw==",
+        "verifies_with_correct_key": true
+      }
+    },
+    {
+      "id": "sender-signature-tampered-body",
+      "description": "Take the §17.2/sender-signature-valid output and change one byte of the body text/plain. The reconstructed canonical bytes differ from what was signed, so Ed25519 verify MUST reject.",
+      "spec_reference": "VECTORS.md §17.2; ENVELOPE.md §6.5.3",
+      "inputs": {
+        "identity_public_key_hex": "d04ab232742bb4ab3a1368bd4615e4e6d0224ab71a016baf8520a332c9778737",
+        "tampered_signed_enclosure_json": {
+          "subject": "Layer 3 vector check",
+          "content_type": "text/plain",
+          "body": {
+            "text/plain": "VGhlIHF1aWNrIGJyb3duIGZveCBqdW1wcyBvdmVyIHRoZSBaYXp5IGRvZy4="
+          },
+          "attachments": [],
+          "forwarded_from": null,
+          "extensions": {},
+          "sender_signature": {
+            "algorithm": "ed25519",
+            "key_id": "10ba682c8ad13513971e8b56881aab8bd702bb807796eca81932c735a94d6e6d",
+            "value": "qcf0FWqIys9yl7EKD+kCCfbRo6FFKLcZy2yNmIjp+zLgRqCZoZdLpmGMxPrWUf7B+Asaqmuqrxqs6Izj7WhvBw=="
+          }
+        }
+      },
+      "expected": {
+        "verifies_with_correct_key": false,
+        "rejection_reason": "ed25519 signature mismatch after canonical reconstruction"
+      }
+    },
+    {
+      "id": "sender-signature-wrong-key",
+      "description": "Enclosure has key_id pointing at identity A but was actually signed by identity B's private key. Verification against A's public key MUST fail; sanity-check that the signature DOES verify against B's public key, isolating the failure to the key-mismatch path.",
+      "spec_reference": "VECTORS.md §17.2; ENVELOPE.md §6.5.3",
+      "inputs": {
+        "claimed_identity_key_id": "10ba682c8ad13513971e8b56881aab8bd702bb807796eca81932c735a94d6e6d",
+        "claimed_identity_public_key_hex": "d04ab232742bb4ab3a1368bd4615e4e6d0224ab71a016baf8520a332c9778737",
+        "actual_signer_private_seed_hex": "2222222222222222222222222222222222222222222222222222222222222222",
+        "actual_signer_public_key_hex": "a09aa5f47a6759802ff955f8dc2d2a14a5c99d23be97f864127ff9383455a4f0",
+        "signed_enclosure_json": {
+          "subject": "Layer 3 vector check",
+          "content_type": "text/plain",
+          "body": {
+            "text/plain": "VGhlIHF1aWNrIGJyb3duIGZveCBqdW1wcyBvdmVyIHRoZSBsYXp5IGRvZy4="
+          },
+          "attachments": [],
+          "forwarded_from": null,
+          "extensions": {},
+          "sender_signature": {
+            "algorithm": "ed25519",
+            "key_id": "10ba682c8ad13513971e8b56881aab8bd702bb807796eca81932c735a94d6e6d",
+            "value": "PivuJsuYrMqIYcmS9PcSsD3k8m374i+39Hosnafg6kfT3UHOCszZ4L0wEnVA0cOIvZZut8Rp4gfa6gKe8Js9CQ=="
+          }
+        }
+      },
+      "expected": {
+        "verifies_with_claimed_key": false,
+        "verifies_with_actual_signer_key": true,
+        "rejection_reason": "key_id does not match the public key that produced the signature"
+      }
+    }
+  ]
+}
