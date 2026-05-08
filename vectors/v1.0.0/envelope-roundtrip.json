@@ -1,0 +1,128 @@
+{
+  "version": "1.0.0",
+  "category": "envelope-roundtrip",
+  "description": "Layer 3 round-trip vector covering the full ENVELOPE.md §7.1 compose flow and §7.2 verification path. Every random input (symmetric keys, nonces, ephemerals) is pinned so the final envelope JSON is byte-deterministic. Baseline suite only (x25519-chacha20-poly1305); PQ suite lands once Kyber768 is wired into the generator.",
+  "spec_reference": "VECTORS.md §17.4; ENVELOPE.md §4, §6.5, §7.1, §7.1.1, §7.2",
+  "construction": {
+    "suite": "x25519-chacha20-poly1305",
+    "seal_signature_prefix_utf8": "SEMP-ENVELOPE:",
+    "session_mac_algorithm": "HMAC-SHA-256",
+    "brief_aead": "ChaCha20-Poly1305(K_brief, brief_nonce, canonical_brief_json, aad=postmark.id)",
+    "enclosure_aead": "ChaCha20-Poly1305(K_enclosure, enclosure_nonce, canonical_enclosure_json, aad=postmark.id)",
+    "envelope_brief_field": "base64(brief_nonce || aead_ct)",
+    "envelope_enclosure_field": "base64(enclosure_nonce || aead_ct)",
+    "seal_wrap_construction": "ENVELOPE.md §4.4.1 (see seal-roundtrip.json)",
+    "sender_signature_construction": "ENVELOPE.md §6.5 (see sender-signature.json)"
+  },
+  "vectors": [
+    {
+      "id": "envelope-roundtrip-baseline-single-recipient",
+      "description": "End-to-end compose for a single-recipient envelope: brief is wrapped for both the recipient server domain and the recipient client; enclosure is wrapped for the recipient client only. The vector pins every random input and records the final envelope JSON; round-trip verification is asserted at generation time across all seven §7.2 steps (seal.signature, seal.session_mac, server K_brief unwrap, brief decrypt, client K_brief unwrap, K_enclosure unwrap, enclosure decrypt + sender_signature).",
+      "spec_reference": "VECTORS.md §17.4; ENVELOPE.md §7.1, §7.1.1, §7.2",
+      "inputs": {
+        "sender_identity_seed_hex": "a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1",
+        "sender_identity_pub_hex": "bc7cbcb5636375fa1d82434d466724d92377f53b980695dd49d26d0ce12205a5",
+        "sender_identity_key_id": "730a5edc28c2f8daf2d9dce3a01d5f205e35e55582eed2ba26219fabdd4cc9a8",
+        "sender_domain_signing_seed_hex": "a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2",
+        "sender_domain_signing_pub_hex": "65e8f9b0bc6eae124169f0576f97362d295a8cf5f770b45e14357ce647d33eec",
+        "sender_domain_signing_key_id": "c7b9b30e8b344118e2cf93b98c6b59b70eda4309b5ff36831ab09ac426a838e1",
+        "recipient_client_priv_hex": "b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1",
+        "recipient_client_pub_hex": "d3337e4d4ee503a66976feb1fadf5bd21ba96fc2b1571b3e980d87cf49797510",
+        "recipient_client_key_id": "a2073cdb817e01f63d81d1a69dbbaa25c557223cd9e9001562eea5f82ce3c08f",
+        "recipient_server_domain_priv_hex": "b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2",
+        "recipient_server_domain_pub_hex": "db48257e1237976a74ad8cfedca00213408fe89ac6251f1b930245f242b5c31a",
+        "recipient_server_domain_key_id": "3fa76f6244743c27a452a7388b2100428c535a97a79e31dcc84f2f9aaab69474",
+        "K_brief_hex": "d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1",
+        "K_enclosure_hex": "d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2",
+        "brief_aead_nonce_hex": "e1e1e1e1e1e1e1e1e1e1e1e1",
+        "enclosure_aead_nonce_hex": "e2e2e2e2e2e2e2e2e2e2e2e2",
+        "ephemeral_priv_brief_for_client_hex": "c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1",
+        "ephemeral_priv_brief_for_domain_hex": "c2c2c2c2c2c2c2c2c2c2c2c2c2c2c2c2c2c2c2c2c2c2c2c2c2c2c2c2c2c2c2c2",
+        "ephemeral_priv_enclosure_for_client_hex": "c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3",
+        "K_env_mac_hex": "f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1",
+        "brief_pre_encrypt_json": {
+          "message_id": "msg-2026-05-08-0001",
+          "from": "alice@a.example",
+          "to": [
+            "bob@b.example"
+          ],
+          "sent_at": "2026-05-08T09:00:00Z"
+        },
+        "enclosure_pre_sign_json": {
+          "subject": "Round-trip vector check",
+          "content_type": "text/plain",
+          "body": {
+            "text/plain": "SGVsbG8gQm9iLCB0aGlzIGlzIGEgcm91bmQtdHJpcCB2ZWN0b3IuIC0tIEFsaWNl"
+          },
+          "attachments": [],
+          "forwarded_from": null,
+          "extensions": {},
+          "sender_signature": {
+            "algorithm": "ed25519",
+            "key_id": "730a5edc28c2f8daf2d9dce3a01d5f205e35e55582eed2ba26219fabdd4cc9a8",
+            "value": ""
+          }
+        },
+        "enclosure_post_sign_json": {
+          "subject": "Round-trip vector check",
+          "content_type": "text/plain",
+          "body": {
+            "text/plain": "SGVsbG8gQm9iLCB0aGlzIGlzIGEgcm91bmQtdHJpcCB2ZWN0b3IuIC0tIEFsaWNl"
+          },
+          "attachments": [],
+          "forwarded_from": null,
+          "extensions": {},
+          "sender_signature": {
+            "algorithm": "ed25519",
+            "key_id": "730a5edc28c2f8daf2d9dce3a01d5f205e35e55582eed2ba26219fabdd4cc9a8",
+            "value": "L1sgdPdGCUm13JHLUZ9GmO7qnpYTn1OLw2N/sfaNsfO8df2FvQDxk1GxdKBSPk+1JFdIPA10ANLFsxoF23BNCw=="
+          }
+        },
+        "postmark_id": "01J7TESTPOSTMARKIDXXXXXXXXXX"
+      },
+      "intermediates": {
+        "brief_canonical_utf8": "{\"from\":\"alice@a.example\",\"message_id\":\"msg-2026-05-08-0001\",\"sent_at\":\"2026-05-08T09:00:00Z\",\"to\":[\"bob@b.example\"]}",
+        "enclosure_canonical_utf8": "{\"attachments\":[],\"body\":{\"text/plain\":\"SGVsbG8gQm9iLCB0aGlzIGlzIGEgcm91bmQtdHJpcCB2ZWN0b3IuIC0tIEFsaWNl\"},\"content_type\":\"text/plain\",\"extensions\":{},\"forwarded_from\":null,\"sender_signature\":{\"algorithm\":\"ed25519\",\"key_id\":\"730a5edc28c2f8daf2d9dce3a01d5f205e35e55582eed2ba26219fabdd4cc9a8\",\"value\":\"L1sgdPdGCUm13JHLUZ9GmO7qnpYTn1OLw2N/sfaNsfO8df2FvQDxk1GxdKBSPk+1JFdIPA10ANLFsxoF23BNCw==\"},\"subject\":\"Round-trip vector check\"}",
+        "envelope_canonical_for_signature_utf8": "{\"brief\":\"4eHh4eHh4eHh4eHh9avHqv9G9N7tMEyhEBpdmWn1c1+vrhLr7BaYiE0FHrP/fwELuQlynZIAFnSK9Mg1DTQkfJzD36Ei93uvK8ehr+VTc1+vm9RAtlQ54SoqVIaEk4MFElH5pRcC82E0lszU2AzYdGZLBBiZ1OqEKGbybvUjzkt5qnA69vFBwwg2yn7i9jQ/zw==\",\"enclosure\":\"4uLi4uLi4uLi4uLiPqLF3C+LPqXQ6OIKoqB31xihVYq1mclJ0mjq0hl8wGsH7I1ornd7gGjvfJ8LyN9jPNlrfovv52WRJ2syuBzBQScIHvDYrxKnigBCMaJd+eEdFi0qWSm4fYsEqpJXgpfVU/FOPivFpg0Rx+fC/epsKkJXy0ca1CJI16i9j6lwyB/q5l1UqtAnl5S9/ednEKFZlsmZ0LCa1MjeJHcLJwJviU9faSa7lV1VSFPixxY4p6BqZWK3I69LL0noWTAcg+9m6hKHUNahFb/36utj7Qi7sb/rfulD8nIRPqzt7F2APuty89/HO0uz70M6fWwwwcy3ak9J+fW86GuVY3RloTrPyn5qiVba0EmKGK7Sf/7wtc7/AxmTN4Di0l1zpxqZ5jBsz+zzKZANZNKUGGoVYaB1p3bV2ddfpxzERU8dTUNfw1FM98cGi3Hkzk/V5KO2q9fCjCNcbDzIWkUNHYPFInH2re2W1I8rvgT8WpqDlFZTfFsG1VWoGstVFayDqv+KTPetMnnfd00N2KwbJdF3bqek0EQcei3478fQj8KqP63lxm2F1ClxS7bpNW+XaCejsKfsVMrV2rR0gPCeEqk=\",\"postmark\":{\"expires\":\"2026-05-15T09:00:00Z\",\"extensions\":{},\"from_domain\":\"a.example\",\"id\":\"01J7TESTPOSTMARKIDXXXXXXXXXX\",\"session_id\":\"01J7TESTSESSIONIDXXXXXXXXXXX\",\"to_domain\":\"b.example\"},\"seal\":{\"algorithm\":\"x25519-chacha20-poly1305\",\"brief_recipients\":{\"3fa76f6244743c27a452a7388b2100428c535a97a79e31dcc84f2f9aaab69474\":\"tj0FVY8h6Fzy5XIVCTAQd6UIczsF3/Pm9RjqBK7ELGUUuTSN7aVma8Aid8+WJFlwNsDxcHH2Yd13XzZPMTraDTmRxN2w6gBlG32FIimG+J0=\",\"a2073cdb817e01f63d81d1a69dbbaa25c557223cd9e9001562eea5f82ce3c08f\":\"QlddXIqTgzJV4J8EBUpPYkbTbtFjwcf4DB/JpYoOkS2nmJVG6fFSup52OkmbbYiAzwa/ABW9vNTfCWQ9w5p9dZIJ/aviYUpCIZwCZ/bQvYQ=\"},\"enclosure_recipients\":{\"a2073cdb817e01f63d81d1a69dbbaa25c557223cd9e9001562eea5f82ce3c08f\":\"v9o3aPkn21Kf6fD27kukaeQyyTu2+7jtXQToftCkXXsiBoMZSbzUo5k5yHm9eBp7DNfDjAzawzBTrKcvTeaOLJJDxZr9fT/Sh1LqnYSs0RU=\"},\"extensions\":{},\"key_id\":\"c7b9b30e8b344118e2cf93b98c6b59b70eda4309b5ff36831ab09ac426a838e1\",\"session_mac\":\"\",\"signature\":\"\"},\"type\":\"SEMP_ENVELOPE\",\"version\":\"1.0.0\"}",
+        "seal_signature_input_prefix_utf8": "SEMP-ENVELOPE:",
+        "seal_signature_hex": "cc98001a4eb507826b91d67c6a3b69b5c73651ce1c226205a1cd4432fb2461fe7fada615f7eabf072643d4fabcfb7c14fba7560630b83fe71371d7c4d14a8606",
+        "session_mac_hex": "3a47e8b3aecfce2094427f458dc3e673d5b5eb925ab86c3a89633eb3d9953306"
+      },
+      "expected": {
+        "envelope_json": {
+          "type": "SEMP_ENVELOPE",
+          "version": "1.0.0",
+          "postmark": {
+            "id": "01J7TESTPOSTMARKIDXXXXXXXXXX",
+            "session_id": "01J7TESTSESSIONIDXXXXXXXXXXX",
+            "from_domain": "a.example",
+            "to_domain": "b.example",
+            "expires": "2026-05-15T09:00:00Z",
+            "extensions": {}
+          },
+          "seal": {
+            "algorithm": "x25519-chacha20-poly1305",
+            "key_id": "c7b9b30e8b344118e2cf93b98c6b59b70eda4309b5ff36831ab09ac426a838e1",
+            "signature": "zJgAGk61B4JrkdZ8ajtptcc2Uc4cImIFoc1EMvskYf5/raYV9+q/ByZD1Pq8+3wU+6dWBjC4P+cTcdfE0UqGBg==",
+            "session_mac": "Okfos67PziCUQn9FjcPmc9W165JauGw6iWM+s9mVMwY=",
+            "brief_recipients": {
+              "a2073cdb817e01f63d81d1a69dbbaa25c557223cd9e9001562eea5f82ce3c08f": "QlddXIqTgzJV4J8EBUpPYkbTbtFjwcf4DB/JpYoOkS2nmJVG6fFSup52OkmbbYiAzwa/ABW9vNTfCWQ9w5p9dZIJ/aviYUpCIZwCZ/bQvYQ=",
+              "3fa76f6244743c27a452a7388b2100428c535a97a79e31dcc84f2f9aaab69474": "tj0FVY8h6Fzy5XIVCTAQd6UIczsF3/Pm9RjqBK7ELGUUuTSN7aVma8Aid8+WJFlwNsDxcHH2Yd13XzZPMTraDTmRxN2w6gBlG32FIimG+J0="
+            },
+            "enclosure_recipients": {
+              "a2073cdb817e01f63d81d1a69dbbaa25c557223cd9e9001562eea5f82ce3c08f": "v9o3aPkn21Kf6fD27kukaeQyyTu2+7jtXQToftCkXXsiBoMZSbzUo5k5yHm9eBp7DNfDjAzawzBTrKcvTeaOLJJDxZr9fT/Sh1LqnYSs0RU="
+            },
+            "extensions": {}
+          },
+          "brief": "4eHh4eHh4eHh4eHh9avHqv9G9N7tMEyhEBpdmWn1c1+vrhLr7BaYiE0FHrP/fwELuQlynZIAFnSK9Mg1DTQkfJzD36Ei93uvK8ehr+VTc1+vm9RAtlQ54SoqVIaEk4MFElH5pRcC82E0lszU2AzYdGZLBBiZ1OqEKGbybvUjzkt5qnA69vFBwwg2yn7i9jQ/zw==",
+          "enclosure": "4uLi4uLi4uLi4uLiPqLF3C+LPqXQ6OIKoqB31xihVYq1mclJ0mjq0hl8wGsH7I1ornd7gGjvfJ8LyN9jPNlrfovv52WRJ2syuBzBQScIHvDYrxKnigBCMaJd+eEdFi0qWSm4fYsEqpJXgpfVU/FOPivFpg0Rx+fC/epsKkJXy0ca1CJI16i9j6lwyB/q5l1UqtAnl5S9/ednEKFZlsmZ0LCa1MjeJHcLJwJviU9faSa7lV1VSFPixxY4p6BqZWK3I69LL0noWTAcg+9m6hKHUNahFb/36utj7Qi7sb/rfulD8nIRPqzt7F2APuty89/HO0uz70M6fWwwwcy3ak9J+fW86GuVY3RloTrPyn5qiVba0EmKGK7Sf/7wtc7/AxmTN4Di0l1zpxqZ5jBsz+zzKZANZNKUGGoVYaB1p3bV2ddfpxzERU8dTUNfw1FM98cGi3Hkzk/V5KO2q9fCjCNcbDzIWkUNHYPFInH2re2W1I8rvgT8WpqDlFZTfFsG1VWoGstVFayDqv+KTPetMnnfd00N2KwbJdF3bqek0EQcei3478fQj8KqP63lxm2F1ClxS7bpNW+XaCejsKfsVMrV2rR0gPCeEqk="
+        },
+        "round_trip_recovers_brief": true,
+        "round_trip_recovers_enclosure": true,
+        "seal_signature_verifies": true,
+        "session_mac_verifies": true,
+        "sender_signature_verifies": true
+      }
+    }
+  ]
+}

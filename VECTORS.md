@@ -904,6 +904,48 @@ Three vectors:
 
 **Bytes:** see [`vectors/v1.0.0/forwarding.json`](vectors/v1.0.0/forwarding.json).
 
+### 17.4 Envelope Round-Trip (Baseline Suite)
+
+Reference: `ENVELOPE.md` §7.1, §7.1.1, §7.2.
+
+This vector covers the full encryption flow end-to-end: brief and enclosure
+canonicalization, ChaCha20-Poly1305 sealing under fresh symmetric keys
+with `postmark.id` as AEAD AAD, seal wrapping for both the recipient
+client and the recipient server's domain key, the outer canonical
+envelope bytes, the domain-key Ed25519 signature with the
+`SEMP-ENVELOPE:` prefix, and the HMAC-SHA-256 session MAC under
+`K_env_mac`.
+
+The vector pins every random input: identity and domain key seeds, the
+recipient client and recipient server domain keys, the symmetric
+`K_brief` / `K_enclosure`, the AEAD nonces, and the three ephemeral X25519
+private keys used for seal wraps (one per wrapped recipient entry).
+Generation runs all seven §7.2 verification steps as `assert`s, so a
+generator bug crashes before any JSON is written:
+
+1. `seal.signature` verifies against the sender domain public key.
+2. `seal.session_mac` verifies under `K_env_mac`.
+3. The recipient server unwraps `K_brief` from its domain entry.
+4. The server decrypts `envelope.brief` and recovers the brief JSON.
+5. The recipient client unwraps `K_brief` from its client entry.
+6. The client unwraps `K_enclosure` from its client entry.
+7. The client decrypts `envelope.enclosure` and verifies
+   `enclosure.sender_signature` against the sender's identity key.
+
+Padding (`envelope.padding`) and recipient-count obfuscation (§4.4.2) are
+omitted from this vector to keep the byte trace minimal; both layers are
+covered by their own §3.3 / §3.4 vectors and compose with this vector
+deterministically when applied.
+
+**Bytes:** see [`vectors/v1.0.0/envelope-roundtrip.json`](vectors/v1.0.0/envelope-roundtrip.json).
+The `intermediates` block records the canonical brief, canonical
+enclosure, canonical envelope-for-signature bytes, the seal-signature
+hex, and the session-MAC hex so an implementer who fails byte equality
+can drill into the specific construction step that diverged.
+
+The post-quantum suite (`pq-kyber768-x25519`) envelope round-trip lands
+in a follow-up once Kyber768 is wired into the generator.
+
 ---
 
 ## 18. Relationship to Other Specifications

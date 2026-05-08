@@ -2218,6 +2218,320 @@ def build_sender_signature_json() -> dict:
     }
 
 
+# ---- Envelope round-trip vectors (Layer 3, ENVELOPE.md §7.1) ----------------
+
+
+SEAL_SIGNATURE_PREFIX = b"SEMP-ENVELOPE:"
+
+
+def encrypt_brief_or_enclosure(
+    K: bytes, nonce: bytes, canonical_plaintext: bytes, postmark_id: str
+) -> str:
+    """ENVELOPE.md §7.1.1: AEAD.Seal under K with postmark.id (UTF-8) as AAD;
+    envelope-field encoding is base64(nonce || ct)."""
+    import base64
+
+    aad = postmark_id.encode("utf-8")
+    ct = chacha20_poly1305_seal(K, nonce, canonical_plaintext, aad)
+    return base64.b64encode(nonce + ct).decode("ascii")
+
+
+def decrypt_brief_or_enclosure(
+    blob_b64: str, K: bytes, postmark_id: str, nonce_size: int = 12
+) -> bytes:
+    """Inverse of encrypt_brief_or_enclosure."""
+    import base64
+
+    raw = base64.b64decode(blob_b64)
+    nonce = raw[:nonce_size]
+    ct = raw[nonce_size:]
+    aad = postmark_id.encode("utf-8")
+    return chacha20_poly1305_open(K, nonce, ct, aad)
+
+
+def envelope_canonical_for_signature(envelope: dict) -> bytes:
+    """ENVELOPE.md §4.3 canonical form for seal.signature / seal.session_mac:
+    blank seal.signature and seal.session_mac, omit postmark.hop_count and
+    top-level padding, sort keys, no whitespace.
+    """
+    return canonical_envelope(envelope)
+
+
+def build_envelope_roundtrip_json() -> dict:
+    """Compose a complete envelope end-to-end with every random input pinned.
+
+    The vector exercises §7.1 steps 1-13 plus the §7.2 verification path.
+    Baseline suite only; PQ suite envelope round-trip lands when Kyber768 is
+    wired up.
+    """
+    # Identity, recipient, and domain key material.
+    sender_identity_seed = bytes([0xA1] * 32)
+    sender_identity_pub = ed25519_pubkey_from_priv(sender_identity_seed)
+    sender_identity_fp = fingerprint_hex(sender_identity_pub)
+
+    sender_domain_seed = bytes([0xA2] * 32)
+    sender_domain_pub = ed25519_pubkey_from_priv(sender_domain_seed)
+    sender_domain_fp = fingerprint_hex(sender_domain_pub)
+
+    recipient_priv = bytes([0xB1] * 32)
+    recipient_pub = x25519_pubkey_from_priv(recipient_priv)
+    recipient_fp = fingerprint_hex(recipient_pub)
+
+    # The recipient server's domain encryption key. The brief is wrapped to
+    # both the recipient client (recipient_pub) and the recipient server's
+    # domain key (recipient_domain_pub). The enclosure is wrapped to the
+    # client only.
+    recipient_domain_priv = bytes([0xB2] * 32)
+    recipient_domain_pub = x25519_pubkey_from_priv(recipient_domain_priv)
+    recipient_domain_fp = fingerprint_hex(recipient_domain_pub)
+
+    # Pinned ephemerals for seal wraps. Three distinct ephemerals (one per
+    # wrapped recipient key entry) so the wraps don't collide.
+    eph_priv_recipient_brief = bytes([0xC1] * 32)
+    eph_priv_recipient_domain = bytes([0xC2] * 32)
+    eph_priv_recipient_enclosure = bytes([0xC3] * 32)
+
+    # Pinned symmetric keys and nonces.
+    K_brief = bytes([0xD1] * 32)
+    K_enclosure = bytes([0xD2] * 32)
+    brief_nonce = bytes([0xE1] * 12)
+    enclosure_nonce = bytes([0xE2] * 12)
+
+    # Session K_env_mac for the seal session_mac. The session.id is the
+    # postmark.session_id below; the K_env_mac is the per-session key the
+    # receiving server holds.
+    K_env_mac = bytes([0xF1] * 32)
+
+    # Step 1: compose plaintext brief and enclosure.
+    postmark_id = "01J7TESTPOSTMARKIDXXXXXXXXXX"
+    session_id = "01J7TESTSESSIONIDXXXXXXXXXXX"
+
+    brief = {
+        "message_id": "msg-2026-05-08-0001",
+        "from": "alice@a.example",
+        "to": ["bob@b.example"],
+        "sent_at": "2026-05-08T09:00:00Z",
+    }
+
+    enclosure_pre_sign = {
+        "subject": "Round-trip vector check",
+        "content_type": "text/plain",
+        "body": {
+            "text/plain": "SGVsbG8gQm9iLCB0aGlzIGlzIGEgcm91bmQtdHJpcCB2ZWN0b3IuIC0tIEFsaWNl",
+        },
+        "attachments": [],
+        "forwarded_from": None,
+        "extensions": {},
+        "sender_signature": {
+            "algorithm": "ed25519",
+            "key_id": sender_identity_fp,
+            "value": "",
+        },
+    }
+
+    # Step 2: sign the enclosure.
+    enclosure_signed, _ = sender_signature_compute(
+        enclosure_pre_sign, sender_identity_seed
+    )
+
+    # Steps 4-5: encrypt brief and enclosure with AEAD using postmark.id
+    # as AAD per §7.1.1.
+    brief_canonical = canonical_json(brief)
+    enclosure_canonical = canonical_json(enclosure_signed)
+    brief_blob = encrypt_brief_or_enclosure(
+        K_brief, brief_nonce, brief_canonical, postmark_id
+    )
+    enclosure_blob = encrypt_brief_or_enclosure(
+        K_enclosure, enclosure_nonce, enclosure_canonical, postmark_id
+    )
+
+    # Steps 7-9: seal wraps. K_brief wraps for both the recipient server
+    # domain key and the recipient client; K_enclosure wraps for the
+    # recipient client only.
+    wrapped_brief_for_client, _ = seal_wrap_baseline(
+        K_brief, recipient_pub, eph_priv_recipient_brief
+    )
+    wrapped_brief_for_domain, _ = seal_wrap_baseline(
+        K_brief, recipient_domain_pub, eph_priv_recipient_domain
+    )
+    wrapped_enclosure_for_client, _ = seal_wrap_baseline(
+        K_enclosure, recipient_pub, eph_priv_recipient_enclosure
+    )
+
+    # Compose the envelope (still missing seal.signature + seal.session_mac).
+    envelope = {
+        "type": "SEMP_ENVELOPE",
+        "version": "1.0.0",
+        "postmark": {
+            "id": postmark_id,
+            "session_id": session_id,
+            "from_domain": "a.example",
+            "to_domain": "b.example",
+            "expires": "2026-05-15T09:00:00Z",
+            "extensions": {},
+        },
+        "seal": {
+            "algorithm": "x25519-chacha20-poly1305",
+            "key_id": sender_domain_fp,
+            "signature": "",
+            "session_mac": "",
+            "brief_recipients": {
+                recipient_fp: wrapped_brief_for_client,
+                recipient_domain_fp: wrapped_brief_for_domain,
+            },
+            "enclosure_recipients": {
+                recipient_fp: wrapped_enclosure_for_client,
+            },
+            "extensions": {},
+        },
+        "brief": brief_blob,
+        "enclosure": enclosure_blob,
+    }
+
+    # Steps 11-13: canonical bytes, domain signature, session MAC.
+    canonical = envelope_canonical_for_signature(envelope)
+    seal_signature = ed25519_sign(
+        sender_domain_seed, SEAL_SIGNATURE_PREFIX + canonical
+    )
+    session_mac = hmac_sha256(K_env_mac, canonical)
+
+    import base64
+
+    final_envelope = copy.deepcopy(envelope)
+    final_envelope["seal"]["signature"] = base64.b64encode(seal_signature).decode("ascii")
+    final_envelope["seal"]["session_mac"] = base64.b64encode(session_mac).decode("ascii")
+
+    # Round-trip verification (the §7.2 path), entirely from primitives:
+    # 1. seal.signature verifies against sender_domain_pub.
+    assert ed25519_verify(
+        sender_domain_pub,
+        seal_signature,
+        SEAL_SIGNATURE_PREFIX + envelope_canonical_for_signature(final_envelope),
+    )
+    # 2. seal.session_mac verifies under K_env_mac.
+    expected_mac = hmac_sha256(
+        K_env_mac, envelope_canonical_for_signature(final_envelope)
+    )
+    assert expected_mac == session_mac
+    # 3. Server unwraps K_brief from recipient_domain entry.
+    K_brief_recovered_server = seal_unwrap_baseline(
+        final_envelope["seal"]["brief_recipients"][recipient_domain_fp],
+        recipient_domain_priv,
+        recipient_domain_pub,
+    )
+    assert K_brief_recovered_server == K_brief
+    # 4. Server decrypts envelope.brief.
+    brief_recovered = decrypt_brief_or_enclosure(
+        final_envelope["brief"], K_brief, postmark_id
+    )
+    assert json.loads(brief_recovered.decode("utf-8")) == brief
+    # 5. Client unwraps K_brief from its own entry.
+    K_brief_recovered_client = seal_unwrap_baseline(
+        final_envelope["seal"]["brief_recipients"][recipient_fp],
+        recipient_priv,
+        recipient_pub,
+    )
+    assert K_brief_recovered_client == K_brief
+    # 6. Client unwraps K_enclosure.
+    K_enclosure_recovered = seal_unwrap_baseline(
+        final_envelope["seal"]["enclosure_recipients"][recipient_fp],
+        recipient_priv,
+        recipient_pub,
+    )
+    assert K_enclosure_recovered == K_enclosure
+    # 7. Client decrypts enclosure and verifies sender_signature.
+    enclosure_recovered_bytes = decrypt_brief_or_enclosure(
+        final_envelope["enclosure"], K_enclosure, postmark_id
+    )
+    enclosure_recovered = json.loads(enclosure_recovered_bytes.decode("utf-8"))
+    assert sender_signature_verify(enclosure_recovered, sender_identity_pub)
+
+    return {
+        "version": "1.0.0",
+        "category": "envelope-roundtrip",
+        "description": (
+            "Layer 3 round-trip vector covering the full ENVELOPE.md §7.1 "
+            "compose flow and §7.2 verification path. Every random input "
+            "(symmetric keys, nonces, ephemerals) is pinned so the final "
+            "envelope JSON is byte-deterministic. Baseline suite only "
+            "(x25519-chacha20-poly1305); PQ suite lands once Kyber768 is "
+            "wired into the generator."
+        ),
+        "spec_reference": "VECTORS.md §17.4; ENVELOPE.md §4, §6.5, §7.1, §7.1.1, §7.2",
+        "construction": {
+            "suite": "x25519-chacha20-poly1305",
+            "seal_signature_prefix_utf8": "SEMP-ENVELOPE:",
+            "session_mac_algorithm": "HMAC-SHA-256",
+            "brief_aead": "ChaCha20-Poly1305(K_brief, brief_nonce, canonical_brief_json, aad=postmark.id)",
+            "enclosure_aead": "ChaCha20-Poly1305(K_enclosure, enclosure_nonce, canonical_enclosure_json, aad=postmark.id)",
+            "envelope_brief_field": "base64(brief_nonce || aead_ct)",
+            "envelope_enclosure_field": "base64(enclosure_nonce || aead_ct)",
+            "seal_wrap_construction": "ENVELOPE.md §4.4.1 (see seal-roundtrip.json)",
+            "sender_signature_construction": "ENVELOPE.md §6.5 (see sender-signature.json)",
+        },
+        "vectors": [
+            {
+                "id": "envelope-roundtrip-baseline-single-recipient",
+                "description": (
+                    "End-to-end compose for a single-recipient envelope: "
+                    "brief is wrapped for both the recipient server domain "
+                    "and the recipient client; enclosure is wrapped for the "
+                    "recipient client only. The vector pins every random "
+                    "input and records the final envelope JSON; round-trip "
+                    "verification is asserted at generation time across all "
+                    "seven §7.2 steps (seal.signature, seal.session_mac, "
+                    "server K_brief unwrap, brief decrypt, client K_brief "
+                    "unwrap, K_enclosure unwrap, enclosure decrypt + "
+                    "sender_signature)."
+                ),
+                "spec_reference": "VECTORS.md §17.4; ENVELOPE.md §7.1, §7.1.1, §7.2",
+                "inputs": {
+                    "sender_identity_seed_hex": sender_identity_seed.hex(),
+                    "sender_identity_pub_hex": sender_identity_pub.hex(),
+                    "sender_identity_key_id": sender_identity_fp,
+                    "sender_domain_signing_seed_hex": sender_domain_seed.hex(),
+                    "sender_domain_signing_pub_hex": sender_domain_pub.hex(),
+                    "sender_domain_signing_key_id": sender_domain_fp,
+                    "recipient_client_priv_hex": recipient_priv.hex(),
+                    "recipient_client_pub_hex": recipient_pub.hex(),
+                    "recipient_client_key_id": recipient_fp,
+                    "recipient_server_domain_priv_hex": recipient_domain_priv.hex(),
+                    "recipient_server_domain_pub_hex": recipient_domain_pub.hex(),
+                    "recipient_server_domain_key_id": recipient_domain_fp,
+                    "K_brief_hex": K_brief.hex(),
+                    "K_enclosure_hex": K_enclosure.hex(),
+                    "brief_aead_nonce_hex": brief_nonce.hex(),
+                    "enclosure_aead_nonce_hex": enclosure_nonce.hex(),
+                    "ephemeral_priv_brief_for_client_hex": eph_priv_recipient_brief.hex(),
+                    "ephemeral_priv_brief_for_domain_hex": eph_priv_recipient_domain.hex(),
+                    "ephemeral_priv_enclosure_for_client_hex": eph_priv_recipient_enclosure.hex(),
+                    "K_env_mac_hex": K_env_mac.hex(),
+                    "brief_pre_encrypt_json": brief,
+                    "enclosure_pre_sign_json": enclosure_pre_sign,
+                    "enclosure_post_sign_json": enclosure_signed,
+                    "postmark_id": postmark_id,
+                },
+                "intermediates": {
+                    "brief_canonical_utf8": brief_canonical.decode("utf-8"),
+                    "enclosure_canonical_utf8": enclosure_canonical.decode("utf-8"),
+                    "envelope_canonical_for_signature_utf8": canonical.decode("utf-8"),
+                    "seal_signature_input_prefix_utf8": SEAL_SIGNATURE_PREFIX.decode("utf-8"),
+                    "seal_signature_hex": seal_signature.hex(),
+                    "session_mac_hex": session_mac.hex(),
+                },
+                "expected": {
+                    "envelope_json": final_envelope,
+                    "round_trip_recovers_brief": True,
+                    "round_trip_recovers_enclosure": True,
+                    "seal_signature_verifies": True,
+                    "session_mac_verifies": True,
+                    "sender_signature_verifies": True,
+                },
+            },
+        ],
+    }
+
+
 # ---- Forwarding vectors (Layer 3, ENVELOPE.md §6.6) -------------------------
 
 
@@ -2688,6 +3002,7 @@ def main() -> int:
         (OUTDIR / "seal-roundtrip.json", build_seal_roundtrip_json()),
         (OUTDIR / "sender-signature.json", build_sender_signature_json()),
         (OUTDIR / "forwarding.json", build_forwarding_json()),
+        (OUTDIR / "envelope-roundtrip.json", build_envelope_roundtrip_json()),
     ]
 
     ok = True

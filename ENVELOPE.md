@@ -1129,6 +1129,49 @@ session key material required for seal computation.
 13. Compute a MAC over the canonical bytes using `K_env_mac` from the active
     session. Store in `seal.session_mac`.
 
+#### 7.1.1 Brief and Enclosure Encryption Wire Format
+
+For step 4 (brief encryption) and step 5 (enclosure encryption), the
+plaintext bytes and the resulting ciphertext envelope-field encoding are
+pinned as follows.
+
+**Plaintext.** The AEAD plaintext is the canonical JSON serialization of
+the brief or enclosure object per §4.3 canonicalization rules: keys sorted
+lexicographically at every nesting level, no insignificant whitespace,
+UTF-8 encoding. For the enclosure, the canonical form already includes
+`sender_signature` with its computed `value`, because §6.5.2 step 7 wrote
+the signature into the enclosure object in step 2 of the §7.1 flow,
+before encryption in step 5.
+
+**AAD.** The AEAD additional authenticated data is the UTF-8 bytes of
+`postmark.id` (no length prefix, no separator).
+
+**Nonce.** The AEAD nonce is the size required by the negotiated suite's
+cipher: 12 bytes for ChaCha20-Poly1305 in both currently-defined suites.
+Each AEAD seal call uses a fresh nonce drawn from a cryptographically
+secure random source. Nonces MUST NOT be reused under the same key.
+
+**Ciphertext envelope-field encoding.**
+
+```
+ciphertext         = AEAD.Seal(key       = K,
+                                nonce     = nonce,
+                                plaintext = canonical_json,
+                                aad       = postmark.id (UTF-8))
+envelope.brief     = base64( nonce || ciphertext )    // K = K_brief
+envelope.enclosure = base64( nonce || ciphertext )    // K = K_enclosure
+```
+
+`ciphertext` is the AEAD ciphertext concatenated with its 16-byte
+authentication tag. Receiving implementations parse `envelope.brief` or
+`envelope.enclosure` by base64-decoding, splitting off the leading nonce
+according to the suite's nonce size, and passing the remainder as
+ciphertext to AEAD.Open with the matching K, nonce, and AAD
+(`postmark.id`). On success the plaintext is the canonical JSON of the
+brief or enclosure object.
+
+References: RFC 7539 (ChaCha20-Poly1305); §4.3 (canonical form).
+
 ### 7.2 Decryption Flow
 
 Receiving an envelope follows this sequence:
