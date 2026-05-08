@@ -17,3 +17,4 @@
 
 cryptography>=42,<46
 kyber-py>=1.0,<2
+pynacl>=1.5,<2

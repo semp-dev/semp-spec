@@ -5,16 +5,15 @@
   "spec_reference": "VECTORS.md §17.6; ATTACHMENTS.md §3",
   "construction": {
     "key_derivation": "K_attachment = HKDF-Expand(PRK=K_enclosure, info='semp-attachment:' || attachment_id, L=32). K_enclosure already has full entropy from the seal layer, so no Extract step is needed.",
-    "aead_baseline": "ChaCha20-Poly1305, 12-byte nonce",
+    "aead_baseline": "ChaCha20-Poly1305, 12-byte nonce (suite x25519-chacha20-poly1305)",
+    "aead_pq": "XChaCha20-Poly1305, 24-byte nonce (suite pq-kyber768-x25519)",
     "aead_aad": "Canonical JSON of the item with ciphertext_hash, aead_nonce, and extensions blanked. Binds filename, mime_type, plaintext_size, url, aead_algorithm, and id into the tag so an attacker cannot swap them.",
     "ciphertext_at_url": "raw aead_ct (ciphertext || tag), no framing",
     "ciphertext_hash_format": "sha256:<hex of SHA-256(aead_ct)>"
   },
   "suites_covered": [
-    "x25519-chacha20-poly1305 (ChaCha20-Poly1305)"
-  ],
-  "suites_pending": [
-    "pq-kyber768-x25519 (XChaCha20-Poly1305, 24-byte nonce; deferred until pyca/cryptography or pynacl is wired in)"
+    "x25519-chacha20-poly1305 (ChaCha20-Poly1305, 12-byte nonce)",
+    "pq-kyber768-x25519 (XChaCha20-Poly1305, 24-byte nonce)"
   ],
   "vectors": [
     {
@@ -118,6 +117,50 @@
         "ciphertext_hash_matches": false,
         "aead_decryption_succeeds": false,
         "rejection_reason": "ciphertext integrity check fails before AEAD; AEAD also rejects"
+      }
+    },
+    {
+      "id": "large-attachment-pq-valid",
+      "description": "Round-trip encrypt + decrypt of a 64-byte plaintext under K_attachment derived from a pinned K_enclosure for the post-quantum suite. The AEAD is XChaCha20-Poly1305 with a 24-byte nonce per ATTACHMENTS.md §3.2. Construction is otherwise identical to the baseline case (same KDF, same metadata-bound AAD, same SHA-256 integrity check).",
+      "spec_reference": "VECTORS.md §17.6; ATTACHMENTS.md §3.2",
+      "inputs": {
+        "K_enclosure_hex": "f5f5f5f5f5f5f5f5f5f5f5f5f5f5f5f5f5f5f5f5f5f5f5f5f5f5f5f5f5f5f5f5",
+        "attachment_id": "01J7PQATTACHMENTIDXXXXXXXXXX",
+        "plaintext_hex": "5051207375697465205843686143686132302d506f6c7931333035206c617267652d6174746163686d656e7420766563746f7220696e7075742e000000000000",
+        "aead_nonce_hex": "f6f6f6f6f6f6f6f6f6f6f6f6f6f6f6f6f6f6f6f6f6f6f6f6",
+        "item_pre_encrypt_template": {
+          "id": "01J7PQATTACHMENTIDXXXXXXXXXX",
+          "filename": "presentation.pdf",
+          "mime_type": "application/pdf",
+          "plaintext_size": 64,
+          "url": "https://blobs.example.com/a/01J7PQATTACHMENTIDXXXXXXXXXX",
+          "ciphertext_hash": "",
+          "aead_algorithm": "xchacha20-poly1305",
+          "aead_nonce": "",
+          "extensions": {}
+        }
+      },
+      "intermediates": {
+        "kdf_info_utf8": "semp-attachment:01J7PQATTACHMENTIDXXXXXXXXXX",
+        "K_attachment_hex": "84d129c8ae4bf119f24d5e41afb80f00bc218d75531e08969abb063cd0f16d45",
+        "canonical_aad_utf8": "{\"aead_algorithm\":\"xchacha20-poly1305\",\"aead_nonce\":\"\",\"ciphertext_hash\":\"\",\"extensions\":{},\"filename\":\"presentation.pdf\",\"id\":\"01J7PQATTACHMENTIDXXXXXXXXXX\",\"mime_type\":\"application/pdf\",\"plaintext_size\":64,\"url\":\"https://blobs.example.com/a/01J7PQATTACHMENTIDXXXXXXXXXX\"}",
+        "aead_ct_hex": "8c3d9bb1db527f43bf27d06eab61a321062d553f13345242d1100069640122209ad70ec3310854dbfbf45041b09017724eb93b264567d3b596d3c3af2e477b7d48a5e04147c8b64f17156db0d00ac9a0",
+        "ct_sha256_hex": "91de2aceeab29015de5c0150b8a62f0a4dce158bfdc4b0053faec7ee64e93535"
+      },
+      "expected": {
+        "item_final_json": {
+          "id": "01J7PQATTACHMENTIDXXXXXXXXXX",
+          "filename": "presentation.pdf",
+          "mime_type": "application/pdf",
+          "plaintext_size": 64,
+          "url": "https://blobs.example.com/a/01J7PQATTACHMENTIDXXXXXXXXXX",
+          "ciphertext_hash": "sha256:91de2aceeab29015de5c0150b8a62f0a4dce158bfdc4b0053faec7ee64e93535",
+          "aead_algorithm": "xchacha20-poly1305",
+          "aead_nonce": "9vb29vb29vb29vb29vb29vb29vb29vb2",
+          "extensions": {}
+        },
+        "ciphertext_at_url_hex": "8c3d9bb1db527f43bf27d06eab61a321062d553f13345242d1100069640122209ad70ec3310854dbfbf45041b09017724eb93b264567d3b596d3c3af2e477b7d48a5e04147c8b64f17156db0d00ac9a0",
+        "round_trip_recovers_plaintext": true
       }
     }
   ]

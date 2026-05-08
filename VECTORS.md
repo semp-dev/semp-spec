@@ -1048,11 +1048,13 @@ Three vectors:
   Poly1305 tag on AEAD.Open. A receiver SHOULD short-circuit on the hash
   check to avoid feeding adversarial input to the AEAD.
 
-**Bytes:** see [`vectors/v1.0.0/large-attachment.json`](vectors/v1.0.0/large-attachment.json).
+A fourth vector covers the post-quantum suite:
 
-The post-quantum suite uses XChaCha20-Poly1305 (24-byte nonce) per §3.2
-and is deferred until the generator wires up an XChaCha20-Poly1305
-implementation; pyca/cryptography 45 does not currently expose it.
+- `large-attachment-pq-valid`: same construction shape (per-item key
+  derivation, metadata-bound AAD, SHA-256 integrity), but with
+  XChaCha20-Poly1305 and a 24-byte nonce per §3.2.
+
+**Bytes:** see [`vectors/v1.0.0/large-attachment.json`](vectors/v1.0.0/large-attachment.json).
 
 ---
 

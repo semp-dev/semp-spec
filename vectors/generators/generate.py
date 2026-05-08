@@ -1774,6 +1774,24 @@ def chacha20_poly1305_open(key: bytes, nonce: bytes, ciphertext: bytes, aad: byt
     return ChaCha20Poly1305(key).decrypt(nonce, ciphertext, aad)
 
 
+def xchacha20_poly1305_seal(key: bytes, nonce: bytes, plaintext: bytes, aad: bytes) -> bytes:
+    """RFC 8439-derived XChaCha20-Poly1305 (24-byte nonce). Used by the
+    post-quantum suite's large-attachment AEAD per ATTACHMENTS.md §3.2."""
+    from nacl.bindings import crypto_aead_xchacha20poly1305_ietf_encrypt
+
+    if len(nonce) != 24:
+        raise ValueError("XChaCha20-Poly1305 nonce MUST be 24 bytes")
+    return crypto_aead_xchacha20poly1305_ietf_encrypt(plaintext, aad, nonce, key)
+
+
+def xchacha20_poly1305_open(key: bytes, nonce: bytes, ciphertext: bytes, aad: bytes) -> bytes:
+    from nacl.bindings import crypto_aead_xchacha20poly1305_ietf_decrypt
+
+    if len(nonce) != 24:
+        raise ValueError("XChaCha20-Poly1305 nonce MUST be 24 bytes")
+    return crypto_aead_xchacha20poly1305_ietf_decrypt(ciphertext, aad, nonce, key)
+
+
 WRAP_INFO = b"SEMP-v1-wrap"
 
 
@@ -3082,6 +3100,74 @@ def build_large_attachment_json() -> dict:
         },
     }
 
+    # ---- PQ suite (XChaCha20-Poly1305) --------------------------------------
+
+    K_enclosure_p = bytes([0xF5] * 32)
+    attachment_id_p = "01J7PQATTACHMENTIDXXXXXXXXXX"
+    K_attachment_p = derive_K_attachment(K_enclosure_p, attachment_id_p)
+
+    plaintext_p = b"PQ suite XChaCha20-Poly1305 large-attachment vector input."
+    plaintext_p = plaintext_p + b"\x00" * (64 - len(plaintext_p))
+    aead_nonce_p = bytes([0xF6] * 24)  # 24 bytes for XChaCha20-Poly1305
+
+    item_template_p = {
+        "id": attachment_id_p,
+        "filename": "presentation.pdf",
+        "mime_type": "application/pdf",
+        "plaintext_size": len(plaintext_p),
+        "url": "https://blobs.example.com/a/01J7PQATTACHMENTIDXXXXXXXXXX",
+        "ciphertext_hash": "",
+        "aead_algorithm": "xchacha20-poly1305",
+        "aead_nonce": "",
+        "extensions": {},
+    }
+    aad_p = attachment_aad(item_template_p)
+    aead_ct_p = xchacha20_poly1305_seal(K_attachment_p, aead_nonce_p, plaintext_p, aad_p)
+    ct_hash_hex_p = hashlib.sha256(aead_ct_p).hexdigest()
+
+    item_final_p = copy.deepcopy(item_template_p)
+    item_final_p["ciphertext_hash"] = "sha256:" + ct_hash_hex_p
+    item_final_p["aead_nonce"] = base64.b64encode(aead_nonce_p).decode("ascii")
+
+    # Round-trip sanity.
+    aad_decrypt_p = attachment_aad(item_final_p)
+    recovered_p = xchacha20_poly1305_open(
+        K_attachment_p, aead_nonce_p, aead_ct_p, aad_decrypt_p
+    )
+    assert recovered_p == plaintext_p
+
+    pq_vector = {
+        "id": "large-attachment-pq-valid",
+        "description": (
+            "Round-trip encrypt + decrypt of a 64-byte plaintext under "
+            "K_attachment derived from a pinned K_enclosure for the "
+            "post-quantum suite. The AEAD is XChaCha20-Poly1305 with a "
+            "24-byte nonce per ATTACHMENTS.md §3.2. Construction is "
+            "otherwise identical to the baseline case (same KDF, same "
+            "metadata-bound AAD, same SHA-256 integrity check)."
+        ),
+        "spec_reference": "VECTORS.md §17.6; ATTACHMENTS.md §3.2",
+        "inputs": {
+            "K_enclosure_hex": K_enclosure_p.hex(),
+            "attachment_id": attachment_id_p,
+            "plaintext_hex": plaintext_p.hex(),
+            "aead_nonce_hex": aead_nonce_p.hex(),
+            "item_pre_encrypt_template": item_template_p,
+        },
+        "intermediates": {
+            "kdf_info_utf8": ATTACHMENT_KDF_INFO_PREFIX.decode("utf-8") + attachment_id_p,
+            "K_attachment_hex": K_attachment_p.hex(),
+            "canonical_aad_utf8": aad_p.decode("utf-8"),
+            "aead_ct_hex": aead_ct_p.hex(),
+            "ct_sha256_hex": ct_hash_hex_p,
+        },
+        "expected": {
+            "item_final_json": item_final_p,
+            "ciphertext_at_url_hex": aead_ct_p.hex(),
+            "round_trip_recovers_plaintext": True,
+        },
+    }
+
     return {
         "version": "1.0.0",
         "category": "large-attachment",
@@ -3100,7 +3186,8 @@ def build_large_attachment_json() -> dict:
                 "K_enclosure already has full entropy from the seal layer, "
                 "so no Extract step is needed."
             ),
-            "aead_baseline": "ChaCha20-Poly1305, 12-byte nonce",
+            "aead_baseline": "ChaCha20-Poly1305, 12-byte nonce (suite x25519-chacha20-poly1305)",
+            "aead_pq": "XChaCha20-Poly1305, 24-byte nonce (suite pq-kyber768-x25519)",
             "aead_aad": (
                 "Canonical JSON of the item with ciphertext_hash, "
                 "aead_nonce, and extensions blanked. Binds filename, "
@@ -3110,12 +3197,11 @@ def build_large_attachment_json() -> dict:
             "ciphertext_at_url": "raw aead_ct (ciphertext || tag), no framing",
             "ciphertext_hash_format": "sha256:<hex of SHA-256(aead_ct)>",
         },
-        "suites_covered": ["x25519-chacha20-poly1305 (ChaCha20-Poly1305)"],
-        "suites_pending": [
-            "pq-kyber768-x25519 (XChaCha20-Poly1305, 24-byte nonce; "
-            "deferred until pyca/cryptography or pynacl is wired in)"
+        "suites_covered": [
+            "x25519-chacha20-poly1305 (ChaCha20-Poly1305, 12-byte nonce)",
+            "pq-kyber768-x25519 (XChaCha20-Poly1305, 24-byte nonce)",
         ],
-        "vectors": [valid_vector, tampered_meta_vector, tampered_ct_vector],
+        "vectors": [valid_vector, tampered_meta_vector, tampered_ct_vector, pq_vector],
     }
 
 

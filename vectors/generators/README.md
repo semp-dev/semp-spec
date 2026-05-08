@@ -38,7 +38,8 @@ The generator depends on the Python standard library plus a small, explicit allo
 
 * **Stdlib only** for any primitive Python ships out of the box. That covers HKDF/HMAC/SHA (Layer 1), canonical JSON / base64 (Layer 2), and the SEMP-specific composition rules (canonicalization, bucket selection, PoW preimage).
 * **`cryptography`** (pyca/cryptography) when Layer 3+ needs Ed25519, X25519, AES-256-GCM, or ChaCha20-Poly1305. This package implements the IETF/NIST primitives, is actively maintained by the Python Cryptographic Authority, and is the de-facto baseline used by Django, Requests, AWS CLI, and similar mainstream projects.
-* **`pqcrypto`** when Layer 3+ needs Kyber768. PQ primitives are not yet in stdlib in any language; this package wraps the NIST reference implementations.
+* **`pqcrypto`** or **`kyber-py`** when Layer 3+ needs Kyber768. PQ primitives are not yet in stdlib in any language; these packages wrap the NIST reference implementations. The generator currently uses `kyber-py` because it exposes the FIPS 203 deterministic-internal API needed for byte-reproducible vectors.
+* **`pynacl`** when Layer 3+ needs XChaCha20-Poly1305 (used by the post-quantum suite's large-attachment AEAD per ATTACHMENTS.md §3.2). pyca/cryptography 45 does not expose XChaCha20-Poly1305; PyNaCl wraps libsodium's binding.
 
 Other dependencies are NOT permitted. The point is that anyone — auditing the spec, building a SEMP implementation in any language, or porting the vectors — can `pip install -r requirements.txt && python3 generate.py` and reproduce every byte from primitives that already have public RFC/NIST test vectors.
 
