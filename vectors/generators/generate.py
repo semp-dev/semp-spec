@@ -412,6 +412,16 @@ def build_confirmation_hash_json() -> dict:
 # ---- Envelope bucket vectors ------------------------------------------------
 
 
+def sample_with_optional_note(sample: dict, note: str | None) -> dict:
+    """Append a `note` field to a sample dict iff `note` is non-empty.
+    Used by decision-table generators that want to keep the
+    `reason_code` field a clean enum value while still annotating
+    edge cases for human readers."""
+    if note:
+        return {**sample, "note": note}
+    return sample
+
+
 def envelope_size_bucket(size: int) -> int:
     """ENVELOPE.md §2.4.1: next power of 2, minimum 4096.
 
@@ -1394,13 +1404,14 @@ def build_device_certificates_json() -> dict:
     ]
 
     enforcement = [
-        ("subscriber1@example.com", "matches user", "accept", None),
-        ("anyone@company.example", "matches domain", "accept", None),
-        ("other@unrelated.example", "no match", "reject", "scope_exceeded"),
+        ("subscriber1@example.com", "matches user", "accept", None, None),
+        ("anyone@company.example", "matches domain", "accept", None, None),
+        ("other@unrelated.example", "no match", "reject", "scope_exceeded", None),
         ("subscriber1@example.com + other@unrelated.example",
          "partial match",
          "reject",
-         "scope_exceeded (the non-matching recipient causes whole-submission rejection)"),
+         "scope_exceeded",
+         "the non-matching recipient causes whole-submission rejection"),
     ]
 
     mode_enforcement = [
@@ -1611,13 +1622,13 @@ def build_device_certificates_json() -> dict:
                 ),
                 "spec_reference": "VECTORS.md §14.3; CLIENT.md §2.3",
                 "samples": [
-                    {
+                    sample_with_optional_note({
                         "recipient_address": addr,
                         "scope_match": match,
                         "expected_action": action,
                         "reason_code": code,
-                    }
-                    for addr, match, action, code in enforcement
+                    }, note)
+                    for addr, match, action, code, note in enforcement
                 ],
             },
             {

@@ -179,7 +179,8 @@
           "recipient_address": "subscriber1@example.com + other@unrelated.example",
           "scope_match": "partial match",
           "expected_action": "reject",
-          "reason_code": "scope_exceeded (the non-matching recipient causes whole-submission rejection)"
+          "reason_code": "scope_exceeded",
+          "note": "the non-matching recipient causes whole-submission rejection"
         }
       ]
     },
