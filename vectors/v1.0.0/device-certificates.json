@@ -1,0 +1,517 @@
+{
+  "version": "1.0.0",
+  "category": "device-certificates",
+  "description": "Scoped device certificate validation, scope enforcement, rate limits, resource read/write enforcement, certificate lifecycle, and staged delivery. Source of truth: VECTORS.md §14.",
+  "spec_reference": "VECTORS.md §14; KEY.md §10.3; CLIENT.md §2.3, §2.4",
+  "vectors": [
+    {
+      "id": "valid-device-certificate",
+      "description": "A well-formed SEMP_DEVICE_CERTIFICATE and the per-check expected outcomes.",
+      "spec_reference": "VECTORS.md §14.1; KEY.md §10.3",
+      "inputs": {
+        "certificate_json": {
+          "type": "SEMP_DEVICE_CERTIFICATE",
+          "version": "1.0.0",
+          "device_id": "01JDELEGATE0000000000000000",
+          "device_public_key": "base64-delegated-device-public-key",
+          "account": "user@example.com",
+          "issued_by": "01JPRIMARY00000000000000000",
+          "issued_at": "2025-06-15T10:00:00Z",
+          "expires_at": "2025-12-15T10:00:00Z",
+          "scope": {
+            "send": {
+              "mode": "restricted",
+              "allow": [
+                {
+                  "type": "user",
+                  "address": "subscriber1@example.com"
+                },
+                {
+                  "type": "domain",
+                  "domain": "company.example"
+                }
+              ],
+              "rate_limits": [
+                {
+                  "period_seconds": 3600,
+                  "amount_allowed": 200
+                },
+                {
+                  "period_seconds": 86400,
+                  "amount_allowed": 2000
+                }
+              ]
+            },
+            "receive": {
+              "mode": "none",
+              "rate_limits": [],
+              "delivery_stage": 1
+            },
+            "blocklist": {
+              "read": false,
+              "write": false,
+              "rate_limits": []
+            },
+            "keys": {
+              "read": false,
+              "write": false,
+              "rate_limits": []
+            },
+            "devices": {
+              "read": false,
+              "write": false,
+              "rate_limits": []
+            }
+          },
+          "signature": {
+            "algorithm": "ed25519",
+            "key_id": "primary-device-key-fingerprint",
+            "value": "base64-valid-signature"
+          }
+        }
+      },
+      "expected": {
+        "checks": [
+          {
+            "check": "Signature valid against primary key",
+            "result": "pass"
+          },
+          {
+            "check": "Primary device authorized for account",
+            "result": "pass"
+          },
+          {
+            "check": "Certificate not expired",
+            "result": "pass"
+          },
+          {
+            "check": "Scope fields present and well-formed",
+            "result": "pass"
+          },
+          {
+            "check": "Certificate registered on server",
+            "result": "accepted"
+          }
+        ]
+      }
+    },
+    {
+      "id": "certificate-validation-failures",
+      "description": "Conditions under which a registration MUST be rejected, with the reason_code surfaced where the spec defines one.",
+      "spec_reference": "VECTORS.md §14.2; KEY.md §10.3",
+      "samples": [
+        {
+          "condition": "Signature does not verify against primary key",
+          "expected_action": "reject",
+          "reason_code": null
+        },
+        {
+          "condition": "issued_by device is not registered for account",
+          "expected_action": "reject",
+          "reason_code": null
+        },
+        {
+          "condition": "issued_by device has been revoked",
+          "expected_action": "reject",
+          "reason_code": null
+        },
+        {
+          "condition": "expires_at is in the past",
+          "expected_action": "reject",
+          "reason_code": null
+        },
+        {
+          "condition": "Combined allow + deny in a matcher exceeds 10000 entries",
+          "expected_action": "reject",
+          "reason_code": "scope_invalid"
+        },
+        {
+          "condition": "Matcher contains both allow and deny",
+          "expected_action": "reject",
+          "reason_code": "scope_invalid"
+        },
+        {
+          "condition": "scope.send.mode is restricted but allow is missing",
+          "expected_action": "reject",
+          "reason_code": "scope_invalid"
+        },
+        {
+          "condition": "scope.send.mode is denylist but deny is missing",
+          "expected_action": "reject",
+          "reason_code": "scope_invalid"
+        },
+        {
+          "condition": "Required scope fields missing (including limits)",
+          "expected_action": "reject",
+          "reason_code": "scope_invalid"
+        },
+        {
+          "condition": "expires_at exceeds issued_at + 365 days",
+          "expected_action": "reject",
+          "reason_code": "scope_invalid"
+        }
+      ]
+    },
+    {
+      "id": "scope-enforcement-by-recipient",
+      "description": "Per-recipient enforcement of scope.send for the §14.1 certificate. Mixed-recipient submissions reject atomically when ANY recipient is outside scope.",
+      "spec_reference": "VECTORS.md §14.3; CLIENT.md §2.3",
+      "samples": [
+        {
+          "recipient_address": "subscriber1@example.com",
+          "scope_match": "matches user",
+          "expected_action": "accept",
+          "reason_code": null
+        },
+        {
+          "recipient_address": "anyone@company.example",
+          "scope_match": "matches domain",
+          "expected_action": "accept",
+          "reason_code": null
+        },
+        {
+          "recipient_address": "other@unrelated.example",
+          "scope_match": "no match",
+          "expected_action": "reject",
+          "reason_code": "scope_exceeded"
+        },
+        {
+          "recipient_address": "subscriber1@example.com + other@unrelated.example",
+          "scope_match": "partial match",
+          "expected_action": "reject",
+          "reason_code": "scope_exceeded (the non-matching recipient causes whole-submission rejection)"
+        }
+      ]
+    },
+    {
+      "id": "scope-mode-enforcement",
+      "description": "scope.send.mode semantics across all four modes.",
+      "spec_reference": "VECTORS.md §14.4; CLIENT.md §2.3",
+      "samples": [
+        {
+          "scope_send_mode": "unrestricted",
+          "recipient": "any address",
+          "expected_action": "accept",
+          "reason_code": null
+        },
+        {
+          "scope_send_mode": "restricted",
+          "recipient": "address in allow list",
+          "expected_action": "accept",
+          "reason_code": null
+        },
+        {
+          "scope_send_mode": "restricted",
+          "recipient": "address not in allow",
+          "expected_action": "reject",
+          "reason_code": "scope_exceeded"
+        },
+        {
+          "scope_send_mode": "denylist",
+          "recipient": "address in deny list",
+          "expected_action": "reject",
+          "reason_code": "scope_exceeded"
+        },
+        {
+          "scope_send_mode": "denylist",
+          "recipient": "address not in deny list",
+          "expected_action": "accept",
+          "reason_code": null
+        },
+        {
+          "scope_send_mode": "none",
+          "recipient": "any address",
+          "expected_action": "reject",
+          "reason_code": "scope_exceeded"
+        }
+      ]
+    },
+    {
+      "id": "receive-matcher-enforcement",
+      "description": "scope.receive enforcement. Multiple devices on the same account can have independent matchers; an inbound envelope is delivered to each device whose matcher accepts the sender.",
+      "spec_reference": "VECTORS.md §14.4.1; CLIENT.md §2.4",
+      "samples": [
+        {
+          "device": "A",
+          "scope_receive": {
+            "mode": "unrestricted"
+          },
+          "inbound_sender": "any",
+          "expected": "delivered to A"
+        },
+        {
+          "device": "B",
+          "scope_receive": {
+            "mode": "restricted",
+            "allow": [
+              {
+                "type": "domain",
+                "domain": "trusted.example"
+              }
+            ]
+          },
+          "inbound_sender": "alice@trusted.example",
+          "expected": "delivered to B"
+        },
+        {
+          "device": "B",
+          "scope_receive": {
+            "mode": "restricted",
+            "allow": [
+              {
+                "type": "domain",
+                "domain": "trusted.example"
+              }
+            ]
+          },
+          "inbound_sender": "mallory@other.example",
+          "expected": "not delivered to B (device A still receives)"
+        },
+        {
+          "device": "C",
+          "scope_receive": {
+            "mode": "none"
+          },
+          "inbound_sender": "any",
+          "expected": "not delivered to C"
+        }
+      ]
+    },
+    {
+      "id": "rate-limit-enforcement",
+      "description": "scope.send.rate_limits and scope.blocklist.rate_limits behavior. Counters MUST NOT record rejected attempts.",
+      "spec_reference": "VECTORS.md §14.4.2; CLIENT.md §2.3",
+      "samples": [
+        {
+          "tier_config": "single tier {period: 3600, amount: 100}",
+          "state": "1 to 100 submissions in rolling hour",
+          "expected_action": "accept",
+          "note": "rate_limit: {period_seconds: 3600, amount_allowed: 100}"
+        },
+        {
+          "tier_config": "single tier {period: 3600, amount: 100}",
+          "state": "101st submission in the same hour",
+          "expected_action": "reject:rate_limited",
+          "note": "Counters MUST NOT record the rejected attempt; rolling window advance permits next send"
+        },
+        {
+          "tier_config": "two tiers {3600, 100} and {86400, 500}",
+          "state": "100 sends in the last hour, 300 in the last day",
+          "expected_action": "reject",
+          "note": "Hourly tier at cap"
+        },
+        {
+          "tier_config": "two tiers {3600, 100} and {86400, 500}",
+          "state": "50 sends in the last hour, 500 in the last day",
+          "expected_action": "reject",
+          "note": "Daily tier at cap"
+        },
+        {
+          "tier_config": "two tiers {3600, 100} and {86400, 500}",
+          "state": "50 sends in the last hour, 300 in the last day",
+          "expected_action": "accept",
+          "note": null
+        },
+        {
+          "tier_config": "scope.blocklist.rate_limits = []",
+          "state": "Any update count when scope.blocklist.rate_limits = []",
+          "expected_action": "no protocol-imposed cap",
+          "note": "Protocol imposes no cap; operator policy MAY still apply"
+        }
+      ]
+    },
+    {
+      "id": "resource-read-write-enforcement",
+      "description": "Operations on managed resources (blocklist, keys, devices) are gated by per-resource read/write flags in the scope. Nested delegation is forbidden.",
+      "spec_reference": "VECTORS.md §14.4.3; CLIENT.md §2.4",
+      "inputs": {
+        "scope_excerpt": {
+          "blocklist": {
+            "read": true,
+            "write": false,
+            "rate_limits": []
+          },
+          "keys": {
+            "read": false,
+            "write": false,
+            "rate_limits": []
+          },
+          "devices": {
+            "read": true,
+            "write": true,
+            "rate_limits": []
+          }
+        }
+      },
+      "expected": {
+        "operations": [
+          {
+            "operation": "GET block list",
+            "expected_action": "accept",
+            "reason_code_or_note": null
+          },
+          {
+            "operation": "POST block entry",
+            "expected_action": "reject",
+            "reason_code_or_note": "scope_exceeded"
+          },
+          {
+            "operation": "GET key rotation history",
+            "expected_action": "reject",
+            "reason_code_or_note": "scope_exceeded"
+          },
+          {
+            "operation": "POST key rotation",
+            "expected_action": "reject",
+            "reason_code_or_note": "scope_exceeded"
+          },
+          {
+            "operation": "GET devices list",
+            "expected_action": "accept",
+            "reason_code_or_note": null
+          },
+          {
+            "operation": "POST new delegated device whose issued_by is a full-access device",
+            "expected_action": "accept",
+            "reason_code_or_note": "(with issuer-signature requirement)"
+          },
+          {
+            "operation": "POST new delegated device whose issued_by is this delegated device",
+            "expected_action": "reject",
+            "reason_code_or_note": "scope_invalid (nested delegation)"
+          }
+        ]
+      }
+    },
+    {
+      "id": "certificate-lifecycle-operations",
+      "description": "Effect of certificate lifecycle operations on existing delegated sessions.",
+      "spec_reference": "VECTORS.md §14.5; KEY.md §10.3",
+      "samples": [
+        {
+          "operation": "Primary client issues new certificate (scope update)",
+          "session_impact": "session continues",
+          "expected_behavior": "New scope enforced on next submission"
+        },
+        {
+          "operation": "Primary client rotates delegated device key",
+          "session_impact": "session invalidated",
+          "expected_behavior": "Delegated client must re-handshake"
+        },
+        {
+          "operation": "Primary client revokes delegated device key",
+          "session_impact": "session invalidated",
+          "expected_behavior": "Delegated client cannot re-handshake"
+        },
+        {
+          "operation": "Certificate expires",
+          "session_impact": "session continues",
+          "expected_behavior": "All submissions rejected until new certificate issued"
+        }
+      ]
+    },
+    {
+      "id": "staged-delivery",
+      "description": "Multi-stage delivery with at least one filter device (stage 1) and a primary device (stage 2). The filter emits delivery-disposition envelopes that drive whether the original envelope advances to stage 2.",
+      "spec_reference": "VECTORS.md §14.6; CLIENT.md §2.4",
+      "inputs": {
+        "devices": [
+          {
+            "device": "Filter (delegated)",
+            "scope_receive": {
+              "mode": "unrestricted",
+              "rate_limits": [],
+              "delivery_stage": 1
+            }
+          },
+          {
+            "device": "Main (full-access)",
+            "scope_receive": "no certificate (implicit stage 2)"
+          }
+        ],
+        "disposition_envelope_example": {
+          "brief": {
+            "from": "alice@example.com",
+            "to": "alice@example.com",
+            "extensions": {
+              "semp.dev/device-sync": {
+                "required": true,
+                "data": {
+                  "kind": "delivery-disposition",
+                  "source_envelope_id": "01HF3X7M8N9P0Q1R2S3T4U5V6W",
+                  "disposition": "suppress",
+                  "reason": "spam",
+                  "device_id": "filter-device-ulid"
+                }
+              }
+            }
+          }
+        }
+      },
+      "expected": {
+        "single_filter_steps": [
+          {
+            "step": "1",
+            "trigger": "envelope passes the ordinary delivery pipeline",
+            "server_action": "partition devices by stage; deliver to Filter (stage 1); hold for Main (stage 2) in queue"
+          },
+          {
+            "step": "2a",
+            "trigger": "Filter emits delivery-disposition with disposition=advance",
+            "server_action": "release envelope from queue; deliver to Main"
+          },
+          {
+            "step": "2b",
+            "trigger": "Filter emits delivery-disposition with disposition=suppress",
+            "server_action": "drop envelope from queue; Main does not receive"
+          },
+          {
+            "step": "2c",
+            "trigger": "Filter is offline; stage timeout elapses (RECOMMENDED 30s)",
+            "server_action": "advance to stage 2 (fail open); deliver to Main"
+          }
+        ],
+        "three_filter_aggregation": [
+          {
+            "dispositions": "A: advance, B: advance, C: advance",
+            "outcome": "advance to stage 2"
+          },
+          {
+            "dispositions": "A: advance, B: advance, C: suppress",
+            "outcome": "suppress (any suppress wins)"
+          },
+          {
+            "dispositions": "A: advance, B: no response, C: no response; timeout",
+            "outcome": "advance to stage 2"
+          },
+          {
+            "dispositions": "A: no response, B: no response, C: no response; timeout",
+            "outcome": "advance to stage 2 (fail open)"
+          }
+        ],
+        "disposition_verification": [
+          {
+            "condition": "data.device_id matches authenticated session's device id",
+            "expected_behavior": "proceed"
+          },
+          {
+            "condition": "data.device_id does not match authenticated session's device id",
+            "expected_behavior": "reject envelope"
+          },
+          {
+            "condition": "source_envelope_id references an envelope held for this account at the submitter's stage or earlier",
+            "expected_behavior": "apply disposition"
+          },
+          {
+            "condition": "source_envelope_id does not reference any held envelope",
+            "expected_behavior": "discard disposition silently"
+          },
+          {
+            "condition": "Envelope carries brief-layer sync fields other than semp.dev/device-sync",
+            "expected_behavior": "reject: extension_unsupported"
+          }
+        ]
+      }
+    }
+  ]
+}

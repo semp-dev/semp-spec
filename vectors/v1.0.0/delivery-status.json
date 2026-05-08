@@ -1,0 +1,128 @@
+{
+  "version": "1.0.0",
+  "category": "delivery-status",
+  "description": "Mapping from server acknowledgments and discovery outcomes to client UI state and submission status, including multi-recipient mixed outcomes. Source of truth: VECTORS.md §10 and §11.",
+  "spec_reference": "VECTORS.md §10, §11; DELIVERY.md §1.4; CLIENT.md §6.3, §7.1; DISCOVERY.md §7.1",
+  "vectors": [
+    {
+      "id": "acknowledgment-to-ui-state",
+      "description": "Maps the server acknowledgment status carried in a submission response to the client UI state and any additional behavior the client MUST drive.",
+      "spec_reference": "VECTORS.md §10.1; CLIENT.md §7.1",
+      "samples": [
+        {
+          "server_acknowledgment": "delivered",
+          "client_ui_state": "Confirmed delivery indicator",
+          "additional_behavior": ""
+        },
+        {
+          "server_acknowledgment": "rejected",
+          "client_ui_state": "Failure indicator + reason",
+          "additional_behavior": "Reason accessible to user"
+        },
+        {
+          "server_acknowledgment": "silent",
+          "client_ui_state": "Unacknowledged (distinct)",
+          "additional_behavior": "MUST be visually distinct from above"
+        },
+        {
+          "server_acknowledgment": "legacy_required",
+          "client_ui_state": "Degradation warning",
+          "additional_behavior": "Await user confirmation before SMTP send"
+        },
+        {
+          "server_acknowledgment": "recipient_not_found",
+          "client_ui_state": "Undeliverable indicator",
+          "additional_behavior": "No fallback available"
+        },
+        {
+          "server_acknowledgment": "queued",
+          "client_ui_state": "Pending indicator",
+          "additional_behavior": "Update when delivery event received"
+        }
+      ]
+    },
+    {
+      "id": "queued-to-final-transitions",
+      "description": "After a queued submission, the asynchronous delivery event drives the final UI state. A client MUST NOT display a confirmed delivery indicator for a queued envelope until a delivered event is received.",
+      "spec_reference": "VECTORS.md §10.2; CLIENT.md §7.1",
+      "samples": [
+        {
+          "initial_status": "queued",
+          "delivery_event_status": "delivered",
+          "client_action": "Update to confirmed delivery indicator"
+        },
+        {
+          "initial_status": "queued",
+          "delivery_event_status": "rejected",
+          "client_action": "Update to failure indicator + reason"
+        },
+        {
+          "initial_status": "queued",
+          "delivery_event_status": "silent",
+          "client_action": "Update to unacknowledged indicator"
+        }
+      ]
+    },
+    {
+      "id": "discovery-outcome-to-submission-status",
+      "description": "Maps the per-recipient discovery outcome to the submission status returned to the client and the client action that follows.",
+      "spec_reference": "VECTORS.md §11.1; DISCOVERY.md §7.1; CLIENT.md §6.3",
+      "samples": [
+        {
+          "discovery_outcome": "semp",
+          "submission_status": null,
+          "client_action": "(proceed with delivery)",
+          "delivery_note": "Envelope delivered via SEMP"
+        },
+        {
+          "discovery_outcome": "legacy",
+          "submission_status": "legacy_required",
+          "client_action": "Surface degradation, await confirm",
+          "delivery_note": null
+        },
+        {
+          "discovery_outcome": "not_found",
+          "submission_status": "recipient_not_found",
+          "client_action": "Surface as undeliverable",
+          "delivery_note": null
+        }
+      ]
+    },
+    {
+      "id": "multi-recipient-mixed-outcomes",
+      "description": "An envelope addressed to three recipients with different discovery outcomes. The server returns per-recipient results in the submission response. The client surfaces each recipient's status individually and MUST NOT suppress or aggregate partial failure. legacy_required for a per-recipient degradation MUST await user confirmation before SMTP fallback.",
+      "spec_reference": "VECTORS.md §11.2; CLIENT.md §6.3",
+      "inputs": {
+        "recipients": [
+          "alice@semp.example",
+          "bob@legacy.example",
+          "carol@gone.invalid"
+        ]
+      },
+      "expected": {
+        "per_recipient": [
+          {
+            "address": "alice@semp.example",
+            "discovery_outcome": "semp",
+            "submission_status": "delivered"
+          },
+          {
+            "address": "bob@legacy.example",
+            "discovery_outcome": "legacy",
+            "submission_status": "legacy_required"
+          },
+          {
+            "address": "carol@gone.invalid",
+            "discovery_outcome": "not_found",
+            "submission_status": "recipient_not_found"
+          }
+        ],
+        "client_must_not": [
+          "suppress partial failure",
+          "aggregate per-recipient outcomes into a single status",
+          "perform SMTP fallback for legacy_required without user confirmation"
+        ]
+      }
+    }
+  ]
+}

@@ -107,10 +107,25 @@ A reference runner ships with [`semp.dev/semp-go`](https://github.com/semp-dev/s
 | 2     | Discovery response + TXT parsing | `discovery.json`          | seeded        |
 | 2     | Rejection-code recoverability   | `rejection-codes.json`     | seeded        |
 | 2     | Extension entry validation      | `extension-entries.json`   | seeded        |
+| 2     | Session lifecycle               | `session-lifecycle.json`   | seeded        |
+| 2     | Delivery + submission status    | `delivery-status.json`     | seeded        |
+| 2     | Key revocation handling         | `key-revocation.json`      | seeded        |
+| 2     | Scoped device certificates      | `device-certificates.json` | seeded        |
+| 2     | Recipient status visibility     | `recipient-status.json`    | seeded        |
 | 3     | Seal wrap / unwrap (round-trip) | `seal-roundtrip.json`      | TODO          |
 | 3     | Envelope compose / open         | `envelope-roundtrip.json`  | TODO          |
+| 3     | Sender identity signature       | `sender-signature.json`    | TODO          |
+| 3     | Forwarding primitive (3-step)   | `forwarding.json`          | TODO          |
+| 3     | Signed delivery receipt         | `delivery-receipt.json`    | TODO          |
+| 3     | Large-attachment AEAD           | `large-attachment.json`    | TODO          |
 | 4     | Handshake message bytes         | `handshake-*.json`         | TODO          |
+| 4     | Session resumption ticket       | `session-resumption.json`  | TODO          |
 | 5     | Discovery signature verification | `discovery-signed.json`   | TODO          |
+| 5     | Configuration versioning + STH  | `configuration-update.json`| TODO          |
+| 5     | Key transparency proofs         | `key-transparency.json`    | TODO          |
+| 5     | Account recovery bundle         | `account-recovery.json`    | TODO          |
+| 5     | Provider migration              | `provider-migration.json`  | TODO          |
+| 5     | Account closure                 | `account-closure.json`     | TODO          |
 | 6     | Negative tests (must-reject)    | `negative-*.json`          | TODO          |
 
 `seeded` means the file exists with a starter set of vectors. `TODO` means the layer is acknowledged but not yet machine-readable.

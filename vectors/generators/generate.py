@@ -1007,6 +1007,803 @@ def build_extension_entries_json() -> dict:
     }
 
 
+# ---- Session lifecycle vectors ----------------------------------------------
+
+
+def build_session_lifecycle_json() -> dict:
+    transitions = [
+        {
+            "from_state": "NO_SESSION",
+            "event": "handshake completes (accepted)",
+            "to_state": "ACTIVE",
+            "actions": [
+                "store session_id, five session keys, established_at, expires_at",
+            ],
+        },
+        {
+            "from_state": "ACTIVE",
+            "event": "envelope submitted with valid session_id",
+            "to_state": "ACTIVE",
+            "actions": ["compute seal.session_mac using K_env_mac"],
+        },
+        {
+            "from_state": "ACTIVE",
+            "event": "expires_at reached",
+            "to_state": "EXPIRED",
+            "actions": [
+                "erase all session keys (secure zeroing)",
+                "retain session_id in expiry log",
+            ],
+        },
+        {
+            "from_state": "ACTIVE",
+            "event": "rekey initiated at 80% of TTL",
+            "to_state": "REKEYING",
+            "actions": ["generate new ephemeral key pair"],
+        },
+        {
+            "from_state": "REKEYING",
+            "event": "rekey accepted",
+            "to_state": "ACTIVE",
+            "actions": [
+                "install new session keys",
+                "erase old session keys",
+                "retire old session_id to expiry log",
+                "5-second transition window for in-flight envelopes",
+            ],
+        },
+        {
+            "from_state": "ACTIVE",
+            "event": "new handshake from same client_identity",
+            "to_state": "INVALIDATED -> ACTIVE",
+            "actions": [
+                "erase old session keys",
+                "retire old session_id to expiry log",
+                "transition new session to ACTIVE",
+            ],
+        },
+        {
+            "from_state": "EXPIRED or INVALIDATED",
+            "event": "envelope received referencing this session_id",
+            "to_state": "(no transition)",
+            "actions": ["reject envelope with reason_code 'handshake_invalid'"],
+        },
+    ]
+
+    concurrent = [
+        ("Client A opens session, then opens another from Client A",
+         "Old session invalidated, new session accepted"),
+        ("Federation peer opens session while one already exists",
+         "Old session invalidated, new session accepted"),
+        ("Two federation peers initiate simultaneously",
+         "Lower session_id lexicographically is abandoned"),
+        ("Active sessions reach server maximum",
+         "New handshakes rejected with server_at_capacity"),
+    ]
+
+    rekey = [
+        ("Rekey attempted before 80% of TTL",
+         "Permitted (SHOULD wait, not MUST)"),
+        ("Rekey attempted after session expiry",
+         "MUST be rejected; full handshake required"),
+        ("11th rekey in same session",
+         "MUST be rejected; maximum 10 rekeys per session"),
+        ("Two rekeys within 60 seconds",
+         "Second MUST be rejected; minimum 1 minute gap"),
+    ]
+
+    return {
+        "version": "1.0.0",
+        "category": "session-lifecycle",
+        "description": (
+            "Session state transitions, concurrency limits, and rekey limits. "
+            "Source of truth: VECTORS.md §9."
+        ),
+        "spec_reference": "VECTORS.md §9; SESSION.md §2.3, §2.4, §2.5, §3",
+        "vectors": [
+            {
+                "id": "session-state-transitions",
+                "description": (
+                    "Authoritative state machine: each row is a (from_state, "
+                    "event) -> (to_state, actions) transition. Implementations "
+                    "MUST drive their session state through these and only "
+                    "these transitions."
+                ),
+                "spec_reference": "VECTORS.md §9.1; SESSION.md §2.3, §2.4, §3",
+                "samples": transitions,
+            },
+            {
+                "id": "concurrent-session-limits",
+                "description": (
+                    "Behavior when a new handshake arrives while one or more "
+                    "sessions are already active for the same identity, or "
+                    "when the server reaches its concurrent-session ceiling."
+                ),
+                "spec_reference": "VECTORS.md §9.2; SESSION.md §2.5",
+                "samples": [
+                    {"scenario": s, "expected_behavior": b} for s, b in concurrent
+                ],
+            },
+            {
+                "id": "rekey-limits",
+                "description": (
+                    "Per-session rekey constraints: minimum elapsed time, "
+                    "maximum count per session, and post-expiry handling."
+                ),
+                "spec_reference": "VECTORS.md §9.3; SESSION.md §3",
+                "samples": [
+                    {"condition": c, "expected_behavior": b} for c, b in rekey
+                ],
+            },
+        ],
+    }
+
+
+# ---- Delivery status vectors (§10 + §11) ------------------------------------
+
+
+def build_delivery_status_json() -> dict:
+    ack_to_ui = [
+        ("delivered", "Confirmed delivery indicator", ""),
+        ("rejected", "Failure indicator + reason", "Reason accessible to user"),
+        ("silent", "Unacknowledged (distinct)", "MUST be visually distinct from above"),
+        ("legacy_required", "Degradation warning", "Await user confirmation before SMTP send"),
+        ("recipient_not_found", "Undeliverable indicator", "No fallback available"),
+        ("queued", "Pending indicator", "Update when delivery event received"),
+    ]
+
+    queued_transitions = [
+        ("queued", "delivered", "Update to confirmed delivery indicator"),
+        ("queued", "rejected", "Update to failure indicator + reason"),
+        ("queued", "silent", "Update to unacknowledged indicator"),
+    ]
+
+    discovery_to_submission = [
+        ("semp", None, "(proceed with delivery)", "Envelope delivered via SEMP"),
+        ("legacy", "legacy_required", "Surface degradation, await confirm", None),
+        ("not_found", "recipient_not_found", "Surface as undeliverable", None),
+    ]
+
+    multi_recipient = [
+        {"address": "alice@semp.example", "discovery_outcome": "semp", "submission_status": "delivered"},
+        {"address": "bob@legacy.example", "discovery_outcome": "legacy", "submission_status": "legacy_required"},
+        {"address": "carol@gone.invalid", "discovery_outcome": "not_found", "submission_status": "recipient_not_found"},
+    ]
+
+    return {
+        "version": "1.0.0",
+        "category": "delivery-status",
+        "description": (
+            "Mapping from server acknowledgments and discovery outcomes to "
+            "client UI state and submission status, including multi-recipient "
+            "mixed outcomes. Source of truth: VECTORS.md §10 and §11."
+        ),
+        "spec_reference": "VECTORS.md §10, §11; DELIVERY.md §1.4; CLIENT.md §6.3, §7.1; DISCOVERY.md §7.1",
+        "vectors": [
+            {
+                "id": "acknowledgment-to-ui-state",
+                "description": (
+                    "Maps the server acknowledgment status carried in a "
+                    "submission response to the client UI state and any "
+                    "additional behavior the client MUST drive."
+                ),
+                "spec_reference": "VECTORS.md §10.1; CLIENT.md §7.1",
+                "samples": [
+                    {
+                        "server_acknowledgment": ack,
+                        "client_ui_state": ui,
+                        "additional_behavior": extra,
+                    }
+                    for ack, ui, extra in ack_to_ui
+                ],
+            },
+            {
+                "id": "queued-to-final-transitions",
+                "description": (
+                    "After a queued submission, the asynchronous delivery "
+                    "event drives the final UI state. A client MUST NOT "
+                    "display a confirmed delivery indicator for a queued "
+                    "envelope until a delivered event is received."
+                ),
+                "spec_reference": "VECTORS.md §10.2; CLIENT.md §7.1",
+                "samples": [
+                    {
+                        "initial_status": initial,
+                        "delivery_event_status": event,
+                        "client_action": action,
+                    }
+                    for initial, event, action in queued_transitions
+                ],
+            },
+            {
+                "id": "discovery-outcome-to-submission-status",
+                "description": (
+                    "Maps the per-recipient discovery outcome to the "
+                    "submission status returned to the client and the "
+                    "client action that follows."
+                ),
+                "spec_reference": "VECTORS.md §11.1; DISCOVERY.md §7.1; CLIENT.md §6.3",
+                "samples": [
+                    {
+                        "discovery_outcome": disc,
+                        "submission_status": sub,
+                        "client_action": action,
+                        "delivery_note": note,
+                    }
+                    for disc, sub, action, note in discovery_to_submission
+                ],
+            },
+            {
+                "id": "multi-recipient-mixed-outcomes",
+                "description": (
+                    "An envelope addressed to three recipients with "
+                    "different discovery outcomes. The server returns "
+                    "per-recipient results in the submission response. The "
+                    "client surfaces each recipient's status individually "
+                    "and MUST NOT suppress or aggregate partial failure. "
+                    "legacy_required for a per-recipient degradation MUST "
+                    "await user confirmation before SMTP fallback."
+                ),
+                "spec_reference": "VECTORS.md §11.2; CLIENT.md §6.3",
+                "inputs": {
+                    "recipients": [r["address"] for r in multi_recipient],
+                },
+                "expected": {
+                    "per_recipient": multi_recipient,
+                    "client_must_not": [
+                        "suppress partial failure",
+                        "aggregate per-recipient outcomes into a single status",
+                        "perform SMTP fallback for legacy_required without user confirmation",
+                    ],
+                },
+            },
+        ],
+    }
+
+
+# ---- Key revocation vectors -------------------------------------------------
+
+
+def build_key_revocation_json() -> dict:
+    revocation_response = {
+        "address": "user@example.com",
+        "key_type": "encryption",
+        "key_id": "old-key-fp",
+        "revocation": {
+            "reason": "key_compromise",
+            "revoked_at": "2025-06-10T19:49:15Z",
+            "replacement_key_id": "new-key-fp",
+        },
+    }
+
+    rules = [
+        ("Revocation present",
+         "MUST NOT use old-key-fp"),
+        ("replacement_key_id present",
+         "SHOULD fetch and use new-key-fp"),
+        ("Key was cached locally",
+         "MUST invalidate cached entry and re-fetch"),
+        ("No replacement_key_id",
+         "Delivery cannot proceed for this recipient"),
+    ]
+
+    return {
+        "version": "1.0.0",
+        "category": "key-revocation",
+        "description": (
+            "Sender-side handling when a SEMP_KEYS lookup returns a revoked "
+            "key with optional replacement. Source of truth: VECTORS.md §12."
+        ),
+        "spec_reference": "VECTORS.md §12; KEY.md §8",
+        "vectors": [
+            {
+                "id": "revoked-key-response",
+                "description": (
+                    "A SEMP_KEYS response carrying a revocation block. The "
+                    "rules samples enumerate the conditional sender behavior."
+                ),
+                "spec_reference": "VECTORS.md §12.1; KEY.md §8",
+                "inputs": {
+                    "revoked_key_record": revocation_response,
+                },
+                "expected": {
+                    "rules": [
+                        {"condition": cond, "action": action}
+                        for cond, action in rules
+                    ],
+                },
+            },
+        ],
+    }
+
+
+# ---- Scoped device certificate vectors (§14) --------------------------------
+
+
+VALID_DEVICE_CERT = {
+    "type": "SEMP_DEVICE_CERTIFICATE",
+    "version": "1.0.0",
+    "device_id": "01JDELEGATE0000000000000000",
+    "device_public_key": "base64-delegated-device-public-key",
+    "account": "user@example.com",
+    "issued_by": "01JPRIMARY00000000000000000",
+    "issued_at": "2025-06-15T10:00:00Z",
+    "expires_at": "2025-12-15T10:00:00Z",
+    "scope": {
+        "send": {
+            "mode": "restricted",
+            "allow": [
+                {"type": "user", "address": "subscriber1@example.com"},
+                {"type": "domain", "domain": "company.example"},
+            ],
+            "rate_limits": [
+                {"period_seconds": 3600, "amount_allowed": 200},
+                {"period_seconds": 86400, "amount_allowed": 2000},
+            ],
+        },
+        "receive": {"mode": "none", "rate_limits": [], "delivery_stage": 1},
+        "blocklist": {"read": False, "write": False, "rate_limits": []},
+        "keys": {"read": False, "write": False, "rate_limits": []},
+        "devices": {"read": False, "write": False, "rate_limits": []},
+    },
+    "signature": {
+        "algorithm": "ed25519",
+        "key_id": "primary-device-key-fingerprint",
+        "value": "base64-valid-signature",
+    },
+}
+
+
+def build_device_certificates_json() -> dict:
+    valid_checks = [
+        ("Signature valid against primary key", "pass"),
+        ("Primary device authorized for account", "pass"),
+        ("Certificate not expired", "pass"),
+        ("Scope fields present and well-formed", "pass"),
+        ("Certificate registered on server", "accepted"),
+    ]
+
+    failures = [
+        ("Signature does not verify against primary key", "reject", None),
+        ("issued_by device is not registered for account", "reject", None),
+        ("issued_by device has been revoked", "reject", None),
+        ("expires_at is in the past", "reject", None),
+        ("Combined allow + deny in a matcher exceeds 10000 entries",
+         "reject", "scope_invalid"),
+        ("Matcher contains both allow and deny", "reject", "scope_invalid"),
+        ("scope.send.mode is restricted but allow is missing",
+         "reject", "scope_invalid"),
+        ("scope.send.mode is denylist but deny is missing",
+         "reject", "scope_invalid"),
+        ("Required scope fields missing (including limits)",
+         "reject", "scope_invalid"),
+        ("expires_at exceeds issued_at + 365 days",
+         "reject", "scope_invalid"),
+    ]
+
+    enforcement = [
+        ("subscriber1@example.com", "matches user", "accept", None),
+        ("anyone@company.example", "matches domain", "accept", None),
+        ("other@unrelated.example", "no match", "reject", "scope_exceeded"),
+        ("subscriber1@example.com + other@unrelated.example",
+         "partial match",
+         "reject",
+         "scope_exceeded (the non-matching recipient causes whole-submission rejection)"),
+    ]
+
+    mode_enforcement = [
+        ("unrestricted", "any address", "accept", None),
+        ("restricted", "address in allow list", "accept", None),
+        ("restricted", "address not in allow", "reject", "scope_exceeded"),
+        ("denylist", "address in deny list", "reject", "scope_exceeded"),
+        ("denylist", "address not in deny list", "accept", None),
+        ("none", "any address", "reject", "scope_exceeded"),
+    ]
+
+    receive_matcher = [
+        {
+            "device": "A",
+            "scope_receive": {"mode": "unrestricted"},
+            "inbound_sender": "any",
+            "expected": "delivered to A",
+        },
+        {
+            "device": "B",
+            "scope_receive": {
+                "mode": "restricted",
+                "allow": [{"type": "domain", "domain": "trusted.example"}],
+            },
+            "inbound_sender": "alice@trusted.example",
+            "expected": "delivered to B",
+        },
+        {
+            "device": "B",
+            "scope_receive": {
+                "mode": "restricted",
+                "allow": [{"type": "domain", "domain": "trusted.example"}],
+            },
+            "inbound_sender": "mallory@other.example",
+            "expected": "not delivered to B (device A still receives)",
+        },
+        {
+            "device": "C",
+            "scope_receive": {"mode": "none"},
+            "inbound_sender": "any",
+            "expected": "not delivered to C",
+        },
+    ]
+
+    rate_limit_single_tier = [
+        ("1 to 100 submissions in rolling hour", "accept",
+         "rate_limit: {period_seconds: 3600, amount_allowed: 100}"),
+        ("101st submission in the same hour", "reject:rate_limited",
+         "Counters MUST NOT record the rejected attempt; rolling window advance permits next send"),
+    ]
+    rate_limit_two_tier = [
+        ("100 sends in the last hour, 300 in the last day",
+         "reject", "Hourly tier at cap"),
+        ("50 sends in the last hour, 500 in the last day",
+         "reject", "Daily tier at cap"),
+        ("50 sends in the last hour, 300 in the last day",
+         "accept", None),
+    ]
+    rate_limit_blocklist = [
+        ("Any update count when scope.blocklist.rate_limits = []",
+         "Protocol imposes no cap; operator policy MAY still apply"),
+    ]
+
+    rw_enforcement_scope = {
+        "blocklist": {"read": True, "write": False, "rate_limits": []},
+        "keys": {"read": False, "write": False, "rate_limits": []},
+        "devices": {"read": True, "write": True, "rate_limits": []},
+    }
+    rw_operations = [
+        ("GET block list", "accept", None),
+        ("POST block entry", "reject", "scope_exceeded"),
+        ("GET key rotation history", "reject", "scope_exceeded"),
+        ("POST key rotation", "reject", "scope_exceeded"),
+        ("GET devices list", "accept", None),
+        ("POST new delegated device whose issued_by is a full-access device",
+         "accept", "(with issuer-signature requirement)"),
+        ("POST new delegated device whose issued_by is this delegated device",
+         "reject", "scope_invalid (nested delegation)"),
+    ]
+
+    lifecycle_ops = [
+        ("Primary client issues new certificate (scope update)",
+         "session continues", "New scope enforced on next submission"),
+        ("Primary client rotates delegated device key",
+         "session invalidated", "Delegated client must re-handshake"),
+        ("Primary client revokes delegated device key",
+         "session invalidated", "Delegated client cannot re-handshake"),
+        ("Certificate expires",
+         "session continues",
+         "All submissions rejected until new certificate issued"),
+    ]
+
+    staged_devices = [
+        {
+            "device": "Filter (delegated)",
+            "scope_receive": {
+                "mode": "unrestricted",
+                "rate_limits": [],
+                "delivery_stage": 1,
+            },
+        },
+        {
+            "device": "Main (full-access)",
+            "scope_receive": "no certificate (implicit stage 2)",
+        },
+    ]
+    staged_steps = [
+        {
+            "step": "1",
+            "trigger": "envelope passes the ordinary delivery pipeline",
+            "server_action": "partition devices by stage; deliver to Filter (stage 1); hold for Main (stage 2) in queue",
+        },
+        {
+            "step": "2a",
+            "trigger": "Filter emits delivery-disposition with disposition=advance",
+            "server_action": "release envelope from queue; deliver to Main",
+        },
+        {
+            "step": "2b",
+            "trigger": "Filter emits delivery-disposition with disposition=suppress",
+            "server_action": "drop envelope from queue; Main does not receive",
+        },
+        {
+            "step": "2c",
+            "trigger": "Filter is offline; stage timeout elapses (RECOMMENDED 30s)",
+            "server_action": "advance to stage 2 (fail open); deliver to Main",
+        },
+    ]
+    staged_aggregation = [
+        ("A: advance, B: advance, C: advance", "advance to stage 2"),
+        ("A: advance, B: advance, C: suppress", "suppress (any suppress wins)"),
+        ("A: advance, B: no response, C: no response; timeout",
+         "advance to stage 2"),
+        ("A: no response, B: no response, C: no response; timeout",
+         "advance to stage 2 (fail open)"),
+    ]
+    disposition_envelope = {
+        "brief": {
+            "from": "alice@example.com",
+            "to": "alice@example.com",
+            "extensions": {
+                "semp.dev/device-sync": {
+                    "required": True,
+                    "data": {
+                        "kind": "delivery-disposition",
+                        "source_envelope_id": "01HF3X7M8N9P0Q1R2S3T4U5V6W",
+                        "disposition": "suppress",
+                        "reason": "spam",
+                        "device_id": "filter-device-ulid",
+                    },
+                }
+            },
+        }
+    }
+    disposition_checks = [
+        ("data.device_id matches authenticated session's device id", "proceed"),
+        ("data.device_id does not match authenticated session's device id",
+         "reject envelope"),
+        ("source_envelope_id references an envelope held for this account at the submitter's stage or earlier",
+         "apply disposition"),
+        ("source_envelope_id does not reference any held envelope",
+         "discard disposition silently"),
+        ("Envelope carries brief-layer sync fields other than semp.dev/device-sync",
+         "reject: extension_unsupported"),
+    ]
+
+    return {
+        "version": "1.0.0",
+        "category": "device-certificates",
+        "description": (
+            "Scoped device certificate validation, scope enforcement, rate "
+            "limits, resource read/write enforcement, certificate lifecycle, "
+            "and staged delivery. Source of truth: VECTORS.md §14."
+        ),
+        "spec_reference": "VECTORS.md §14; KEY.md §10.3; CLIENT.md §2.3, §2.4",
+        "vectors": [
+            {
+                "id": "valid-device-certificate",
+                "description": "A well-formed SEMP_DEVICE_CERTIFICATE and the per-check expected outcomes.",
+                "spec_reference": "VECTORS.md §14.1; KEY.md §10.3",
+                "inputs": {"certificate_json": VALID_DEVICE_CERT},
+                "expected": {
+                    "checks": [{"check": c, "result": r} for c, r in valid_checks],
+                },
+            },
+            {
+                "id": "certificate-validation-failures",
+                "description": (
+                    "Conditions under which a registration MUST be rejected, "
+                    "with the reason_code surfaced where the spec defines one."
+                ),
+                "spec_reference": "VECTORS.md §14.2; KEY.md §10.3",
+                "samples": [
+                    {
+                        "condition": cond,
+                        "expected_action": action,
+                        "reason_code": code,
+                    }
+                    for cond, action, code in failures
+                ],
+            },
+            {
+                "id": "scope-enforcement-by-recipient",
+                "description": (
+                    "Per-recipient enforcement of scope.send for the §14.1 "
+                    "certificate. Mixed-recipient submissions reject "
+                    "atomically when ANY recipient is outside scope."
+                ),
+                "spec_reference": "VECTORS.md §14.3; CLIENT.md §2.3",
+                "samples": [
+                    {
+                        "recipient_address": addr,
+                        "scope_match": match,
+                        "expected_action": action,
+                        "reason_code": code,
+                    }
+                    for addr, match, action, code in enforcement
+                ],
+            },
+            {
+                "id": "scope-mode-enforcement",
+                "description": "scope.send.mode semantics across all four modes.",
+                "spec_reference": "VECTORS.md §14.4; CLIENT.md §2.3",
+                "samples": [
+                    {
+                        "scope_send_mode": mode,
+                        "recipient": rcp,
+                        "expected_action": action,
+                        "reason_code": code,
+                    }
+                    for mode, rcp, action, code in mode_enforcement
+                ],
+            },
+            {
+                "id": "receive-matcher-enforcement",
+                "description": (
+                    "scope.receive enforcement. Multiple devices on the same "
+                    "account can have independent matchers; an inbound "
+                    "envelope is delivered to each device whose matcher "
+                    "accepts the sender."
+                ),
+                "spec_reference": "VECTORS.md §14.4.1; CLIENT.md §2.4",
+                "samples": receive_matcher,
+            },
+            {
+                "id": "rate-limit-enforcement",
+                "description": (
+                    "scope.send.rate_limits and scope.blocklist.rate_limits "
+                    "behavior. Counters MUST NOT record rejected attempts."
+                ),
+                "spec_reference": "VECTORS.md §14.4.2; CLIENT.md §2.3",
+                "samples": [
+                    {
+                        "tier_config": "single tier {period: 3600, amount: 100}",
+                        "state": s,
+                        "expected_action": a,
+                        "note": n,
+                    }
+                    for s, a, n in rate_limit_single_tier
+                ] + [
+                    {
+                        "tier_config": "two tiers {3600, 100} and {86400, 500}",
+                        "state": s,
+                        "expected_action": a,
+                        "note": n,
+                    }
+                    for s, a, n in rate_limit_two_tier
+                ] + [
+                    {
+                        "tier_config": "scope.blocklist.rate_limits = []",
+                        "state": s,
+                        "expected_action": "no protocol-imposed cap",
+                        "note": n,
+                    }
+                    for s, n in rate_limit_blocklist
+                ],
+            },
+            {
+                "id": "resource-read-write-enforcement",
+                "description": (
+                    "Operations on managed resources (blocklist, keys, "
+                    "devices) are gated by per-resource read/write flags in "
+                    "the scope. Nested delegation is forbidden."
+                ),
+                "spec_reference": "VECTORS.md §14.4.3; CLIENT.md §2.4",
+                "inputs": {"scope_excerpt": rw_enforcement_scope},
+                "expected": {
+                    "operations": [
+                        {
+                            "operation": op,
+                            "expected_action": action,
+                            "reason_code_or_note": code,
+                        }
+                        for op, action, code in rw_operations
+                    ],
+                },
+            },
+            {
+                "id": "certificate-lifecycle-operations",
+                "description": (
+                    "Effect of certificate lifecycle operations on existing "
+                    "delegated sessions."
+                ),
+                "spec_reference": "VECTORS.md §14.5; KEY.md §10.3",
+                "samples": [
+                    {
+                        "operation": op,
+                        "session_impact": impact,
+                        "expected_behavior": behavior,
+                    }
+                    for op, impact, behavior in lifecycle_ops
+                ],
+            },
+            {
+                "id": "staged-delivery",
+                "description": (
+                    "Multi-stage delivery with at least one filter device "
+                    "(stage 1) and a primary device (stage 2). The filter "
+                    "emits delivery-disposition envelopes that drive whether "
+                    "the original envelope advances to stage 2."
+                ),
+                "spec_reference": "VECTORS.md §14.6; CLIENT.md §2.4",
+                "inputs": {
+                    "devices": staged_devices,
+                    "disposition_envelope_example": disposition_envelope,
+                },
+                "expected": {
+                    "single_filter_steps": staged_steps,
+                    "three_filter_aggregation": [
+                        {"dispositions": d, "outcome": o}
+                        for d, o in staged_aggregation
+                    ],
+                    "disposition_verification": [
+                        {"condition": c, "expected_behavior": b}
+                        for c, b in disposition_checks
+                    ],
+                },
+            },
+        ],
+    }
+
+
+# ---- Recipient status vectors (§15) -----------------------------------------
+
+
+def build_recipient_status_json() -> dict:
+    visibility = [
+        ("nobody", "any sender", False),
+        ("everyone", "any sender", True),
+        ("users", "listed user address", True),
+        ("users", "unlisted user address", False),
+        ("domains", "address at listed domain", True),
+        ("domains", "address at unlisted domain", False),
+        ("servers", "routed through listed server", True),
+        ("servers", "not routed through listed server", False),
+    ]
+    delivery = [
+        ("available", True, "delivered", None),
+        ("away", True, "delivered", "with status if visible"),
+        ("do_not_disturb", True, "delivered", "with status if visible"),
+        ("away", False, "rejected", "seal_invalid"),
+    ]
+
+    return {
+        "version": "1.0.0",
+        "category": "recipient-status",
+        "description": (
+            "Recipient-status visibility rules and the rule that recipient "
+            "status MUST NOT influence the delivery decision. Source of "
+            "truth: VECTORS.md §15."
+        ),
+        "spec_reference": "VECTORS.md §15; DELIVERY.md §1.6",
+        "vectors": [
+            {
+                "id": "status-visibility-rules",
+                "description": (
+                    "When the sender does NOT match the recipient's "
+                    "visibility configuration, the acknowledgment MUST omit "
+                    "the recipient_status field entirely. Omission MUST be "
+                    "indistinguishable from a recipient who has not "
+                    "configured status at all."
+                ),
+                "spec_reference": "VECTORS.md §15.1; DELIVERY.md §1.6",
+                "samples": [
+                    {
+                        "visibility_mode": mode,
+                        "sender_identity": sender,
+                        "status_included": included,
+                    }
+                    for mode, sender, included in visibility
+                ],
+            },
+            {
+                "id": "status-does-not-affect-delivery",
+                "description": (
+                    "Status MUST NOT influence the delivery decision. An "
+                    "invalid envelope is rejected regardless of recipient "
+                    "status; a valid envelope is delivered regardless of "
+                    "recipient status."
+                ),
+                "spec_reference": "VECTORS.md §15.2; DELIVERY.md §1.6",
+                "samples": [
+                    {
+                        "recipient_state": state,
+                        "envelope_valid": valid,
+                        "expected_acknowledgment": ack,
+                        "note": note,
+                    }
+                    for state, valid, ack, note in delivery
+                ],
+            },
+        ],
+    }
+
+
 # ---------------------------------------------------------------------------
 # Drive
 
@@ -1078,6 +1875,11 @@ def main() -> int:
         (OUTDIR / "discovery.json", build_discovery_json()),
         (OUTDIR / "rejection-codes.json", build_rejection_codes_json()),
         (OUTDIR / "extension-entries.json", build_extension_entries_json()),
+        (OUTDIR / "session-lifecycle.json", build_session_lifecycle_json()),
+        (OUTDIR / "delivery-status.json", build_delivery_status_json()),
+        (OUTDIR / "key-revocation.json", build_key_revocation_json()),
+        (OUTDIR / "device-certificates.json", build_device_certificates_json()),
+        (OUTDIR / "recipient-status.json", build_recipient_status_json()),
     ]
 
     ok = True

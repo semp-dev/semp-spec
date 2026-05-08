@@ -1,0 +1,45 @@
+{
+  "version": "1.0.0",
+  "category": "key-revocation",
+  "description": "Sender-side handling when a SEMP_KEYS lookup returns a revoked key with optional replacement. Source of truth: VECTORS.md §12.",
+  "spec_reference": "VECTORS.md §12; KEY.md §8",
+  "vectors": [
+    {
+      "id": "revoked-key-response",
+      "description": "A SEMP_KEYS response carrying a revocation block. The rules samples enumerate the conditional sender behavior.",
+      "spec_reference": "VECTORS.md §12.1; KEY.md §8",
+      "inputs": {
+        "revoked_key_record": {
+          "address": "user@example.com",
+          "key_type": "encryption",
+          "key_id": "old-key-fp",
+          "revocation": {
+            "reason": "key_compromise",
+            "revoked_at": "2025-06-10T19:49:15Z",
+            "replacement_key_id": "new-key-fp"
+          }
+        }
+      },
+      "expected": {
+        "rules": [
+          {
+            "condition": "Revocation present",
+            "action": "MUST NOT use old-key-fp"
+          },
+          {
+            "condition": "replacement_key_id present",
+            "action": "SHOULD fetch and use new-key-fp"
+          },
+          {
+            "condition": "Key was cached locally",
+            "action": "MUST invalidate cached entry and re-fetch"
+          },
+          {
+            "condition": "No replacement_key_id",
+            "action": "Delivery cannot proceed for this recipient"
+          }
+        ]
+      }
+    }
+  ]
+}

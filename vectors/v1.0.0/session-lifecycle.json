@@ -1,0 +1,123 @@
+{
+  "version": "1.0.0",
+  "category": "session-lifecycle",
+  "description": "Session state transitions, concurrency limits, and rekey limits. Source of truth: VECTORS.md §9.",
+  "spec_reference": "VECTORS.md §9; SESSION.md §2.3, §2.4, §2.5, §3",
+  "vectors": [
+    {
+      "id": "session-state-transitions",
+      "description": "Authoritative state machine: each row is a (from_state, event) -> (to_state, actions) transition. Implementations MUST drive their session state through these and only these transitions.",
+      "spec_reference": "VECTORS.md §9.1; SESSION.md §2.3, §2.4, §3",
+      "samples": [
+        {
+          "from_state": "NO_SESSION",
+          "event": "handshake completes (accepted)",
+          "to_state": "ACTIVE",
+          "actions": [
+            "store session_id, five session keys, established_at, expires_at"
+          ]
+        },
+        {
+          "from_state": "ACTIVE",
+          "event": "envelope submitted with valid session_id",
+          "to_state": "ACTIVE",
+          "actions": [
+            "compute seal.session_mac using K_env_mac"
+          ]
+        },
+        {
+          "from_state": "ACTIVE",
+          "event": "expires_at reached",
+          "to_state": "EXPIRED",
+          "actions": [
+            "erase all session keys (secure zeroing)",
+            "retain session_id in expiry log"
+          ]
+        },
+        {
+          "from_state": "ACTIVE",
+          "event": "rekey initiated at 80% of TTL",
+          "to_state": "REKEYING",
+          "actions": [
+            "generate new ephemeral key pair"
+          ]
+        },
+        {
+          "from_state": "REKEYING",
+          "event": "rekey accepted",
+          "to_state": "ACTIVE",
+          "actions": [
+            "install new session keys",
+            "erase old session keys",
+            "retire old session_id to expiry log",
+            "5-second transition window for in-flight envelopes"
+          ]
+        },
+        {
+          "from_state": "ACTIVE",
+          "event": "new handshake from same client_identity",
+          "to_state": "INVALIDATED -> ACTIVE",
+          "actions": [
+            "erase old session keys",
+            "retire old session_id to expiry log",
+            "transition new session to ACTIVE"
+          ]
+        },
+        {
+          "from_state": "EXPIRED or INVALIDATED",
+          "event": "envelope received referencing this session_id",
+          "to_state": "(no transition)",
+          "actions": [
+            "reject envelope with reason_code 'handshake_invalid'"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "concurrent-session-limits",
+      "description": "Behavior when a new handshake arrives while one or more sessions are already active for the same identity, or when the server reaches its concurrent-session ceiling.",
+      "spec_reference": "VECTORS.md §9.2; SESSION.md §2.5",
+      "samples": [
+        {
+          "scenario": "Client A opens session, then opens another from Client A",
+          "expected_behavior": "Old session invalidated, new session accepted"
+        },
+        {
+          "scenario": "Federation peer opens session while one already exists",
+          "expected_behavior": "Old session invalidated, new session accepted"
+        },
+        {
+          "scenario": "Two federation peers initiate simultaneously",
+          "expected_behavior": "Lower session_id lexicographically is abandoned"
+        },
+        {
+          "scenario": "Active sessions reach server maximum",
+          "expected_behavior": "New handshakes rejected with server_at_capacity"
+        }
+      ]
+    },
+    {
+      "id": "rekey-limits",
+      "description": "Per-session rekey constraints: minimum elapsed time, maximum count per session, and post-expiry handling.",
+      "spec_reference": "VECTORS.md §9.3; SESSION.md §3",
+      "samples": [
+        {
+          "condition": "Rekey attempted before 80% of TTL",
+          "expected_behavior": "Permitted (SHOULD wait, not MUST)"
+        },
+        {
+          "condition": "Rekey attempted after session expiry",
+          "expected_behavior": "MUST be rejected; full handshake required"
+        },
+        {
+          "condition": "11th rekey in same session",
+          "expected_behavior": "MUST be rejected; maximum 10 rekeys per session"
+        },
+        {
+          "condition": "Two rekeys within 60 seconds",
+          "expected_behavior": "Second MUST be rejected; minimum 1 minute gap"
+        }
+      ]
+    }
+  ]
+}

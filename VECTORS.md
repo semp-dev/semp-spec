@@ -384,64 +384,29 @@ These vectors verify correct session state transitions.
 
 ### 9.1 Vector: Session State Transitions
 
-```
-State: NO_SESSION
-  Event: Handshake completes (accepted)
-  → State: ACTIVE
-  → Store: session_id, five session keys, established_at, expires_at
+The authoritative state machine: each transition is a (from_state, event) ->
+(to_state, actions) tuple. Implementations MUST drive their session state
+through these and only these transitions.
 
-State: ACTIVE
-  Event: Envelope submitted with valid session_id
-  → State: ACTIVE (unchanged)
-  → Action: Compute seal.session_mac using K_env_mac
-
-State: ACTIVE
-  Event: expires_at reached
-  → State: EXPIRED
-  → Action: Erase all session keys (secure zeroing)
-  → Action: Retain session_id in expiry log
-
-State: ACTIVE
-  Event: Rekey initiated at 80% of TTL
-  → State: REKEYING
-  → Action: Generate new ephemeral key pair
-
-State: REKEYING
-  Event: Rekey accepted
-  → State: ACTIVE (new session keys)
-  → Action: Erase old session keys
-  → Action: Retire old session_id to expiry log
-  → Action: 5-second transition window for in-flight envelopes
-
-State: ACTIVE
-  Event: New handshake from same client_identity
-  → State: (old session) INVALIDATED
-  → Action: Erase old session keys
-  → Action: Retire old session_id to expiry log
-  → State: (new session) ACTIVE
-
-State: EXPIRED / INVALIDATED
-  Event: Envelope received referencing this session_id
-  → Action: Reject with reason_code "handshake_invalid"
-```
+**Bytes:** see [`vectors/v1.0.0/session-lifecycle.json`](vectors/v1.0.0/session-lifecycle.json),
+entry `id: session-state-transitions` (samples table of seven transitions).
 
 ### 9.2 Vector: Concurrent Session Limits
 
-| Scenario                                  | Expected behavior                             |
-|-------------------------------------------|-----------------------------------------------|
-| Client A opens session, Client A opens another | Old session invalidated, new session accepted |
-| Federation peer opens session while one exists  | Old session invalidated, new session accepted |
-| Two federation peers initiate simultaneously    | Lower session_id lexicographically is abandoned |
-| Active sessions reach server maximum            | New handshakes rejected with `server_at_capacity` |
+Behavior when a new handshake arrives while one or more sessions are already
+active for the same identity, or when the server reaches its concurrent-session
+ceiling.
+
+**Bytes:** see [`vectors/v1.0.0/session-lifecycle.json`](vectors/v1.0.0/session-lifecycle.json),
+entry `id: concurrent-session-limits`.
 
 ### 9.3 Vector: Rekey Limits
 
-| Condition                           | Expected behavior                              |
-|-------------------------------------|------------------------------------------------|
-| Rekey attempted before 80% of TTL   | Permitted (SHOULD wait, not MUST)              |
-| Rekey attempted after session expiry | MUST be rejected; full handshake required      |
-| 11th rekey in same session           | MUST be rejected; maximum 10 rekeys per session|
-| Two rekeys within 60 seconds         | Second MUST be rejected; minimum 1 minute gap  |
+Per-session rekey constraints: minimum elapsed time, maximum count per
+session, and post-expiry handling.
+
+**Bytes:** see [`vectors/v1.0.0/session-lifecycle.json`](vectors/v1.0.0/session-lifecycle.json),
+entry `id: rekey-limits`.
 
 ---
 
@@ -454,25 +419,20 @@ to user-facing delivery states.
 
 ### 10.1 Vector: Acknowledgment to UI State
 
-| Server acknowledgment | Client UI state                | Additional behavior                        |
-|-----------------------|--------------------------------|--------------------------------------------|
-| `delivered`           | Confirmed delivery indicator   | --                                          |
-| `rejected`            | Failure indicator + reason     | Reason accessible to user                  |
-| `silent`              | Unacknowledged (distinct)      | Must be visually distinct from above       |
-| `legacy_required`     | Degradation warning            | Await user confirmation before SMTP send   |
-| `recipient_not_found` | Undeliverable indicator        | No fallback available                      |
-| `queued`              | Pending indicator              | Update when delivery event received        |
+Maps the server acknowledgment status carried in a submission response to
+the client UI state and any additional behavior the client MUST drive.
+
+**Bytes:** see [`vectors/v1.0.0/delivery-status.json`](vectors/v1.0.0/delivery-status.json),
+entry `id: acknowledgment-to-ui-state`.
 
 ### 10.2 Vector: Queued → Final State Transitions
 
-| Initial status | Delivery event status | Client action                              |
-|----------------|----------------------|--------------------------------------------|
-| `queued`       | `delivered`          | Update to confirmed delivery indicator     |
-| `queued`       | `rejected`           | Update to failure indicator + reason       |
-| `queued`       | `silent`             | Update to unacknowledged indicator         |
+After a queued submission, the asynchronous delivery event drives the final
+UI state. A client MUST NOT display a confirmed delivery indicator for a
+queued envelope until a delivered event is received.
 
-A client MUST NOT display a confirmed delivery indicator for a `queued`
-envelope until a `delivered` event is received.
+**Bytes:** see [`vectors/v1.0.0/delivery-status.json`](vectors/v1.0.0/delivery-status.json),
+entry `id: queued-to-final-transitions`.
 
 ---
 
@@ -482,29 +442,22 @@ Reference: `DISCOVERY.md` §7.1, `CLIENT.md` §6.3.
 
 ### 11.1 Vector: Discovery Outcome to Submission Status
 
-| Discovery outcome | Submission status returned to client | Client action                       |
-|-------------------|--------------------------------------|-------------------------------------|
-| `semp`            | (proceed with delivery)              | Envelope delivered via SEMP         |
-| `legacy`          | `legacy_required`                    | Surface degradation, await confirm  |
-| `not_found`       | `recipient_not_found`                | Surface as undeliverable            |
+Maps the per-recipient discovery outcome to the submission status returned to
+the client and the client action that follows.
+
+**Bytes:** see [`vectors/v1.0.0/delivery-status.json`](vectors/v1.0.0/delivery-status.json),
+entry `id: discovery-outcome-to-submission-status`.
 
 ### 11.2 Vector: Multi-Recipient Mixed Outcomes
 
-Given an envelope addressed to three recipients:
+An envelope addressed to three recipients with different discovery outcomes.
+The server returns per-recipient results in the submission response. The
+client surfaces each recipient's status individually and MUST NOT suppress or
+aggregate partial failure. `legacy_required` for any recipient MUST await
+user confirmation before SMTP fallback.
 
-| Recipient              | Discovery outcome | Submission status       |
-|------------------------|-------------------|-------------------------|
-| `alice@semp.example`   | `semp`            | `delivered`             |
-| `bob@legacy.example`   | `legacy`          | `legacy_required`       |
-| `carol@gone.invalid`   | `not_found`       | `recipient_not_found`   |
-
-**Expected behavior:**
-
-- The server returns per-recipient results in the submission response.
-- The client surfaces each recipient's status individually.
-- The client MUST NOT suppress or aggregate partial failure.
-- `legacy_required` for Bob MUST be surfaced as a per-recipient degradation
-  and MUST await user confirmation before SMTP fallback.
+**Bytes:** see [`vectors/v1.0.0/delivery-status.json`](vectors/v1.0.0/delivery-status.json),
+entry `id: multi-recipient-mixed-outcomes`.
 
 ---
 
@@ -514,29 +467,15 @@ Reference: `KEY.md` §8.
 
 ### 12.1 Vector: Revoked Key Response
 
-When a sender fetches keys and receives:
+A SEMP_KEYS response carrying a `revocation` block. The sender MUST NOT use
+the revoked key; SHOULD fetch and use the replacement when present; MUST
+invalidate any locally cached copy of the revoked key; and MUST treat the
+recipient as undeliverable when no replacement is supplied.
 
-```json
-{
-    "address": "user@example.com",
-    "key_type": "encryption",
-    "key_id": "old-key-fp",
-    "revocation": {
-        "reason": "key_compromise",
-        "revoked_at": "2025-06-10T19:49:15Z",
-        "replacement_key_id": "new-key-fp"
-    }
-}
-```
-
-**Expected behavior:**
-
-| Condition                        | Action                                          |
-|----------------------------------|-------------------------------------------------|
-| Revocation present               | MUST NOT use `old-key-fp`                       |
-| `replacement_key_id` present     | SHOULD fetch and use `new-key-fp`               |
-| Key was cached locally           | MUST invalidate cached entry and re-fetch       |
-| No `replacement_key_id`          | Delivery cannot proceed for this recipient      |
+**Bytes:** see [`vectors/v1.0.0/key-revocation.json`](vectors/v1.0.0/key-revocation.json),
+entry `id: revoked-key-response`. The JSON carries the example revoked-key
+record under `inputs.revoked_key_record` and the conditional behavior rules
+under `expected.rules`.
 
 ---
 
@@ -613,213 +552,89 @@ certificates.
 
 ### 14.1 Vector: Valid Scoped Certificate
 
-```json
-{
-    "type": "SEMP_DEVICE_CERTIFICATE",
-    "version": "1.0.0",
-    "device_id": "01JDELEGATE0000000000000000",
-    "device_public_key": "base64-delegated-device-public-key",
-    "account": "user@example.com",
-    "issued_by": "01JPRIMARY00000000000000000",
-    "issued_at": "2025-06-15T10:00:00Z",
-    "expires_at": "2025-12-15T10:00:00Z",
-    "scope": {
-        "send": {
-            "mode": "restricted",
-            "allow": [
-                { "type": "user", "address": "subscriber1@example.com" },
-                { "type": "domain", "domain": "company.example" }
-            ],
-            "rate_limits": [
-                { "period_seconds": 3600,  "amount_allowed": 200 },
-                { "period_seconds": 86400, "amount_allowed": 2000 }
-            ]
-        },
-        "receive": { "mode": "none", "rate_limits": [], "delivery_stage": 1 },
-        "blocklist": { "read": false, "write": false, "rate_limits": [] },
-        "keys":      { "read": false, "write": false, "rate_limits": [] },
-        "devices":   { "read": false, "write": false, "rate_limits": [] }
-    },
-    "signature": {
-        "algorithm": "ed25519",
-        "key_id": "primary-device-key-fingerprint",
-        "value": "base64-valid-signature"
-    }
-}
-```
+A well-formed `SEMP_DEVICE_CERTIFICATE`. Five validation checks (signature
+verifies against primary key, primary device authorized for account,
+certificate not expired, scope well-formed, certificate registered) all
+pass; the certificate is accepted.
 
-**Expected behavior:**
-
-| Check                                  | Expected result                         |
-|----------------------------------------|-----------------------------------------|
-| Signature valid against primary key    | Pass                                    |
-| Primary device authorized for account  | Pass                                    |
-| Certificate not expired                | Pass                                    |
-| Scope fields present and well-formed   | Pass                                    |
-| Certificate registered on server       | Accepted                                |
+**Bytes:** see [`vectors/v1.0.0/device-certificates.json`](vectors/v1.0.0/device-certificates.json),
+entry `id: valid-device-certificate`. The JSON carries the full certificate
+under `inputs.certificate_json` and the per-check expected outcomes under
+`expected.checks`.
 
 ### 14.2 Vector: Certificate Validation Failures
 
-| Condition                                    | Expected behavior                            |
-|----------------------------------------------|----------------------------------------------|
-| Signature does not verify against primary key | Reject registration                         |
-| `issued_by` device is not registered for account | Reject registration                      |
-| `issued_by` device has been revoked          | Reject registration                          |
-| `expires_at` is in the past                  | Reject registration                          |
-| Combined `allow`+`deny` in a matcher exceeds 10,000 entries | Reject: `scope_invalid`       |
-| Matcher contains both `allow` and `deny`     | Reject: `scope_invalid`                      |
-| `scope.send.mode` is `restricted` but `allow` is missing | Reject: `scope_invalid`         |
-| `scope.send.mode` is `denylist` but `deny` is missing | Reject: `scope_invalid`              |
-| Required scope fields missing (including `limits`) | Reject: `scope_invalid`                |
-| `expires_at` exceeds `issued_at + 365 days`  | Reject: `scope_invalid`                      |
+Conditions under which a registration MUST be rejected, with the reason_code
+surfaced where the spec defines one (most are `scope_invalid`).
+
+**Bytes:** see [`vectors/v1.0.0/device-certificates.json`](vectors/v1.0.0/device-certificates.json),
+entry `id: certificate-validation-failures`.
 
 ### 14.3 Vector: Scope Enforcement at Submission
 
-Given a delegated device with the certificate from section 14.1:
+Per-recipient enforcement of `scope.send` for the §14.1 certificate.
+Mixed-recipient submissions reject atomically when ANY recipient is outside
+scope.
 
-| Recipient address             | Matches scope? | Expected behavior                    |
-|-------------------------------|---------------|--------------------------------------|
-| `subscriber1@example.com`     | Yes (user)    | Submission accepted                  |
-| `anyone@company.example`      | Yes (domain)  | Submission accepted                  |
-| `other@unrelated.example`     | No            | Rejected: `scope_exceeded`           |
-| `subscriber1@example.com` + `other@unrelated.example` | Partial | Rejected: `scope_exceeded` (the non-matching recipient causes rejection) |
+**Bytes:** see [`vectors/v1.0.0/device-certificates.json`](vectors/v1.0.0/device-certificates.json),
+entry `id: scope-enforcement-by-recipient`.
 
 ### 14.4 Vector: Scope Mode Enforcement
 
-| `scope.send.mode` | Recipient                  | Expected behavior             |
-|--------------------|----------------------------|-------------------------------|
-| `unrestricted`     | Any address                | Submission accepted           |
-| `restricted`       | Address in `allow` list    | Submission accepted           |
-| `restricted`       | Address not in `allow`     | Rejected: `scope_exceeded`    |
-| `denylist`         | Address in `deny` list     | Rejected: `scope_exceeded`    |
-| `denylist`         | Address not in `deny` list | Submission accepted           |
-| `none`             | Any address                | Rejected: `scope_exceeded`    |
+`scope.send.mode` semantics across all four modes (`unrestricted`,
+`restricted`, `denylist`, `none`).
+
+**Bytes:** see [`vectors/v1.0.0/device-certificates.json`](vectors/v1.0.0/device-certificates.json),
+entry `id: scope-mode-enforcement`.
 
 ### 14.4.1 Vector: Receive Matcher Enforcement
 
-Given two delegated devices on the same account:
+`scope.receive` enforcement. Multiple devices on the same account can have
+independent matchers; an inbound envelope is delivered to each device whose
+matcher accepts the sender.
 
-| Device | `scope.receive`                                                  | Inbound sender             | Expected behavior                        |
-|--------|------------------------------------------------------------------|----------------------------|------------------------------------------|
-| A      | `{ "mode": "unrestricted" }`                                     | any                        | Delivered to device A                    |
-| B      | `{ "mode": "restricted", "allow": [ {"type":"domain","domain":"trusted.example"} ] }` | `alice@trusted.example`    | Delivered to device B                    |
-| B      | same as above                                                    | `mallory@other.example`    | Not delivered to device B (device A still receives) |
-| C      | `{ "mode": "none" }`                                             | any                        | Not delivered to device C                |
+**Bytes:** see [`vectors/v1.0.0/device-certificates.json`](vectors/v1.0.0/device-certificates.json),
+entry `id: receive-matcher-enforcement`.
 
 ### 14.4.2 Vector: Rate Limit Enforcement
 
-Given a delegated device with `scope.send.rate_limits` containing one
-tier `{ "period_seconds": 3600, "amount_allowed": 100 }`:
+`scope.send.rate_limits` and `scope.blocklist.rate_limits` behavior across
+single-tier, two-tier, and empty-cap configurations. Counters MUST NOT
+record rejected attempts.
 
-| Submissions in rolling hour | Expected behavior                                                 |
-|-----------------------------|-------------------------------------------------------------------|
-| 1 to 100                    | Accepted                                                          |
-| 101st                       | Rejected: `rate_limited`. Counters MUST NOT record the rejected attempt. Rolling window advance permits next send. |
-
-Given a delegated device with `scope.send.rate_limits` containing two
-tiers `{ "period_seconds": 3600, "amount_allowed": 100 }` and
-`{ "period_seconds": 86400, "amount_allowed": 500 }`:
-
-| State                                                          | Expected behavior                    |
-|----------------------------------------------------------------|--------------------------------------|
-| 100 sends in the last hour, 300 in the last day                | Hourly tier at cap: reject           |
-| 50 sends in the last hour, 500 in the last day                 | Daily tier at cap: reject            |
-| 50 sends in the last hour, 300 in the last day                 | Accept                               |
-
-Given a delegated device with `scope.blocklist.rate_limits = []`:
-
-| Update count | Expected behavior                                        |
-|--------------|----------------------------------------------------------|
-| any          | Protocol imposes no cap; operator policy MAY still apply. |
+**Bytes:** see [`vectors/v1.0.0/device-certificates.json`](vectors/v1.0.0/device-certificates.json),
+entry `id: rate-limit-enforcement`.
 
 ### 14.4.3 Vector: Resource Read/Write Enforcement
 
-Given a delegated device with:
+Operations on managed resources (blocklist, keys, devices) are gated by
+per-resource read/write flags in the scope. Nested delegation (a delegated
+device issuing another delegated certificate) is forbidden.
 
-```json
-"blocklist": { "read": true, "write": false, "rate_limits": [] },
-"keys":      { "read": false, "write": false, "rate_limits": [] },
-"devices":   { "read": true, "write": true, "rate_limits": [] }
-```
-
-| Operation                                             | Expected behavior                     |
-|-------------------------------------------------------|---------------------------------------|
-| GET block list                                        | Accepted                              |
-| POST block entry                                      | Rejected: `scope_exceeded`            |
-| GET key rotation history                              | Rejected: `scope_exceeded`            |
-| POST key rotation                                     | Rejected: `scope_exceeded`            |
-| GET devices list                                      | Accepted                              |
-| POST new delegated device whose `issued_by` is a full-access device | Accepted (with issuer-signature requirement) |
-| POST new delegated device whose `issued_by` is this delegated device | Rejected: `scope_invalid` (nested delegation) |
+**Bytes:** see [`vectors/v1.0.0/device-certificates.json`](vectors/v1.0.0/device-certificates.json),
+entry `id: resource-read-write-enforcement`.
 
 ### 14.5 Vector: Certificate Lifecycle Operations
 
-| Operation                                        | Session impact              | Expected behavior                          |
-|--------------------------------------------------|-----------------------------|--------------------------------------------|
-| Primary client issues new certificate (scope update) | Session continues       | New scope enforced on next submission      |
-| Primary client rotates delegated device key      | Session invalidated         | Delegated client must re-handshake         |
-| Primary client revokes delegated device key      | Session invalidated         | Delegated client cannot re-handshake       |
-| Certificate expires                              | Session continues           | All submissions rejected until new certificate issued |
+Effect of certificate lifecycle operations (scope update, key rotation,
+revocation, expiry) on existing delegated sessions.
+
+**Bytes:** see [`vectors/v1.0.0/device-certificates.json`](vectors/v1.0.0/device-certificates.json),
+entry `id: certificate-lifecycle-operations`.
 
 ### 14.6 Vector: Staged Delivery
 
-Given an account with two devices:
+Multi-stage delivery with at least one filter device (stage 1) and a primary
+device (stage 2). The filter emits `delivery-disposition` envelopes that
+drive whether the original envelope advances to stage 2.
 
-| Device         | `scope.receive`                                                                 |
-|----------------|---------------------------------------------------------------------------------|
-| Filter (delegated) | `{ "mode": "unrestricted", "rate_limits": [], "delivery_stage": 1 }`       |
-| Main (full-access) | No certificate (implicit stage 2)                                          |
-
-An inbound envelope arrives. Expected server behavior:
-
-| Step | Trigger                                                                                   | Server action                                                                                  |
-|------|-------------------------------------------------------------------------------------------|------------------------------------------------------------------------------------------------|
-| 1    | Envelope passes the ordinary delivery pipeline                                            | Partition devices by stage. Deliver to Filter (stage 1). Hold for Main (stage 2) in queue.     |
-| 2a   | Filter emits `delivery-disposition` with `disposition: "advance"`                         | Release envelope from queue; deliver to Main.                                                  |
-| 2b   | Filter emits `delivery-disposition` with `disposition: "suppress"`                        | Drop envelope from queue; Main does not receive.                                               |
-| 2c   | Filter is offline; stage timeout elapses (RECOMMENDED 30 seconds)                         | Advance to stage 2 (fail open); deliver to Main.                                               |
-
-With three filters at stage 1 (A, B, C):
-
-| Dispositions received before timeout                                   | Aggregated outcome |
-|------------------------------------------------------------------------|--------------------|
-| A: advance, B: advance, C: advance                                     | Advance to stage 2 |
-| A: advance, B: advance, C: suppress                                    | Suppress (any suppress wins) |
-| A: advance, B: (no response), C: (no response); timeout                | Advance to stage 2 |
-| A: (no response), B: (no response), C: (no response); timeout          | Advance to stage 2 (fail open) |
-
-Delivery-disposition envelope shape:
-
-```json
-{
-    "brief": {
-        "from": "alice@example.com",
-        "to":   "alice@example.com",
-        "extensions": {
-            "semp.dev/device-sync": {
-                "required": true,
-                "data": {
-                    "kind": "delivery-disposition",
-                    "source_envelope_id": "01HF3X7M8N9P0Q1R2S3T4U5V6W",
-                    "disposition": "suppress",
-                    "reason": "spam",
-                    "device_id": "filter-device-ulid"
-                }
-            }
-        }
-    }
-}
-```
-
-Expected verification:
-
-| Condition                                                                                           | Expected behavior                             |
-|-----------------------------------------------------------------------------------------------------|-----------------------------------------------|
-| `data.device_id` matches authenticated session's device id                                          | Proceed                                       |
-| `data.device_id` does not match authenticated session's device id                                   | Reject envelope                               |
-| `source_envelope_id` references an envelope held for this account at the submitter's stage or earlier | Apply disposition                             |
-| `source_envelope_id` does not reference any held envelope                                           | Discard disposition silently                  |
-| Envelope carries brief-layer sync fields other than `semp.dev/device-sync`                          | Reject: `extension_unsupported`               |
+**Bytes:** see [`vectors/v1.0.0/device-certificates.json`](vectors/v1.0.0/device-certificates.json),
+entry `id: staged-delivery`. The JSON carries the device topology under
+`inputs.devices`, an example delivery-disposition envelope under
+`inputs.disposition_envelope_example`, the per-step server actions under
+`expected.single_filter_steps`, three-filter aggregation outcomes under
+`expected.three_filter_aggregation`, and the disposition-verification rules
+under `expected.disposition_verification`.
 
 ---
 
@@ -832,34 +647,22 @@ delivery acknowledgments.
 
 ### 15.1 Vector: Status Visibility Rules
 
-Given recipient has status `away` with message "Back July 1":
+When the sender does NOT match the recipient's visibility configuration, the
+acknowledgment MUST omit the `recipient_status` field entirely. Omission MUST
+be indistinguishable from a recipient who has not configured status at all.
 
-| Visibility mode | Sender identity              | Status included? |
-|-----------------|------------------------------|------------------|
-| `nobody`        | Any sender                   | No               |
-| `everyone`      | Any sender                   | Yes              |
-| `users`         | Listed user address          | Yes              |
-| `users`         | Unlisted user address        | No               |
-| `domains`       | Address at listed domain     | Yes              |
-| `domains`       | Address at unlisted domain   | No               |
-| `servers`       | Routed through listed server | Yes              |
-| `servers`       | Not routed through listed server | No           |
-
-When status is not included, the acknowledgment MUST contain no
-`recipient_status` field. The absence MUST be indistinguishable from a
-recipient who has not configured status at all.
+**Bytes:** see [`vectors/v1.0.0/recipient-status.json`](vectors/v1.0.0/recipient-status.json),
+entry `id: status-visibility-rules` (eight visibility-mode + sender-identity
+samples).
 
 ### 15.2 Vector: Status Does Not Affect Delivery
 
-| Recipient state    | Envelope valid? | Expected acknowledgment |
-|--------------------|----------------|-------------------------|
-| `available`        | Yes            | `delivered`             |
-| `away`             | Yes            | `delivered` (with status if visible) |
-| `do_not_disturb`   | Yes            | `delivered` (with status if visible) |
-| `away`             | No (bad seal)  | `rejected: seal_invalid` |
-
 Status MUST NOT influence the delivery decision. An invalid envelope is
-rejected regardless of recipient status.
+rejected regardless of recipient status; a valid envelope is delivered
+regardless of recipient status.
+
+**Bytes:** see [`vectors/v1.0.0/recipient-status.json`](vectors/v1.0.0/recipient-status.json),
+entry `id: status-does-not-affect-delivery`.
 
 ---
 
@@ -867,33 +670,23 @@ rejected regardless of recipient status.
 
 ### 16.1 Generating Authoritative Vectors
 
-The HKDF-SHA-512 vectors in section 2 and the HMAC-SHA-256 vectors in
-section 6 are fully deterministic given the specified inputs. Implementers
-can generate reference outputs using any trusted cryptographic library:
+The byte values in [`vectors/v1.0.0/`](vectors/v1.0.0/) are produced by
+[`vectors/generators/generate.py`](vectors/generators/generate.py), a
+standalone Python script with no dependencies beyond the standard library
+(`hmac`, `hashlib`, `json`, `base64`). The generator is the authoritative
+source for those values; reference implementations (including
+`semp.dev/semp-go`) consume the JSON, they do not produce it.
 
-```python
-# Python example using the standard library:
-import hmac, hashlib
+Run modes:
 
-# Inputs
-ikm = bytes([0x0b]*32 + [0x0c]*32)
-salt = bytes([0xaa]*32) + bytes([0xbb]*32)
-
-# HKDF-Extract (RFC 5869 §2.2)
-prk = hmac.new(salt, ikm, hashlib.sha512).digest()
-
-# HKDF-Expand (RFC 5869 §2.3) for one key
-def hkdf_expand(prk, info, length):
-    t = b""
-    okm = b""
-    for i in range(1, (length + 63) // 64 + 1):
-        t = hmac.new(prk, t + info + bytes([i]), hashlib.sha512).digest()
-        okm += t
-    return okm[:length]
-
-key = hkdf_expand(prk, b"SEMP-v1-session-enc-c2s", 32)
-# Expected: cf74d91d41de6ac8f838715bc44a31d7...
+```sh
+python3 vectors/generators/generate.py            # write JSON files
+python3 vectors/generators/generate.py --verify   # exit non-zero on diff
+python3 vectors/generators/generate.py --diff     # show diffs without writing
 ```
+
+CI for any SEMP implementation SHOULD invoke `--verify` on every commit so
+drift between the prose, the generator, and the JSON is caught immediately.
 
 ### 16.2 Canonicalization Testing Strategy
 

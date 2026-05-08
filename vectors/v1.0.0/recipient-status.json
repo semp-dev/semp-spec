@@ -1,0 +1,86 @@
+{
+  "version": "1.0.0",
+  "category": "recipient-status",
+  "description": "Recipient-status visibility rules and the rule that recipient status MUST NOT influence the delivery decision. Source of truth: VECTORS.md §15.",
+  "spec_reference": "VECTORS.md §15; DELIVERY.md §1.6",
+  "vectors": [
+    {
+      "id": "status-visibility-rules",
+      "description": "When the sender does NOT match the recipient's visibility configuration, the acknowledgment MUST omit the recipient_status field entirely. Omission MUST be indistinguishable from a recipient who has not configured status at all.",
+      "spec_reference": "VECTORS.md §15.1; DELIVERY.md §1.6",
+      "samples": [
+        {
+          "visibility_mode": "nobody",
+          "sender_identity": "any sender",
+          "status_included": false
+        },
+        {
+          "visibility_mode": "everyone",
+          "sender_identity": "any sender",
+          "status_included": true
+        },
+        {
+          "visibility_mode": "users",
+          "sender_identity": "listed user address",
+          "status_included": true
+        },
+        {
+          "visibility_mode": "users",
+          "sender_identity": "unlisted user address",
+          "status_included": false
+        },
+        {
+          "visibility_mode": "domains",
+          "sender_identity": "address at listed domain",
+          "status_included": true
+        },
+        {
+          "visibility_mode": "domains",
+          "sender_identity": "address at unlisted domain",
+          "status_included": false
+        },
+        {
+          "visibility_mode": "servers",
+          "sender_identity": "routed through listed server",
+          "status_included": true
+        },
+        {
+          "visibility_mode": "servers",
+          "sender_identity": "not routed through listed server",
+          "status_included": false
+        }
+      ]
+    },
+    {
+      "id": "status-does-not-affect-delivery",
+      "description": "Status MUST NOT influence the delivery decision. An invalid envelope is rejected regardless of recipient status; a valid envelope is delivered regardless of recipient status.",
+      "spec_reference": "VECTORS.md §15.2; DELIVERY.md §1.6",
+      "samples": [
+        {
+          "recipient_state": "available",
+          "envelope_valid": true,
+          "expected_acknowledgment": "delivered",
+          "note": null
+        },
+        {
+          "recipient_state": "away",
+          "envelope_valid": true,
+          "expected_acknowledgment": "delivered",
+          "note": "with status if visible"
+        },
+        {
+          "recipient_state": "do_not_disturb",
+          "envelope_valid": true,
+          "expected_acknowledgment": "delivered",
+          "note": "with status if visible"
+        },
+        {
+          "recipient_state": "away",
+          "envelope_valid": false,
+          "expected_acknowledgment": "rejected",
+          "note": "seal_invalid"
+        }
+      ]
+    }
+  ]
+}
