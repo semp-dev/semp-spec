@@ -1,0 +1,142 @@
+{
+  "version": "1.0.0",
+  "category": "rejection-codes",
+  "description": "Recoverability classification and expected sender behavior for every defined rejection reason code in handshake and envelope rejections. Source of truth: VECTORS.md §8.",
+  "spec_reference": "VECTORS.md §8; HANDSHAKE.md §4.1; ENVELOPE.md §9.3",
+  "vectors": [
+    {
+      "id": "handshake-rejection-codes",
+      "description": "Recoverability and expected sender behavior for codes carried in a SEMP_HANDSHAKE rejection.",
+      "spec_reference": "VECTORS.md §8.1; HANDSHAKE.md §4.1",
+      "samples": [
+        {
+          "reason_code": "blocked",
+          "recoverable": false,
+          "expected_sender_behavior": "Surface to user. Do not retry."
+        },
+        {
+          "reason_code": "auth_failed",
+          "recoverable": false,
+          "expected_sender_behavior": "Surface to user. Do not retry."
+        },
+        {
+          "reason_code": "policy_forbidden",
+          "recoverable": false,
+          "expected_sender_behavior": "Surface to user. Do not retry."
+        },
+        {
+          "reason_code": "handshake_expired",
+          "recoverable": true,
+          "expected_sender_behavior": "Re-handshake and retry."
+        },
+        {
+          "reason_code": "handshake_invalid",
+          "recoverable": true,
+          "expected_sender_behavior": "Re-handshake and retry."
+        },
+        {
+          "reason_code": "no_session",
+          "recoverable": true,
+          "expected_sender_behavior": "Establish new session and retry."
+        },
+        {
+          "reason_code": "rate_limited",
+          "recoverable": true,
+          "expected_sender_behavior": "Back off and retry."
+        },
+        {
+          "reason_code": "challenge",
+          "recoverable": true,
+          "expected_sender_behavior": "Solve the issued challenge and continue handshake."
+        },
+        {
+          "reason_code": "challenge_failed",
+          "recoverable": true,
+          "expected_sender_behavior": "Request new challenge and retry."
+        },
+        {
+          "reason_code": "challenge_invalid",
+          "recoverable": false,
+          "expected_sender_behavior": "Surface to user or operator. Do not retry."
+        },
+        {
+          "reason_code": "server_at_capacity",
+          "recoverable": true,
+          "expected_sender_behavior": "Back off and retry later."
+        },
+        {
+          "reason_code": "version_unsupported",
+          "recoverable": false,
+          "expected_sender_behavior": "Surface to user. Peer's MAJOR version unsupported."
+        }
+      ]
+    },
+    {
+      "id": "envelope-rejection-codes",
+      "description": "Recoverability and expected sender behavior for codes carried in a per-recipient envelope SubmissionResult.",
+      "spec_reference": "VECTORS.md §8.2; ENVELOPE.md §9.3",
+      "samples": [
+        {
+          "reason_code": "blocked",
+          "recoverable": false,
+          "expected_sender_behavior": "Surface to user. Do not retry."
+        },
+        {
+          "reason_code": "seal_invalid",
+          "recoverable": false,
+          "expected_sender_behavior": "Indicates a bug. Do not retry same envelope."
+        },
+        {
+          "reason_code": "session_mac_invalid",
+          "recoverable": false,
+          "expected_sender_behavior": "Indicates a bug or session mismatch. Re-handshake before retry."
+        },
+        {
+          "reason_code": "envelope_expired",
+          "recoverable": false,
+          "expected_sender_behavior": "Recompose with new expiry if content still relevant."
+        },
+        {
+          "reason_code": "envelope_size_exceeded",
+          "recoverable": false,
+          "expected_sender_behavior": "Recompose with smaller envelope: split recipients or move large content to the large-attachment extension."
+        },
+        {
+          "reason_code": "policy_forbidden",
+          "recoverable": false,
+          "expected_sender_behavior": "Surface to user. Rejection MAY carry a challenge."
+        },
+        {
+          "reason_code": "handshake_invalid",
+          "recoverable": true,
+          "expected_sender_behavior": "Establish new session and resend."
+        },
+        {
+          "reason_code": "handshake_expired",
+          "recoverable": true,
+          "expected_sender_behavior": "Establish new session and resend."
+        },
+        {
+          "reason_code": "no_session",
+          "recoverable": true,
+          "expected_sender_behavior": "Establish new session and resend."
+        },
+        {
+          "reason_code": "extension_unsupported",
+          "recoverable": false,
+          "expected_sender_behavior": "Remove or renegotiate the unsupported extension."
+        },
+        {
+          "reason_code": "extension_size_exceeded",
+          "recoverable": false,
+          "expected_sender_behavior": "Reduce extension payload size."
+        },
+        {
+          "reason_code": "scope_exceeded",
+          "recoverable": false,
+          "expected_sender_behavior": "Update device certificate scope or use a full-access device."
+        }
+      ]
+    }
+  ]
+}

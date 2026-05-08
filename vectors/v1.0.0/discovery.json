@@ -1,0 +1,112 @@
+{
+  "version": "1.0.0",
+  "category": "discovery",
+  "description": "Discovery response parsing and DNS TXT capability-record parsing. Source of truth: VECTORS.md §7.",
+  "spec_reference": "VECTORS.md §7; DISCOVERY.md §4.3, §4.6, §8.1",
+  "vectors": [
+    {
+      "id": "discovery-response-parsing",
+      "description": "A well-formed SEMP_DISCOVERY response carries per-address results with statuses semp / legacy / not_found. Each result drives a different sender action; unknown fields MUST be ignored, and the response signature MUST be verified against the responding server's published domain key before any result is acted on or cached. Each result is cached for its individual ttl.",
+      "spec_reference": "VECTORS.md §7.1; DISCOVERY.md §4.3, §4.6",
+      "validation_requirements": [
+        "Verify response.signature against the server's published domain key BEFORE caching or acting on results.",
+        "Cache each result per its individual ttl.",
+        "Unknown fields in the response or per-result objects MUST be ignored, not rejected."
+      ],
+      "inputs": {
+        "response_json": {
+          "type": "SEMP_DISCOVERY",
+          "step": "response",
+          "version": "1.0.0",
+          "id": "01JTEST44444444444444444444",
+          "timestamp": "2025-06-10T20:00:00Z",
+          "results": [
+            {
+              "address": "alice@example.com",
+              "status": "semp",
+              "transports": [
+                "ws",
+                "h2"
+              ],
+              "extensions": [
+                "semp.dev/device-sync",
+                "semp.dev/large-attachment"
+              ],
+              "server": "semp.example.com",
+              "ttl": 3600
+            },
+            {
+              "address": "bob@legacy.example",
+              "status": "legacy",
+              "transports": [
+                "smtp"
+              ],
+              "server": "mail.legacy.example",
+              "ttl": 86400
+            },
+            {
+              "address": "charlie@nowhere.invalid",
+              "status": "not_found",
+              "ttl": 3600
+            }
+          ],
+          "signature": {
+            "algorithm": "ed25519",
+            "key_id": "server-domain-key-fp",
+            "value": "c2lnbmF0dXJlLXZhbHVl"
+          },
+          "extensions": {}
+        }
+      },
+      "expected": {
+        "per_address_actions": {
+          "alice@example.com": {
+            "status": "semp",
+            "action": "proceed_with_handshake",
+            "server": "semp.example.com",
+            "transports": [
+              "ws",
+              "h2"
+            ]
+          },
+          "bob@legacy.example": {
+            "status": "legacy",
+            "action": "return_legacy_required"
+          },
+          "charlie@nowhere.invalid": {
+            "status": "not_found",
+            "action": "return_recipient_not_found"
+          }
+        }
+      }
+    },
+    {
+      "id": "discovery-txt-parsing",
+      "description": "A DNS TXT capability record advertises protocol version and optional capability hints under semicolon-separated key=value pairs. Unknown keys (here: x=unknown) MUST be ignored, not rejected.",
+      "spec_reference": "VECTORS.md §7.2; DISCOVERY.md §8.1",
+      "rule": "split on ';' -> for each 'k=v' segment, dispatch by key: v/pq -> string, c/f -> comma-split list, anything else -> silently ignore.",
+      "inputs": {
+        "txt_record_utf8": "v=semp1;pq=ready;c=ws,h2,quic;f=groups,threads,reactions;x=unknown"
+      },
+      "expected": {
+        "parsed": {
+          "v": "semp1",
+          "pq": "ready",
+          "c": [
+            "ws",
+            "h2",
+            "quic"
+          ],
+          "f": [
+            "groups",
+            "threads",
+            "reactions"
+          ],
+          "_ignored_unknown": [
+            "x"
+          ]
+        }
+      }
+    }
+  ]
+}

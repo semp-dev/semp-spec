@@ -326,77 +326,28 @@ discovery responses.
 
 ### 7.1 Vector: Well-Formed Discovery Response
 
-```json
-{
-    "type": "SEMP_DISCOVERY",
-    "step": "response",
-    "version": "1.0.0",
-    "id": "01JTEST44444444444444444444",
-    "timestamp": "2025-06-10T20:00:00Z",
-    "results": [
-        {
-            "address": "alice@example.com",
-            "status": "semp",
-            "transports": ["ws", "h2"],
-            "extensions": ["semp.dev/device-sync", "semp.dev/large-attachment"],
-            "server": "semp.example.com",
-            "ttl": 3600
-        },
-        {
-            "address": "bob@legacy.example",
-            "status": "legacy",
-            "transports": ["smtp"],
-            "server": "mail.legacy.example",
-            "ttl": 86400
-        },
-        {
-            "address": "charlie@nowhere.invalid",
-            "status": "not_found",
-            "ttl": 3600
-        }
-    ],
-    "signature": {
-        "algorithm": "ed25519",
-        "key_id": "server-domain-key-fp",
-        "value": "c2lnbmF0dXJlLXZhbHVl"
-    },
-    "extensions": {}
-}
-```
+A SEMP_DISCOVERY response carries a list of per-address results; each result
+status (`semp`, `legacy`, `not_found`) drives a different sender action. Every
+result is cached for its individual `ttl`. The response signature MUST be
+verified against the responding server's published domain key BEFORE any
+result is acted on or cached. Unknown fields in the response or in per-result
+objects MUST be ignored, not rejected.
 
-**Expected parsing behavior:**
-
-| Address                   | Status      | Action                                              |
-|---------------------------|-------------|-----------------------------------------------------|
-| `alice@example.com`       | `semp`      | Proceed with SEMP handshake to `semp.example.com`.  |
-| `bob@legacy.example`      | `legacy`    | Return `legacy_required` to client.                 |
-| `charlie@nowhere.invalid` | `not_found` | Return `recipient_not_found` to client.             |
-
-**Validation requirements:**
-
-1. Verify `signature` against the responding server's published domain key
-   before caching or acting on results.
-2. Cache each result per its individual `ttl`.
-3. Unknown fields in the response or result objects MUST be ignored, not
-   rejected.
+**Bytes:** see [`vectors/v1.0.0/discovery.json`](vectors/v1.0.0/discovery.json),
+entry `id: discovery-response-parsing`. The JSON carries the full response
+under `inputs.response_json` and the per-address expected actions under
+`expected.per_address_actions`.
 
 ### 7.2 Vector: DNS TXT Capability Record Parsing
 
-```
-_semp._tcp.example.com.  3600  IN  TXT  "v=semp1;pq=ready;c=ws,h2,quic;f=groups,threads,reactions;x=unknown"
-```
+A SEMP TXT capability record advertises protocol version and optional
+capability hints under semicolon-separated `key=value` pairs. Known keys:
+`v` (version, required), `pq` (post-quantum readiness), `c` (transport ids),
+`f` (optional features). Unknown keys MUST be ignored, not treated as an
+error.
 
-**Expected parsing:**
-
-| Parameter | Value                            | Required |
-|-----------|----------------------------------|----------|
-| `v`       | `semp1`                          | Yes      |
-| `pq`      | `ready`                          | No       |
-| `c`       | `["ws", "h2", "quic"]`          | No       |
-| `f`       | `["groups", "threads", "reactions"]` | No  |
-| `x`       | (ignored; unknown parameter)      | --        |
-
-The unknown parameter `x` MUST be ignored, not treated as an error.
+**Bytes:** see [`vectors/v1.0.0/discovery.json`](vectors/v1.0.0/discovery.json),
+entry `id: discovery-txt-parsing`.
 
 ---
 
@@ -409,37 +360,19 @@ reason codes as recoverable or non-recoverable.
 
 ### 8.1 Handshake Rejection Codes
 
-| Reason code         | Recoverable | Expected sender behavior                          |
-|---------------------|-------------|---------------------------------------------------|
-| `blocked`           | No          | Surface to user. Do not retry.                    |
-| `auth_failed`       | No          | Surface to user. Do not retry.                    |
-| `policy_forbidden`  | No          | Surface to user. Do not retry.                    |
-| `handshake_expired` | Yes         | Re-handshake and retry.                           |
-| `handshake_invalid` | Yes         | Re-handshake and retry.                           |
-| `no_session`        | Yes         | Establish new session and retry.                  |
-| `rate_limited`      | Yes         | Back off and retry.                               |
-| `challenge`         | Yes         | Solve the issued challenge and continue handshake.|
-| `challenge_failed`  | Yes         | Request new challenge and retry.                  |
-| `challenge_invalid` | No          | Surface to user or operator. Do not retry.        |
-| `server_at_capacity`| Yes         | Back off and retry later.                         |
-| `version_unsupported`| No         | Surface to user. Peer's MAJOR version unsupported.|
+Twelve codes carried in a SEMP_HANDSHAKE rejection. Each is classified as
+recoverable or not, and each prescribes an expected sender behavior.
+
+**Bytes:** see [`vectors/v1.0.0/rejection-codes.json`](vectors/v1.0.0/rejection-codes.json),
+entry `id: handshake-rejection-codes`.
 
 ### 8.2 Envelope Rejection Codes
 
-| Reason code           | Recoverable | Expected sender behavior                        |
-|-----------------------|-------------|-------------------------------------------------|
-| `blocked`             | No          | Surface to user. Do not retry.                  |
-| `seal_invalid`        | No          | Indicates a bug. Do not retry same envelope.    |
-| `session_mac_invalid` | No          | Indicates a bug or session mismatch. Re-handshake before retry. |
-| `envelope_expired`    | No          | Recompose with new expiry if content still relevant. |
-| `envelope_size_exceeded` | No       | Recompose with smaller envelope: split recipients or move large content to the large-attachment extension. |
-| `policy_forbidden`    | No          | Surface to user. Rejection MAY carry a challenge. |
-| `handshake_invalid`   | Yes         | Establish new session and resend.               |
-| `handshake_expired`   | Yes         | Establish new session and resend.               |
-| `no_session`          | Yes         | Establish new session and resend.               |
-| `extension_unsupported` | No        | Remove or renegotiate the unsupported extension.|
-| `extension_size_exceeded` | No      | Reduce extension payload size.                  |
-| `scope_exceeded`      | No          | Update device certificate scope or use a full-access device. |
+Twelve codes carried in a per-recipient `SubmissionResult`. Each is classified
+as recoverable or not, with a prescribed sender behavior.
+
+**Bytes:** see [`vectors/v1.0.0/rejection-codes.json`](vectors/v1.0.0/rejection-codes.json),
+entry `id: envelope-rejection-codes`.
 
 ---
 
@@ -616,111 +549,58 @@ criticality signaling, and size limits.
 
 ### 13.1 Vector: Extension Entry Structure
 
-**Valid extension entry:**
+An optional extension whose key is unknown to the receiver MUST be silently
+ignored; envelope processing continues.
 
-```json
-{
-    "extensions": {
-        "semp.dev/priority": {
-            "required": false,
-            "data": {
-                "level": "urgent"
-            }
-        }
-    }
-}
-```
-
-**Expected behavior:** Extension is parsed. Since `required` is `false` and the
-extension is unknown to the implementation, it is silently ignored. Envelope
-processing continues normally.
+**Bytes:** see [`vectors/v1.0.0/extension-entries.json`](vectors/v1.0.0/extension-entries.json),
+entry `id: extension-optional-unknown`.
 
 ### 13.2 Vector: Required Extension, Known
 
-```json
-{
-    "extensions": {
-        "vendor.example.com/example-extension": {
-            "required": true,
-            "data": {
-                "example_field": "example_value"
-            }
-        }
-    }
-}
-```
+A required extension whose key the receiver supports is parsed and processed.
+A required extension whose key the receiver does NOT support causes rejection
+with reason code `extension_unsupported`; the rejection MUST include the
+offending key so the sender can identify which extension caused the failure.
 
-**Expected behavior (implementation supports `vendor.example.com/example-extension`):**
-Extension is parsed and processed. Envelope processing continues.
-
-**Expected behavior (implementation does NOT support `vendor.example.com/example-extension`):**
-Envelope is rejected with reason code `extension_unsupported`. The rejection
-MUST include the key `"vendor.example.com/example-extension"` so the sender can
-identify which extension caused the failure.
+**Bytes:** see [`vectors/v1.0.0/extension-entries.json`](vectors/v1.0.0/extension-entries.json),
+entries `id: extension-required-known-supported` and
+`id: extension-required-known-unsupported`.
 
 ### 13.3 Vector: Required Extension, Unknown
 
-```json
-{
-    "extensions": {
-        "vendor.example.com/custom-feature": {
-            "required": true,
-            "data": {
-                "mode": "strict"
-            }
-        }
-    }
-}
-```
+A required extension with a vendor key the receiver does not recognize is
+rejected with `extension_unsupported`.
 
-**Expected behavior:** Envelope is rejected with reason code
-`extension_unsupported`. The sender is informed that
-`"vendor.example.com/custom-feature"` is not supported.
+**Bytes:** see [`vectors/v1.0.0/extension-entries.json`](vectors/v1.0.0/extension-entries.json),
+entry `id: extension-required-unknown`.
 
 ### 13.4 Vector: Extension Size Enforcement
 
-| Layer                  | Size limit | Test payload size | Expected behavior            |
-|------------------------|------------|-------------------|------------------------------|
-| `postmark.extensions`  | 4 KB       | 3 KB              | Accepted                     |
-| `postmark.extensions`  | 4 KB       | 5 KB              | Rejected: `extension_size_exceeded` |
-| `seal.extensions`      | 4 KB       | 5 KB              | Rejected: `extension_size_exceeded` |
-| `brief.extensions`     | 16 KB      | 10 KB             | Accepted                     |
-| `brief.extensions`     | 16 KB      | 20 KB             | Rejected: `extension_size_exceeded` |
-| `enclosure.extensions` | 64 KB      | 50 KB             | Accepted                     |
-| `enclosure.extensions` | 64 KB      | 70 KB             | Rejected: `extension_size_exceeded` |
+Per-layer size limits on the serialized UTF-8 JSON byte length of each
+`extensions` object: `postmark.extensions` and `seal.extensions` cap at 4 KB;
+`brief.extensions` at 16 KB; `enclosure.extensions` at 64 KB. Size enforcement
+MUST occur before signature verification to prevent resource exhaustion.
 
-Size is measured as the serialized UTF-8 JSON byte length of the `extensions`
-object at each layer. Size enforcement MUST occur before signature verification
-to prevent resource exhaustion.
+**Bytes:** see [`vectors/v1.0.0/extension-entries.json`](vectors/v1.0.0/extension-entries.json),
+entry `id: extension-size-limits` (samples table covering accept and reject
+cases at each layer).
 
 ### 13.5 Vector: Mixed Required and Optional Extensions
 
-```json
-{
-    "extensions": {
-        "semp.dev/priority": {
-            "required": false,
-            "data": { "level": "low" }
-        },
-        "vendor.example.com/unknown-feature": {
-            "required": true,
-            "data": { "enabled": true }
-        }
-    }
-}
-```
+An optional supported extension does not rescue an envelope carrying an
+unknown required extension; rejection is driven by the
+required-and-unsupported entry.
 
-**Expected behavior:** Even though `semp.dev/priority` is valid and optional,
-the presence of an unknown required extension
-(`vendor.example.com/unknown-feature`) causes rejection with
-`extension_unsupported`. The optional extension does not rescue the envelope.
+**Bytes:** see [`vectors/v1.0.0/extension-entries.json`](vectors/v1.0.0/extension-entries.json),
+entry `id: extension-mixed-required-and-optional`.
 
 ### 13.6 Vector: Extension Canonicalization
 
 Extensions are included in the canonical form for seal computation. Extension
 keys within each `extensions` object MUST be sorted lexicographically,
-consistent with `ENVELOPE.md` §4.3. See section 3.2 of this document for
-a canonicalization vector that includes extensions.
+consistent with `ENVELOPE.md` §4.3. See §3.2 (vector
+`envelope-canonical-with-extensions`) for an envelope canonicalization vector
+that exercises nested extension key sorting.
 
 ---
 

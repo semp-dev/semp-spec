@@ -104,10 +104,13 @@ A reference runner ships with [`semp.dev/semp-go`](https://github.com/semp-dev/s
 | 1     | Proof of work                   | `pow.json`                 | seeded        |
 | 2     | Canonical JSON serialization    | `envelope-canonical.json`  | seeded        |
 | 2     | Envelope size + recipient buckets | `envelope-buckets.json`  | seeded        |
+| 2     | Discovery response + TXT parsing | `discovery.json`          | seeded        |
+| 2     | Rejection-code recoverability   | `rejection-codes.json`     | seeded        |
+| 2     | Extension entry validation      | `extension-entries.json`   | seeded        |
 | 3     | Seal wrap / unwrap (round-trip) | `seal-roundtrip.json`      | TODO          |
 | 3     | Envelope compose / open         | `envelope-roundtrip.json`  | TODO          |
 | 4     | Handshake message bytes         | `handshake-*.json`         | TODO          |
-| 5     | Discovery configuration         | `discovery.json`           | TODO          |
+| 5     | Discovery signature verification | `discovery-signed.json`   | TODO          |
 | 6     | Negative tests (must-reject)    | `negative-*.json`          | TODO          |
 
 `seeded` means the file exists with a starter set of vectors. `TODO` means the layer is acknowledged but not yet machine-readable.

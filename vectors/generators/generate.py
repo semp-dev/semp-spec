@@ -620,6 +620,393 @@ def build_pow_json() -> dict:
     }
 
 
+# ---- Discovery vectors ------------------------------------------------------
+
+
+def parse_dns_txt_capability(txt: str) -> dict:
+    """DISCOVERY.md §8.1: parse a SEMP TXT capability record.
+
+    Format: semicolon-separated `key=value` pairs. Known keys:
+      v   protocol version (required)
+      pq  post-quantum readiness (optional)
+      c   comma-separated transport ids (optional)
+      f   comma-separated optional features (optional)
+
+    Unknown keys MUST be ignored, not rejected.
+    """
+    out: dict[str, Any] = {}
+    ignored: list[str] = []
+    for segment in txt.split(";"):
+        segment = segment.strip()
+        if not segment:
+            continue
+        if "=" not in segment:
+            ignored.append(segment)
+            continue
+        key, value = segment.split("=", 1)
+        if key in ("c", "f"):
+            out[key] = [item for item in value.split(",") if item]
+        elif key in ("v", "pq"):
+            out[key] = value
+        else:
+            ignored.append(key)
+    if ignored:
+        out["_ignored_unknown"] = ignored
+    return out
+
+
+def build_discovery_json() -> dict:
+    response = {
+        "type": "SEMP_DISCOVERY",
+        "step": "response",
+        "version": "1.0.0",
+        "id": "01JTEST44444444444444444444",
+        "timestamp": "2025-06-10T20:00:00Z",
+        "results": [
+            {
+                "address": "alice@example.com",
+                "status": "semp",
+                "transports": ["ws", "h2"],
+                "extensions": ["semp.dev/device-sync", "semp.dev/large-attachment"],
+                "server": "semp.example.com",
+                "ttl": 3600,
+            },
+            {
+                "address": "bob@legacy.example",
+                "status": "legacy",
+                "transports": ["smtp"],
+                "server": "mail.legacy.example",
+                "ttl": 86400,
+            },
+            {
+                "address": "charlie@nowhere.invalid",
+                "status": "not_found",
+                "ttl": 3600,
+            },
+        ],
+        "signature": {
+            "algorithm": "ed25519",
+            "key_id": "server-domain-key-fp",
+            "value": "c2lnbmF0dXJlLXZhbHVl",
+        },
+        "extensions": {},
+    }
+
+    expected_actions = {
+        "alice@example.com": {
+            "status": "semp",
+            "action": "proceed_with_handshake",
+            "server": "semp.example.com",
+            "transports": ["ws", "h2"],
+        },
+        "bob@legacy.example": {
+            "status": "legacy",
+            "action": "return_legacy_required",
+        },
+        "charlie@nowhere.invalid": {
+            "status": "not_found",
+            "action": "return_recipient_not_found",
+        },
+    }
+
+    txt_record = "v=semp1;pq=ready;c=ws,h2,quic;f=groups,threads,reactions;x=unknown"
+    parsed = parse_dns_txt_capability(txt_record)
+
+    return {
+        "version": "1.0.0",
+        "category": "discovery",
+        "description": (
+            "Discovery response parsing and DNS TXT capability-record parsing. "
+            "Source of truth: VECTORS.md §7."
+        ),
+        "spec_reference": "VECTORS.md §7; DISCOVERY.md §4.3, §4.6, §8.1",
+        "vectors": [
+            {
+                "id": "discovery-response-parsing",
+                "description": (
+                    "A well-formed SEMP_DISCOVERY response carries per-address "
+                    "results with statuses semp / legacy / not_found. Each "
+                    "result drives a different sender action; unknown fields "
+                    "MUST be ignored, and the response signature MUST be "
+                    "verified against the responding server's published domain "
+                    "key before any result is acted on or cached. Each result "
+                    "is cached for its individual ttl."
+                ),
+                "spec_reference": "VECTORS.md §7.1; DISCOVERY.md §4.3, §4.6",
+                "validation_requirements": [
+                    "Verify response.signature against the server's published domain key BEFORE caching or acting on results.",
+                    "Cache each result per its individual ttl.",
+                    "Unknown fields in the response or per-result objects MUST be ignored, not rejected.",
+                ],
+                "inputs": {
+                    "response_json": response,
+                },
+                "expected": {
+                    "per_address_actions": expected_actions,
+                },
+            },
+            {
+                "id": "discovery-txt-parsing",
+                "description": (
+                    "A DNS TXT capability record advertises protocol version "
+                    "and optional capability hints under semicolon-separated "
+                    "key=value pairs. Unknown keys (here: x=unknown) MUST be "
+                    "ignored, not rejected."
+                ),
+                "spec_reference": "VECTORS.md §7.2; DISCOVERY.md §8.1",
+                "rule": (
+                    "split on ';' -> for each 'k=v' segment, dispatch by key: "
+                    "v/pq -> string, c/f -> comma-split list, anything else -> "
+                    "silently ignore."
+                ),
+                "inputs": {
+                    "txt_record_utf8": txt_record,
+                },
+                "expected": {
+                    "parsed": parsed,
+                },
+            },
+        ],
+    }
+
+
+# ---- Rejection-code vectors -------------------------------------------------
+
+
+def build_rejection_codes_json() -> dict:
+    handshake = [
+        ("blocked", False, "Surface to user. Do not retry."),
+        ("auth_failed", False, "Surface to user. Do not retry."),
+        ("policy_forbidden", False, "Surface to user. Do not retry."),
+        ("handshake_expired", True, "Re-handshake and retry."),
+        ("handshake_invalid", True, "Re-handshake and retry."),
+        ("no_session", True, "Establish new session and retry."),
+        ("rate_limited", True, "Back off and retry."),
+        ("challenge", True, "Solve the issued challenge and continue handshake."),
+        ("challenge_failed", True, "Request new challenge and retry."),
+        ("challenge_invalid", False, "Surface to user or operator. Do not retry."),
+        ("server_at_capacity", True, "Back off and retry later."),
+        ("version_unsupported", False, "Surface to user. Peer's MAJOR version unsupported."),
+    ]
+    envelope = [
+        ("blocked", False, "Surface to user. Do not retry."),
+        ("seal_invalid", False, "Indicates a bug. Do not retry same envelope."),
+        ("session_mac_invalid", False, "Indicates a bug or session mismatch. Re-handshake before retry."),
+        ("envelope_expired", False, "Recompose with new expiry if content still relevant."),
+        ("envelope_size_exceeded", False, "Recompose with smaller envelope: split recipients or move large content to the large-attachment extension."),
+        ("policy_forbidden", False, "Surface to user. Rejection MAY carry a challenge."),
+        ("handshake_invalid", True, "Establish new session and resend."),
+        ("handshake_expired", True, "Establish new session and resend."),
+        ("no_session", True, "Establish new session and resend."),
+        ("extension_unsupported", False, "Remove or renegotiate the unsupported extension."),
+        ("extension_size_exceeded", False, "Reduce extension payload size."),
+        ("scope_exceeded", False, "Update device certificate scope or use a full-access device."),
+    ]
+
+    def to_samples(rows):
+        return [
+            {"reason_code": code, "recoverable": rec, "expected_sender_behavior": text}
+            for code, rec, text in rows
+        ]
+
+    return {
+        "version": "1.0.0",
+        "category": "rejection-codes",
+        "description": (
+            "Recoverability classification and expected sender behavior for "
+            "every defined rejection reason code in handshake and envelope "
+            "rejections. Source of truth: VECTORS.md §8."
+        ),
+        "spec_reference": "VECTORS.md §8; HANDSHAKE.md §4.1; ENVELOPE.md §9.3",
+        "vectors": [
+            {
+                "id": "handshake-rejection-codes",
+                "description": (
+                    "Recoverability and expected sender behavior for codes "
+                    "carried in a SEMP_HANDSHAKE rejection."
+                ),
+                "spec_reference": "VECTORS.md §8.1; HANDSHAKE.md §4.1",
+                "samples": to_samples(handshake),
+            },
+            {
+                "id": "envelope-rejection-codes",
+                "description": (
+                    "Recoverability and expected sender behavior for codes "
+                    "carried in a per-recipient envelope SubmissionResult."
+                ),
+                "spec_reference": "VECTORS.md §8.2; ENVELOPE.md §9.3",
+                "samples": to_samples(envelope),
+            },
+        ],
+    }
+
+
+# ---- Extension-entry vectors ------------------------------------------------
+
+
+def build_extension_entries_json() -> dict:
+    size_table = [
+        ("postmark.extensions", 4 * 1024, 3 * 1024, "accept"),
+        ("postmark.extensions", 4 * 1024, 5 * 1024, "reject:extension_size_exceeded"),
+        ("seal.extensions", 4 * 1024, 5 * 1024, "reject:extension_size_exceeded"),
+        ("brief.extensions", 16 * 1024, 10 * 1024, "accept"),
+        ("brief.extensions", 16 * 1024, 20 * 1024, "reject:extension_size_exceeded"),
+        ("enclosure.extensions", 64 * 1024, 50 * 1024, "accept"),
+        ("enclosure.extensions", 64 * 1024, 70 * 1024, "reject:extension_size_exceeded"),
+    ]
+    size_samples = []
+    for layer, limit, size, outcome in size_table:
+        sample = {
+            "layer": layer,
+            "size_limit_bytes": limit,
+            "test_payload_bytes": size,
+            "expected_outcome": outcome,
+        }
+        if outcome.startswith("reject:"):
+            sample["reason_code"] = outcome.split(":", 1)[1]
+            sample["expected_outcome"] = "reject"
+        size_samples.append(sample)
+
+    return {
+        "version": "1.0.0",
+        "category": "extension-entries",
+        "description": (
+            "Extension entry parsing, criticality enforcement, and size limits. "
+            "Source of truth: VECTORS.md §13."
+        ),
+        "spec_reference": "VECTORS.md §13; EXTENSIONS.md §2, §3, §4",
+        "vectors": [
+            {
+                "id": "extension-optional-unknown",
+                "description": (
+                    "Optional extension whose key is unknown to the receiver. "
+                    "MUST be silently ignored; envelope processing continues."
+                ),
+                "spec_reference": "VECTORS.md §13.1; EXTENSIONS.md §3",
+                "inputs": {
+                    "extensions_json": {
+                        "semp.dev/priority": {
+                            "required": False,
+                            "data": {"level": "urgent"},
+                        }
+                    },
+                    "implementation_supports": [],
+                },
+                "expected": {
+                    "action": "accept",
+                    "ignored_keys": ["semp.dev/priority"],
+                },
+            },
+            {
+                "id": "extension-required-known-supported",
+                "description": (
+                    "Required extension whose key the receiver supports. "
+                    "Extension is parsed and processed."
+                ),
+                "spec_reference": "VECTORS.md §13.2; EXTENSIONS.md §3",
+                "inputs": {
+                    "extensions_json": {
+                        "vendor.example.com/example-extension": {
+                            "required": True,
+                            "data": {"example_field": "example_value"},
+                        }
+                    },
+                    "implementation_supports": [
+                        "vendor.example.com/example-extension"
+                    ],
+                },
+                "expected": {
+                    "action": "accept",
+                    "processed_keys": ["vendor.example.com/example-extension"],
+                },
+            },
+            {
+                "id": "extension-required-known-unsupported",
+                "description": (
+                    "Required extension whose key the receiver does NOT support. "
+                    "Envelope MUST be rejected with extension_unsupported, and "
+                    "the rejection MUST identify the offending key."
+                ),
+                "spec_reference": "VECTORS.md §13.2; EXTENSIONS.md §3",
+                "inputs": {
+                    "extensions_json": {
+                        "vendor.example.com/example-extension": {
+                            "required": True,
+                            "data": {"example_field": "example_value"},
+                        }
+                    },
+                    "implementation_supports": [],
+                },
+                "expected": {
+                    "action": "reject",
+                    "reason_code": "extension_unsupported",
+                    "offending_keys": ["vendor.example.com/example-extension"],
+                },
+            },
+            {
+                "id": "extension-required-unknown",
+                "description": (
+                    "Required extension with a vendor key the receiver does not "
+                    "recognize. Envelope rejected with extension_unsupported."
+                ),
+                "spec_reference": "VECTORS.md §13.3; EXTENSIONS.md §3",
+                "inputs": {
+                    "extensions_json": {
+                        "vendor.example.com/custom-feature": {
+                            "required": True,
+                            "data": {"mode": "strict"},
+                        }
+                    },
+                    "implementation_supports": [],
+                },
+                "expected": {
+                    "action": "reject",
+                    "reason_code": "extension_unsupported",
+                    "offending_keys": ["vendor.example.com/custom-feature"],
+                },
+            },
+            {
+                "id": "extension-size-limits",
+                "description": (
+                    "Per-layer size limits on the serialized UTF-8 JSON byte "
+                    "length of each extensions object. Size enforcement MUST "
+                    "occur before signature verification."
+                ),
+                "spec_reference": "VECTORS.md §13.4; EXTENSIONS.md §4",
+                "samples": size_samples,
+            },
+            {
+                "id": "extension-mixed-required-and-optional",
+                "description": (
+                    "An optional supported extension does not rescue an envelope "
+                    "carrying an unknown required extension. Reject is driven by "
+                    "the required-and-unsupported entry."
+                ),
+                "spec_reference": "VECTORS.md §13.5; EXTENSIONS.md §3",
+                "inputs": {
+                    "extensions_json": {
+                        "semp.dev/priority": {
+                            "required": False,
+                            "data": {"level": "low"},
+                        },
+                        "vendor.example.com/unknown-feature": {
+                            "required": True,
+                            "data": {"enabled": True},
+                        },
+                    },
+                    "implementation_supports": ["semp.dev/priority"],
+                },
+                "expected": {
+                    "action": "reject",
+                    "reason_code": "extension_unsupported",
+                    "offending_keys": ["vendor.example.com/unknown-feature"],
+                    "ignored_keys": ["semp.dev/priority"],
+                },
+            },
+        ],
+    }
+
+
 # ---------------------------------------------------------------------------
 # Drive
 
@@ -688,6 +1075,9 @@ def main() -> int:
         (OUTDIR / "session-mac.json", session_mac),
         (OUTDIR / "confirmation-hash.json", confirmation),
         (OUTDIR / "pow.json", build_pow_json()),
+        (OUTDIR / "discovery.json", build_discovery_json()),
+        (OUTDIR / "rejection-codes.json", build_rejection_codes_json()),
+        (OUTDIR / "extension-entries.json", build_extension_entries_json()),
     ]
 
     ok = True

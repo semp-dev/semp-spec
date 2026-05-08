@@ -1,0 +1,187 @@
+{
+  "version": "1.0.0",
+  "category": "extension-entries",
+  "description": "Extension entry parsing, criticality enforcement, and size limits. Source of truth: VECTORS.md §13.",
+  "spec_reference": "VECTORS.md §13; EXTENSIONS.md §2, §3, §4",
+  "vectors": [
+    {
+      "id": "extension-optional-unknown",
+      "description": "Optional extension whose key is unknown to the receiver. MUST be silently ignored; envelope processing continues.",
+      "spec_reference": "VECTORS.md §13.1; EXTENSIONS.md §3",
+      "inputs": {
+        "extensions_json": {
+          "semp.dev/priority": {
+            "required": false,
+            "data": {
+              "level": "urgent"
+            }
+          }
+        },
+        "implementation_supports": []
+      },
+      "expected": {
+        "action": "accept",
+        "ignored_keys": [
+          "semp.dev/priority"
+        ]
+      }
+    },
+    {
+      "id": "extension-required-known-supported",
+      "description": "Required extension whose key the receiver supports. Extension is parsed and processed.",
+      "spec_reference": "VECTORS.md §13.2; EXTENSIONS.md §3",
+      "inputs": {
+        "extensions_json": {
+          "vendor.example.com/example-extension": {
+            "required": true,
+            "data": {
+              "example_field": "example_value"
+            }
+          }
+        },
+        "implementation_supports": [
+          "vendor.example.com/example-extension"
+        ]
+      },
+      "expected": {
+        "action": "accept",
+        "processed_keys": [
+          "vendor.example.com/example-extension"
+        ]
+      }
+    },
+    {
+      "id": "extension-required-known-unsupported",
+      "description": "Required extension whose key the receiver does NOT support. Envelope MUST be rejected with extension_unsupported, and the rejection MUST identify the offending key.",
+      "spec_reference": "VECTORS.md §13.2; EXTENSIONS.md §3",
+      "inputs": {
+        "extensions_json": {
+          "vendor.example.com/example-extension": {
+            "required": true,
+            "data": {
+              "example_field": "example_value"
+            }
+          }
+        },
+        "implementation_supports": []
+      },
+      "expected": {
+        "action": "reject",
+        "reason_code": "extension_unsupported",
+        "offending_keys": [
+          "vendor.example.com/example-extension"
+        ]
+      }
+    },
+    {
+      "id": "extension-required-unknown",
+      "description": "Required extension with a vendor key the receiver does not recognize. Envelope rejected with extension_unsupported.",
+      "spec_reference": "VECTORS.md §13.3; EXTENSIONS.md §3",
+      "inputs": {
+        "extensions_json": {
+          "vendor.example.com/custom-feature": {
+            "required": true,
+            "data": {
+              "mode": "strict"
+            }
+          }
+        },
+        "implementation_supports": []
+      },
+      "expected": {
+        "action": "reject",
+        "reason_code": "extension_unsupported",
+        "offending_keys": [
+          "vendor.example.com/custom-feature"
+        ]
+      }
+    },
+    {
+      "id": "extension-size-limits",
+      "description": "Per-layer size limits on the serialized UTF-8 JSON byte length of each extensions object. Size enforcement MUST occur before signature verification.",
+      "spec_reference": "VECTORS.md §13.4; EXTENSIONS.md §4",
+      "samples": [
+        {
+          "layer": "postmark.extensions",
+          "size_limit_bytes": 4096,
+          "test_payload_bytes": 3072,
+          "expected_outcome": "accept"
+        },
+        {
+          "layer": "postmark.extensions",
+          "size_limit_bytes": 4096,
+          "test_payload_bytes": 5120,
+          "expected_outcome": "reject",
+          "reason_code": "extension_size_exceeded"
+        },
+        {
+          "layer": "seal.extensions",
+          "size_limit_bytes": 4096,
+          "test_payload_bytes": 5120,
+          "expected_outcome": "reject",
+          "reason_code": "extension_size_exceeded"
+        },
+        {
+          "layer": "brief.extensions",
+          "size_limit_bytes": 16384,
+          "test_payload_bytes": 10240,
+          "expected_outcome": "accept"
+        },
+        {
+          "layer": "brief.extensions",
+          "size_limit_bytes": 16384,
+          "test_payload_bytes": 20480,
+          "expected_outcome": "reject",
+          "reason_code": "extension_size_exceeded"
+        },
+        {
+          "layer": "enclosure.extensions",
+          "size_limit_bytes": 65536,
+          "test_payload_bytes": 51200,
+          "expected_outcome": "accept"
+        },
+        {
+          "layer": "enclosure.extensions",
+          "size_limit_bytes": 65536,
+          "test_payload_bytes": 71680,
+          "expected_outcome": "reject",
+          "reason_code": "extension_size_exceeded"
+        }
+      ]
+    },
+    {
+      "id": "extension-mixed-required-and-optional",
+      "description": "An optional supported extension does not rescue an envelope carrying an unknown required extension. Reject is driven by the required-and-unsupported entry.",
+      "spec_reference": "VECTORS.md §13.5; EXTENSIONS.md §3",
+      "inputs": {
+        "extensions_json": {
+          "semp.dev/priority": {
+            "required": false,
+            "data": {
+              "level": "low"
+            }
+          },
+          "vendor.example.com/unknown-feature": {
+            "required": true,
+            "data": {
+              "enabled": true
+            }
+          }
+        },
+        "implementation_supports": [
+          "semp.dev/priority"
+        ]
+      },
+      "expected": {
+        "action": "reject",
+        "reason_code": "extension_unsupported",
+        "offending_keys": [
+          "vendor.example.com/unknown-feature"
+        ],
+        "ignored_keys": [
+          "semp.dev/priority"
+        ]
+      }
+    }
+  ]
+}
