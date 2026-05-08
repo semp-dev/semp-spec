@@ -127,8 +127,9 @@ A runner is a small, language-idiomatic test harness — typically a few hundred
 | 9     | Clock tolerance boundaries      | `clock-tolerance.json`     | seeded        |
 | 5     | Discovery signature verification | `discovery-signed.json`   | seeded        |
 | 5     | Configuration versioning        | `configuration-update.json`| seeded        |
-| 5     | Key transparency proofs         | `transparency.json`        | seeded (STH + inclusion + consistency; §4 TODO) |
-| 5     | Account recovery bundle         | `account-recovery.json`    | seeded (bundle; Shamir TODO) |
+| 5     | Key transparency proofs         | `transparency.json`        | seeded (STH + inclusion + consistency + §4 augmented fetch) |
+| 5     | Account recovery bundle         | `account-recovery.json`    | seeded        |
+| 5     | Shamir device-split recovery    | `recovery-shamir.json`     | seeded        |
 | 5     | Provider migration              | `migration.json`           | seeded        |
 | 5     | Account closure                 | `account-closure.json`     | seeded        |
 | 5     | User policy update              | `user-policy.json`         | seeded        |

@@ -113,6 +113,129 @@
         "tampered_path_first_element_hex": "c5993a66c85be234afa8209ebde81bdba0bbe748d8c39013dac5f104509ed3b8",
         "tampered_path_verifies": false
       }
+    },
+    {
+      "id": "transparency-augmented-key-fetch",
+      "description": "TRANSPARENCY.md §4 augmented SEMP_KEYS response: each returned key carries a transparency block with a current STH and an inclusion proof showing the key's most recent log event is a leaf of the tree the STH attests. The client MUST verify the STH's domain signature, the STH freshness (within 1 hour per §4.3), the inclusion proof against the STH's root_hash, and the leaf-key correspondence (returned key's key_id and public_key match the leaf's).",
+      "spec_reference": "VECTORS.md §17.10; TRANSPARENCY.md §4; RFC 6962 §2.1.1",
+      "inputs": {
+        "log_events_json": [
+          {
+            "event": "publish",
+            "user_id": "alice@example.com",
+            "key_id": "01J7KEYIDPUBLISH00000000000",
+            "key_type": "identity",
+            "algorithm": "ed25519",
+            "public_key": "oKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKA=",
+            "created": "2025-01-15T08:30:00Z",
+            "expires": "2026-01-15T08:30:00Z",
+            "revoked_at": null,
+            "revoked_reason": null,
+            "supersedes": null,
+            "log_timestamp": "2025-01-15T08:30:05Z"
+          },
+          {
+            "event": "rotate",
+            "user_id": "alice@example.com",
+            "key_id": "01J7KEYIDROTATE000000000000",
+            "key_type": "identity",
+            "algorithm": "ed25519",
+            "public_key": "oaGhoaGhoaGhoaGhoaGhoaGhoaGhoaGhoaGhoaGhoaE=",
+            "created": "2026-01-15T08:30:00Z",
+            "expires": "2027-01-15T08:30:00Z",
+            "revoked_at": null,
+            "revoked_reason": null,
+            "supersedes": "01J7KEYIDPUBLISH00000000000",
+            "log_timestamp": "2026-01-15T08:30:05Z"
+          },
+          {
+            "event": "publish",
+            "user_id": "bob@example.com",
+            "key_id": "01J7BOBKEYIDXXXXXXXXXXXXXXX",
+            "key_type": "identity",
+            "algorithm": "ed25519",
+            "public_key": "sLCwsLCwsLCwsLCwsLCwsLCwsLCwsLCwsLCwsLCwsLA=",
+            "created": "2025-06-15T08:30:00Z",
+            "expires": "2026-06-15T08:30:00Z",
+            "revoked_at": null,
+            "revoked_reason": null,
+            "supersedes": null,
+            "log_timestamp": "2025-06-15T08:30:05Z"
+          }
+        ],
+        "leaf_index_returned": 1,
+        "domain_seed_hex": "4242424242424242424242424242424242424242424242424242424242424242",
+        "domain_pub_hex": "2152f8d19b791d24453242e15f2eab6cb7cffa7b6a5ed30097960e069881db12",
+        "domain_key_id": "3097e2dee2cb4a34b53840cdb705aed71067c36f68db0e0f559c3f3fa043315f"
+      },
+      "intermediates": {
+        "leaf_hashes_hex": [
+          "bea4dccd1443a711f503d9c2bd5bf0cd0657c7e2270b7ad6c835ae0312b96159",
+          "2d0597fa2bb205e99de3eaa6a022043562e4e62735a5b8b877faf0a5f48933e0",
+          "967ea3b40c16b83e193876a83a9cb79080e0f7265104522125b9f527b03d4e6e"
+        ],
+        "root_hash_hex": "e060e51b063fed5c5e582945d344d203053dbb50b0c3d587f6d555b47298f5b2",
+        "sth_canonical_with_blanked_signature_utf8": "{\"log_size\":3,\"root_hash\":\"4GDlGwY/7VxeWClF00TSAwU9u1Cww9WH9tVVtHKY9bI=\",\"signature\":{\"algorithm\":\"ed25519\",\"key_id\":\"3097e2dee2cb4a34b53840cdb705aed71067c36f68db0e0f559c3f3fa043315f\",\"value\":\"\"},\"timestamp\":\"2026-04-19T12:00:00Z\"}",
+        "alice_inclusion_path_hex": [
+          "bea4dccd1443a711f503d9c2bd5bf0cd0657c7e2270b7ad6c835ae0312b96159",
+          "967ea3b40c16b83e193876a83a9cb79080e0f7265104522125b9f527b03d4e6e"
+        ]
+      },
+      "expected": {
+        "augmented_response_json": {
+          "type": "SEMP_KEYS",
+          "step": "response",
+          "version": "1.0.0",
+          "id": "01J7KEYREQUESTIDXXXXXXXXXXX",
+          "timestamp": "2026-04-19T12:00:00Z",
+          "keys": [
+            {
+              "address": "alice@example.com",
+              "key_type": "identity",
+              "public_key": "oaGhoaGhoaGhoaGhoaGhoaGhoaGhoaGhoaGhoaGhoaE=",
+              "key_id": "01J7KEYIDROTATE000000000000",
+              "transparency": {
+                "sth": {
+                  "log_size": 3,
+                  "root_hash": "4GDlGwY/7VxeWClF00TSAwU9u1Cww9WH9tVVtHKY9bI=",
+                  "timestamp": "2026-04-19T12:00:00Z",
+                  "signature": {
+                    "algorithm": "ed25519",
+                    "key_id": "3097e2dee2cb4a34b53840cdb705aed71067c36f68db0e0f559c3f3fa043315f",
+                    "value": "jwW9HNCMf2fdkMMVns6m/K4GFj1gj8cb0nNIvLnZ6PeFfN1wKlae35SBMWv2/m78zBc2PCzfXe/YkxY6OwRGDw=="
+                  }
+                },
+                "inclusion_proof": {
+                  "log_size": 3,
+                  "leaf_index": 1,
+                  "leaf_event_json": {
+                    "event": "rotate",
+                    "user_id": "alice@example.com",
+                    "key_id": "01J7KEYIDROTATE000000000000",
+                    "key_type": "identity",
+                    "algorithm": "ed25519",
+                    "public_key": "oaGhoaGhoaGhoaGhoaGhoaGhoaGhoaGhoaGhoaGhoaE=",
+                    "created": "2026-01-15T08:30:00Z",
+                    "expires": "2027-01-15T08:30:00Z",
+                    "revoked_at": null,
+                    "revoked_reason": null,
+                    "supersedes": "01J7KEYIDPUBLISH00000000000",
+                    "log_timestamp": "2026-01-15T08:30:05Z"
+                  },
+                  "leaf_hash_b64": "LQWX+iuyBemd4+qmoCIENWLk5ic1pbi4d/rwpfSJM+A=",
+                  "path_b64": [
+                    "vqTczRRDpxH1A9nCvVvwzQZXx+InC3rWyDWuAxK5YVk=",
+                    "ln6jtAwWuD4ZOHaoOpy3kIDg9yZRBFIhJbn1J7A9Tm4="
+                  ]
+                }
+              }
+            }
+          ]
+        },
+        "sth_signature_verifies": true,
+        "inclusion_proof_verifies": true,
+        "leaf_matches_returned_key": true
+      }
     }
   ]
 }

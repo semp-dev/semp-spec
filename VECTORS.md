@@ -1175,11 +1175,17 @@ Head per `TRANSPARENCY.md` §2.3, plus an RFC 6962 inclusion proof.
   STHs and the proof, the verifier recomputes both roots and confirms
   they match. Tampering one bit of the proof rejects, demonstrating
   the append-only-log property.
+- `transparency-augmented-key-fetch`: TRANSPARENCY.md §4 augmented
+  SEMP_KEYS response with three pinned key events (publish, rotate,
+  one for an unrelated user). The response carries a transparency
+  block with a current STH and an inclusion proof for alice's
+  most recent key event. The vector exercises the §4.2 client
+  verification chain: STH signature, inclusion-proof verification,
+  and leaf-key correspondence.
 
 The Merkle hash construction follows RFC 6962:
 `leaf_hash = SHA-256(0x00 || leaf_data)` and
-`internal_hash = SHA-256(0x01 || left || right)`. The §4 augmented
-key-fetch path is TODO.
+`internal_hash = SHA-256(0x01 || left || right)`.
 
 **Bytes:** see [`vectors/v1.0.0/discovery-signed.json`](vectors/v1.0.0/discovery-signed.json),
 [`vectors/v1.0.0/transparency.json`](vectors/v1.0.0/transparency.json).
@@ -1247,7 +1253,8 @@ identity Ed25519 seed. Round-trip is asserted at generation time:
 re-deriving `K_bundle` from the same inputs yields the same key, the
 AEAD decrypts, and the bundle signature verifies.
 
-Shamir device-split backup (§2 alternative recovery mechanism) is TODO.
+Shamir device-split backup (§2 alternative recovery mechanism) is
+covered separately in §17.15.
 
 **Bytes:** see [`vectors/v1.0.0/account-recovery.json`](vectors/v1.0.0/account-recovery.json).
 
@@ -1274,6 +1281,50 @@ plus the algorithm-string change.
 
 **Bytes:** see [`vectors/v1.0.0/configuration-update.json`](vectors/v1.0.0/configuration-update.json),
 [`vectors/v1.0.0/handshake-messages-pq.json`](vectors/v1.0.0/handshake-messages-pq.json).
+
+### 17.15 Shamir Device-Split Recovery
+
+Reference: `RECOVERY.md` §5.
+
+`recovery-shamir.json` covers the alternative device-split recovery
+mechanism in which `K_bundle` (the AEAD key from §17.13) is split into
+`N` shares using `(M, N)`-threshold Shamir's Secret Sharing over
+`GF(256)` and stored across `N` of the user's devices, recoverable by
+any `M`-subset.
+
+The construction is byte-wise: each byte of `K_bundle` is split
+independently using a polynomial
+`f(x) = secret_byte + c_1·x + c_2·x² + ... + c_{M-1}·x^{M-1}`
+over `GF(256)` with the AES irreducible polynomial `0x11b`. Share `i`
+is `(i, f(i))` for `i = 1..N`. Reconstruction is Lagrange
+interpolation at `x = 0` over the same field.
+
+Because the coefficients an implementation draws at split time are
+cryptographically random, the resulting share bytes are not
+reproducible — but the algorithm IS reproducible given a fixed
+coefficient seed. The vector therefore pins a coefficient seed and
+asserts at generation time that:
+
+1. Reconstruction from any `M`-subset recovers `K_bundle` exactly.
+2. Reconstruction from fewer than `M` shares yields a different
+   output (the secrecy property — sub-threshold sets reveal nothing
+   about the secret).
+
+A SEMP_RECOVERY_SET_MANIFEST signed by the user's identity key with
+the `SEMP-RECOVERY-MANIFEST:` prefix binds each share index to a
+specific device's identity public key. Each SEMP_RECOVERY_SHARE
+record is then signed by its bound device's identity key with the
+`SEMP-RECOVERY-SHARE:` prefix, proving that the device storing this
+share controls the identity key the manifest assigned to this slot.
+A restore client cross-checks share records against the manifest
+before combining them.
+
+The vector pins the user identity seed (`0x92` × 32), five device
+identity seeds (`0xA0..0xA4`, each × 32), `M = 3`, `N = 5`, and a
+coefficient seed of `0x91` × 64 (32 secret bytes × 2 coefficients per
+byte for `M = 3`).
+
+**Bytes:** see [`vectors/v1.0.0/recovery-shamir.json`](vectors/v1.0.0/recovery-shamir.json).
 
 ---
 

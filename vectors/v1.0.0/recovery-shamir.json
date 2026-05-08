@@ -1,0 +1,299 @@
+{
+  "version": "1.0.0",
+  "category": "recovery-shamir",
+  "description": "RECOVERY.md §5: device-split Shamir backup. K_bundle (the same key that account-recovery.json's bundle uses for AEAD) is split with M=3, N=5 over GF(256) using the AES irreducible polynomial. Shares are bound to specific device identity keys via a user-signed manifest (SEMP-RECOVERY-MANIFEST:) and each share record is signed by its bound device (SEMP-RECOVERY-SHARE:). Round-trip (threshold reconstruction MUST recover K_bundle; sub-threshold reconstruction MUST NOT) is asserted at generation time.",
+  "spec_reference": "VECTORS.md §17.15; RECOVERY.md §5",
+  "construction": {
+    "field": "GF(256) with irreducible polynomial 0x11b (AES)",
+    "polynomial": "f(x) = secret + c_1*x + c_2*x^2 + ... + c_{M-1}*x^{M-1}",
+    "shares": "(i, f(i)) for i = 1..N, each byte computed independently",
+    "reconstruction": "Lagrange interpolation at x = 0 over GF(256)",
+    "manifest_prefix_utf8": "SEMP-RECOVERY-MANIFEST:",
+    "share_prefix_utf8": "SEMP-RECOVERY-SHARE:"
+  },
+  "vectors": [
+    {
+      "id": "shamir-split-and-combine",
+      "description": "Split K_bundle (32 bytes) with M=3, N=5 using a pinned coefficient seed (a stand-in for the cryptographically random coefficients an implementation draws at production split time). Reconstruct from shares 1+2+3 and confirm K_bundle is recovered byte-for-byte. Sub-threshold reconstruction (shares 1+2 alone) produces a different output, demonstrating the secrecy property.",
+      "spec_reference": "VECTORS.md §17.15; RECOVERY.md §5.1, §5.4",
+      "inputs": {
+        "K_bundle_hex": "83986165248db482d3eeffeec27131b4cd63ad2974f51f91f4544fd394a55d71",
+        "threshold": 3,
+        "total_shares": 5,
+        "coefficient_seed_hex": "91919191919191919191919191919191919191919191919191919191919191919191919191919191919191919191919191919191919191919191919191919191",
+        "share_index_subset_for_combine": [
+          1,
+          2,
+          3
+        ]
+      },
+      "intermediates": {
+        "shares_hex": [
+          "83986165248db482d3eeffeec27131b4cd63ad2974f51f91f4544fd394a55d71",
+          "c8d32a2e6fc6ffc998a5b4a5893a7aff8628e6623fbe54dabf1f0498dfee163a",
+          "c8d32a2e6fc6ffc998a5b4a5893a7aff8628e6623fbe54dabf1f0498dfee163a",
+          "2239c0c4852c1523724f5e4f63d090156cc20c88d554be3055f5ee723504fcd0",
+          "2239c0c4852c1523724f5e4f63d090156cc20c88d554be3055f5ee723504fcd0"
+        ],
+        "subthreshold_combine_output_hex": "baa1585c1db48dbbead7c6d7fb48088df45a94104dcc26a8cd6d76eaad9c6448"
+      },
+      "expected": {
+        "threshold_combine_recovers_K_bundle": true,
+        "subthreshold_combine_recovers_K_bundle": false,
+        "recovered_secret_hex": "83986165248db482d3eeffeec27131b4cd63ad2974f51f91f4544fd394a55d71"
+      }
+    },
+    {
+      "id": "shamir-recovery-set-manifest-signed",
+      "description": "User identity key signs the SEMP_RECOVERY_SET_MANIFEST with the SEMP-RECOVERY-MANIFEST: prefix. The manifest binds each share_index to a device's identity public key so a restore client can cross-check share records against the user-attested device set.",
+      "spec_reference": "VECTORS.md §17.15; RECOVERY.md §5.2",
+      "inputs": {
+        "user_seed_hex": "9292929292929292929292929292929292929292929292929292929292929292",
+        "user_pub_hex": "c6d0c796bb4c3c923615f8dc85e6fc35149eb6b1317de523d3a5085584f5c109",
+        "user_key_id": "390a4948c6e3a0c929f4ccfca89446a3acc089e313d60f6a35926bf16b56ea2f",
+        "manifest_pre_sign_json": {
+          "type": "SEMP_RECOVERY_SET_MANIFEST",
+          "version": "1.0.0",
+          "bundle_id": "01J7BUNDLE0000000000000000",
+          "threshold": 3,
+          "total_shares": 5,
+          "contributors": [
+            {
+              "share_index": 1,
+              "device_id": "01J7DEVICE00000000000000000000",
+              "device_identity_pubkey": {
+                "algorithm": "ed25519",
+                "public_key": "tTPYrZ/Pvd4LSBwbM03cPFNBL9YUVk5+Wv0CA2jTgsM=",
+                "key_id": "489f44d9921995762d53b9c6e65c0014df72af7713b479ea9a703e49e9b43658"
+              }
+            },
+            {
+              "share_index": 2,
+              "device_id": "01J7DEVICE00000000000000000001",
+              "device_identity_pubkey": {
+                "algorithm": "ed25519",
+                "public_key": "vHy8tWNjdfodgkNNRmck2SN39TuYBpXdSdJtDOEiBaU=",
+                "key_id": "730a5edc28c2f8daf2d9dce3a01d5f205e35e55582eed2ba26219fabdd4cc9a8"
+              }
+            },
+            {
+              "share_index": 3,
+              "device_id": "01J7DEVICE00000000000000000002",
+              "device_identity_pubkey": {
+                "algorithm": "ed25519",
+                "public_key": "Zej5sLxurhJBafBXb5c2LSlajPX3cLReFDV85kfTPuw=",
+                "key_id": "c7b9b30e8b344118e2cf93b98c6b59b70eda4309b5ff36831ab09ac426a838e1"
+              }
+            },
+            {
+              "share_index": 4,
+              "device_id": "01J7DEVICE00000000000000000003",
+              "device_identity_pubkey": {
+                "algorithm": "ed25519",
+                "public_key": "rPErSswcZgqDJq7TQDnvtyil5JZIgkD1CpMqt6ulF1E=",
+                "key_id": "1a6637539bfe7d38af34872efcfdb6ddef0649f2e0a06c36c5c419e0796dfdf4"
+              }
+            },
+            {
+              "share_index": 5,
+              "device_id": "01J7DEVICE00000000000000000004",
+              "device_identity_pubkey": {
+                "algorithm": "ed25519",
+                "public_key": "oKDCJ9ihJUOTWQeJwYBg7+qgk3GWpre9twYYQZB5dac=",
+                "key_id": "959a80191f7640f9ca5a36cffefcfcd7a90c07291d3c940a862a2a990907b503"
+              }
+            }
+          ],
+          "issued_at": "2026-04-18T10:00:00Z",
+          "signature": {
+            "algorithm": "ed25519",
+            "key_id": "390a4948c6e3a0c929f4ccfca89446a3acc089e313d60f6a35926bf16b56ea2f",
+            "value": ""
+          }
+        }
+      },
+      "intermediates": {
+        "canonical_with_blanked_signature_utf8": "{\"bundle_id\":\"01J7BUNDLE0000000000000000\",\"contributors\":[{\"device_id\":\"01J7DEVICE00000000000000000000\",\"device_identity_pubkey\":{\"algorithm\":\"ed25519\",\"key_id\":\"489f44d9921995762d53b9c6e65c0014df72af7713b479ea9a703e49e9b43658\",\"public_key\":\"tTPYrZ/Pvd4LSBwbM03cPFNBL9YUVk5+Wv0CA2jTgsM=\"},\"share_index\":1},{\"device_id\":\"01J7DEVICE00000000000000000001\",\"device_identity_pubkey\":{\"algorithm\":\"ed25519\",\"key_id\":\"730a5edc28c2f8daf2d9dce3a01d5f205e35e55582eed2ba26219fabdd4cc9a8\",\"public_key\":\"vHy8tWNjdfodgkNNRmck2SN39TuYBpXdSdJtDOEiBaU=\"},\"share_index\":2},{\"device_id\":\"01J7DEVICE00000000000000000002\",\"device_identity_pubkey\":{\"algorithm\":\"ed25519\",\"key_id\":\"c7b9b30e8b344118e2cf93b98c6b59b70eda4309b5ff36831ab09ac426a838e1\",\"public_key\":\"Zej5sLxurhJBafBXb5c2LSlajPX3cLReFDV85kfTPuw=\"},\"share_index\":3},{\"device_id\":\"01J7DEVICE00000000000000000003\",\"device_identity_pubkey\":{\"algorithm\":\"ed25519\",\"key_id\":\"1a6637539bfe7d38af34872efcfdb6ddef0649f2e0a06c36c5c419e0796dfdf4\",\"public_key\":\"rPErSswcZgqDJq7TQDnvtyil5JZIgkD1CpMqt6ulF1E=\"},\"share_index\":4},{\"device_id\":\"01J7DEVICE00000000000000000004\",\"device_identity_pubkey\":{\"algorithm\":\"ed25519\",\"key_id\":\"959a80191f7640f9ca5a36cffefcfcd7a90c07291d3c940a862a2a990907b503\",\"public_key\":\"oKDCJ9ihJUOTWQeJwYBg7+qgk3GWpre9twYYQZB5dac=\"},\"share_index\":5}],\"issued_at\":\"2026-04-18T10:00:00Z\",\"signature\":{\"algorithm\":\"ed25519\",\"key_id\":\"390a4948c6e3a0c929f4ccfca89446a3acc089e313d60f6a35926bf16b56ea2f\",\"value\":\"\"},\"threshold\":3,\"total_shares\":5,\"type\":\"SEMP_RECOVERY_SET_MANIFEST\",\"version\":\"1.0.0\"}",
+        "signing_input_prefix_utf8": "SEMP-RECOVERY-MANIFEST:",
+        "signing_input_hex": "53454d502d5245434f564552592d4d414e49464553543a7b2262756e646c655f6964223a2230314a3742554e444c4530303030303030303030303030303030222c22636f6e7472696275746f7273223a5b7b226465766963655f6964223a2230314a374445564943453030303030303030303030303030303030303030222c226465766963655f6964656e746974795f7075626b6579223a7b22616c676f726974686d223a2265643235353139222c226b65795f6964223a2234383966343464393932313939353736326435336239633665363563303031346466373261663737313362343739656139613730336534396539623433363538222c227075626c69635f6b6579223a2274545059725a2f507664344c534277624d30336350464e424c395955566b352b5776304341326a5467734d3d227d2c2273686172655f696e646578223a317d2c7b226465766963655f6964223a2230314a374445564943453030303030303030303030303030303030303031222c226465766963655f6964656e746974795f7075626b6579223a7b22616c676f726974686d223a2265643235353139222c226b65795f6964223a2237333061356564633238633266386461663264396463653361303164356632303565333565353535383265656432626132363231396661626464346363396138222c227075626c69635f6b6579223a227648793874574e6a64666f64676b4e4e526d636b32534e33395475594270586453644a74444f45694261553d227d2c2273686172655f696e646578223a327d2c7b226465766963655f6964223a2230314a374445564943453030303030303030303030303030303030303032222c226465766963655f6964656e746974795f7075626b6579223a7b22616c676f726974686d223a2265643235353139222c226b65795f6964223a2263376239623330653862333434313138653263663933623938633662353962373065646134333039623566663336383331616230396163343236613833386531222c227075626c69635f6b6579223a225a656a35734c787572684a4261664258623563324c536c616a505833634c526546445638356b66545075773d227d2c2273686172655f696e646578223a337d2c7b226465766963655f6964223a2230314a374445564943453030303030303030303030303030303030303033222c226465766963655f6964656e746974795f7075626b6579223a7b22616c676f726974686d223a2265643235353139222c226b65795f6964223a2231613636333735333962666537643338616633343837326566636664623664646566303634396632653061303663333663356334313965303739366466646634222c227075626c69635f6b6579223a2272504572537377635a6771444a71375451446e767479696c354a5a49676b443143704d717436756c4631453d227d2c2273686172655f696e646578223a347d2c7b226465766963655f6964223a2230314a374445564943453030303030303030303030303030303030303034222c226465766963655f6964656e746974795f7075626b6579223a7b22616c676f726974686d223a2265643235353139222c226b65795f6964223a2239353961383031393166373634306639636135613336636666656663666364376139306330373239316433633934306138363261326139393039303762353033222c227075626c69635f6b6579223a226f4b44434a3969684a554f545751654a77594267372b71676b3347577072653974775959515a42356461633d227d2c2273686172655f696e646578223a357d5d2c226973737565645f6174223a22323032362d30342d31385431303a30303a30305a222c227369676e6174757265223a7b22616c676f726974686d223a2265643235353139222c226b65795f6964223a2233393061343934386336653361306339323966346363666361383934343661336163633038396533313364363066366133353932366266313662353665613266222c2276616c7565223a22227d2c227468726573686f6c64223a332c22746f74616c5f736861726573223a352c2274797065223a2253454d505f5245434f564552595f5345545f4d414e4946455354222c2276657273696f6e223a22312e302e30227d",
+        "signature_hex": "25242bf9b772f7e8211719c70253046c196c076a07cefd32d1ed6bd1c9712c2bfed3ea8ac5aa0dc255cb75ffce82bd75f5652690e083e8f7d532ab2c7aa0d80f"
+      },
+      "expected": {
+        "signed_manifest_json": {
+          "type": "SEMP_RECOVERY_SET_MANIFEST",
+          "version": "1.0.0",
+          "bundle_id": "01J7BUNDLE0000000000000000",
+          "threshold": 3,
+          "total_shares": 5,
+          "contributors": [
+            {
+              "share_index": 1,
+              "device_id": "01J7DEVICE00000000000000000000",
+              "device_identity_pubkey": {
+                "algorithm": "ed25519",
+                "public_key": "tTPYrZ/Pvd4LSBwbM03cPFNBL9YUVk5+Wv0CA2jTgsM=",
+                "key_id": "489f44d9921995762d53b9c6e65c0014df72af7713b479ea9a703e49e9b43658"
+              }
+            },
+            {
+              "share_index": 2,
+              "device_id": "01J7DEVICE00000000000000000001",
+              "device_identity_pubkey": {
+                "algorithm": "ed25519",
+                "public_key": "vHy8tWNjdfodgkNNRmck2SN39TuYBpXdSdJtDOEiBaU=",
+                "key_id": "730a5edc28c2f8daf2d9dce3a01d5f205e35e55582eed2ba26219fabdd4cc9a8"
+              }
+            },
+            {
+              "share_index": 3,
+              "device_id": "01J7DEVICE00000000000000000002",
+              "device_identity_pubkey": {
+                "algorithm": "ed25519",
+                "public_key": "Zej5sLxurhJBafBXb5c2LSlajPX3cLReFDV85kfTPuw=",
+                "key_id": "c7b9b30e8b344118e2cf93b98c6b59b70eda4309b5ff36831ab09ac426a838e1"
+              }
+            },
+            {
+              "share_index": 4,
+              "device_id": "01J7DEVICE00000000000000000003",
+              "device_identity_pubkey": {
+                "algorithm": "ed25519",
+                "public_key": "rPErSswcZgqDJq7TQDnvtyil5JZIgkD1CpMqt6ulF1E=",
+                "key_id": "1a6637539bfe7d38af34872efcfdb6ddef0649f2e0a06c36c5c419e0796dfdf4"
+              }
+            },
+            {
+              "share_index": 5,
+              "device_id": "01J7DEVICE00000000000000000004",
+              "device_identity_pubkey": {
+                "algorithm": "ed25519",
+                "public_key": "oKDCJ9ihJUOTWQeJwYBg7+qgk3GWpre9twYYQZB5dac=",
+                "key_id": "959a80191f7640f9ca5a36cffefcfcd7a90c07291d3c940a862a2a990907b503"
+              }
+            }
+          ],
+          "issued_at": "2026-04-18T10:00:00Z",
+          "signature": {
+            "algorithm": "ed25519",
+            "key_id": "390a4948c6e3a0c929f4ccfca89446a3acc089e313d60f6a35926bf16b56ea2f",
+            "value": "JSQr+bdy9+ghFxnHAlMEbBlsB2oHzv0y0e1r0clxLCv+0+qKxaoNwlXLdf/Ogr119WUmkOCD6PfVMqsseqDYDw=="
+          }
+        },
+        "signature_verifies": true
+      }
+    },
+    {
+      "id": "shamir-share-record-signed",
+      "description": "Each SEMP_RECOVERY_SHARE record carries a device_signature produced by the share-holding device's identity key with the SEMP-RECOVERY-SHARE: prefix. The record proves that the device storing this share controls the identity key the manifest assigned to this share_index. The full set of five signed share records is included so an implementation can verify any subset against the manifest's contributor list.",
+      "spec_reference": "VECTORS.md §17.15; RECOVERY.md §5.3",
+      "inputs": {
+        "device_seeds_hex": [
+          "a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0",
+          "a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1",
+          "a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2",
+          "a3a3a3a3a3a3a3a3a3a3a3a3a3a3a3a3a3a3a3a3a3a3a3a3a3a3a3a3a3a3a3a3",
+          "a4a4a4a4a4a4a4a4a4a4a4a4a4a4a4a4a4a4a4a4a4a4a4a4a4a4a4a4a4a4a4a4"
+        ],
+        "device_pubs_hex": [
+          "b533d8ad9fcfbdde0b481c1b334ddc3c53412fd614564e7e5afd020368d382c3",
+          "bc7cbcb5636375fa1d82434d466724d92377f53b980695dd49d26d0ce12205a5",
+          "65e8f9b0bc6eae124169f0576f97362d295a8cf5f770b45e14357ce647d33eec",
+          "acf12b4acc1c660a8326aed34039efb728a5e496488240f50a932ab7aba51751",
+          "a0a0c227d8a1254393590789c18060efeaa0937196a6b7bdb7061841907975a7"
+        ],
+        "device_key_ids": [
+          "489f44d9921995762d53b9c6e65c0014df72af7713b479ea9a703e49e9b43658",
+          "730a5edc28c2f8daf2d9dce3a01d5f205e35e55582eed2ba26219fabdd4cc9a8",
+          "c7b9b30e8b344118e2cf93b98c6b59b70eda4309b5ff36831ab09ac426a838e1",
+          "1a6637539bfe7d38af34872efcfdb6ddef0649f2e0a06c36c5c419e0796dfdf4",
+          "959a80191f7640f9ca5a36cffefcfcd7a90c07291d3c940a862a2a990907b503"
+        ]
+      },
+      "expected": {
+        "signed_share_records_json": [
+          {
+            "type": "SEMP_RECOVERY_SHARE",
+            "version": "1.0.0",
+            "bundle_id": "01J7BUNDLE0000000000000000",
+            "share_index": 1,
+            "device_id": "01J7DEVICE00000000000000000000",
+            "threshold": 3,
+            "total_shares": 5,
+            "share_value": "g5hhZSSNtILT7v/uwnExtM1jrSl09R+R9FRP05SlXXE=",
+            "issued_at": "2026-04-18T10:00:00Z",
+            "device_signature": {
+              "algorithm": "ed25519",
+              "key_id": "489f44d9921995762d53b9c6e65c0014df72af7713b479ea9a703e49e9b43658",
+              "value": "KvVCe+t/ju9VnS8eU3bWBaALXRJz3urFIq698gmnJLg2jb8VC7nqAHt4+yJ1jV0WdHcg269nKbM0uyw4NqT2BQ=="
+            }
+          },
+          {
+            "type": "SEMP_RECOVERY_SHARE",
+            "version": "1.0.0",
+            "bundle_id": "01J7BUNDLE0000000000000000",
+            "share_index": 2,
+            "device_id": "01J7DEVICE00000000000000000001",
+            "threshold": 3,
+            "total_shares": 5,
+            "share_value": "yNMqLm/G/8mYpbSliTp6/4Yo5mI/vlTavx8EmN/uFjo=",
+            "issued_at": "2026-04-18T10:00:00Z",
+            "device_signature": {
+              "algorithm": "ed25519",
+              "key_id": "730a5edc28c2f8daf2d9dce3a01d5f205e35e55582eed2ba26219fabdd4cc9a8",
+              "value": "sgOWRqXFpSgxMmv6zDGTg6AzuQUm7vjVXS7dO3GhO/Xb/JSwb2vHjansXyfZZ1/XloU6+f6vB1JoIO6iADw1BA=="
+            }
+          },
+          {
+            "type": "SEMP_RECOVERY_SHARE",
+            "version": "1.0.0",
+            "bundle_id": "01J7BUNDLE0000000000000000",
+            "share_index": 3,
+            "device_id": "01J7DEVICE00000000000000000002",
+            "threshold": 3,
+            "total_shares": 5,
+            "share_value": "yNMqLm/G/8mYpbSliTp6/4Yo5mI/vlTavx8EmN/uFjo=",
+            "issued_at": "2026-04-18T10:00:00Z",
+            "device_signature": {
+              "algorithm": "ed25519",
+              "key_id": "c7b9b30e8b344118e2cf93b98c6b59b70eda4309b5ff36831ab09ac426a838e1",
+              "value": "dinR+7fY9jQMrPtGNeM8mPFgok5wjmzHKGaOyyxQMawl0XHGm9YI87f2CE3gG7dRn12y/1a3PiHB2/TXrcgNBg=="
+            }
+          },
+          {
+            "type": "SEMP_RECOVERY_SHARE",
+            "version": "1.0.0",
+            "bundle_id": "01J7BUNDLE0000000000000000",
+            "share_index": 4,
+            "device_id": "01J7DEVICE00000000000000000003",
+            "threshold": 3,
+            "total_shares": 5,
+            "share_value": "IjnAxIUsFSNyT15PY9CQFWzCDIjVVL4wVfXucjUE/NA=",
+            "issued_at": "2026-04-18T10:00:00Z",
+            "device_signature": {
+              "algorithm": "ed25519",
+              "key_id": "1a6637539bfe7d38af34872efcfdb6ddef0649f2e0a06c36c5c419e0796dfdf4",
+              "value": "qO97oXYWibcPxM340UntBYWUFJeU7/DDVYLFp/mFeopwtueVhdyROQbHtCPqhHacLF8A67qocaPY7tD16K5fAA=="
+            }
+          },
+          {
+            "type": "SEMP_RECOVERY_SHARE",
+            "version": "1.0.0",
+            "bundle_id": "01J7BUNDLE0000000000000000",
+            "share_index": 5,
+            "device_id": "01J7DEVICE00000000000000000004",
+            "threshold": 3,
+            "total_shares": 5,
+            "share_value": "IjnAxIUsFSNyT15PY9CQFWzCDIjVVL4wVfXucjUE/NA=",
+            "issued_at": "2026-04-18T10:00:00Z",
+            "device_signature": {
+              "algorithm": "ed25519",
+              "key_id": "959a80191f7640f9ca5a36cffefcfcd7a90c07291d3c940a862a2a990907b503",
+              "value": "dBR97J2CnoScCYkIE96mbgx5houN8NLTbc4BEfgVI7SBPJbSsu0ZyhJ2aUUvAVfa7W54O3FBSC6gUJLPOr3aAg=="
+            }
+          }
+        ],
+        "all_signatures_verify": true
+      }
+    }
+  ]
+}

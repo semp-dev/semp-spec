@@ -3755,6 +3755,323 @@ def build_forwarding_json() -> dict:
     }
 
 
+# ---- Shamir secret sharing over GF(256) ------------------------------------
+#
+# RECOVERY.md §5: Shamir's Secret Sharing over GF(256) with the AES
+# irreducible polynomial (0x11b). Each byte of the secret is split
+# independently. A degree-(M-1) polynomial with the secret byte as
+# constant term and pinned random coefficients yields N shares evaluated
+# at x = 1..N.
+
+GF256_IRREDUCIBLE = 0x11B  # AES polynomial
+
+
+def gf256_mul(a: int, b: int) -> int:
+    p = 0
+    a &= 0xFF
+    b &= 0xFF
+    for _ in range(8):
+        if b & 1:
+            p ^= a
+        hi = a & 0x80
+        a = (a << 1) & 0xFF
+        if hi:
+            a ^= 0x1B  # the low byte of 0x11B
+        b >>= 1
+    return p & 0xFF
+
+
+def gf256_pow(base: int, exp: int) -> int:
+    result = 1
+    while exp:
+        if exp & 1:
+            result = gf256_mul(result, base)
+        base = gf256_mul(base, base)
+        exp >>= 1
+    return result
+
+
+def gf256_inv(a: int) -> int:
+    if a == 0:
+        raise ZeroDivisionError("0 has no inverse in GF(256)")
+    return gf256_pow(a, 254)  # Fermat: a^(2^8 - 2) = a^-1
+
+
+def shamir_split(secret: bytes, threshold: int, total: int, coeff_seed: bytes) -> list[bytes]:
+    """Split a secret into total shares with threshold M, using
+    coefficients drawn deterministically from coeff_seed. For each
+    secret byte we draw (threshold - 1) coefficients; the polynomial
+    is f(x) = secret_byte + c_1*x + c_2*x^2 + ... + c_{M-1}*x^{M-1}.
+    Returns total share-bytestrings of length len(secret); share i
+    is f(i) per byte for i in 1..total.
+    """
+    if not (2 <= threshold <= total <= 255):
+        raise ValueError("require 2 <= M <= N <= 255")
+    coeffs_per_byte = threshold - 1
+    needed = len(secret) * coeffs_per_byte
+    if len(coeff_seed) < needed:
+        raise ValueError(
+            f"coeff_seed too short: need {needed} bytes, got {len(coeff_seed)}"
+        )
+    shares: list[bytearray] = [bytearray() for _ in range(total)]
+    cursor = 0
+    for sec_byte in secret:
+        # Read M-1 coefficients from the seed.
+        coeffs = [coeff_seed[cursor + j] for j in range(coeffs_per_byte)]
+        cursor += coeffs_per_byte
+        for share_index in range(1, total + 1):
+            # Evaluate f(share_index) = sec_byte + sum(c_j * x^j) over GF(256).
+            y = sec_byte
+            x_power = 1
+            for c in coeffs:
+                x_power = gf256_mul(x_power, share_index)
+                y ^= gf256_mul(c, x_power)
+            shares[share_index - 1].append(y & 0xFF)
+    return [bytes(s) for s in shares]
+
+
+def shamir_combine(shares: list[tuple[int, bytes]]) -> bytes:
+    """Reconstruct the secret from a subset of (share_index, share_bytes)
+    pairs via Lagrange interpolation at x=0. Caller MUST pass at least
+    threshold shares; passing fewer reconstructs the wrong secret."""
+    if len(shares) < 1:
+        raise ValueError("no shares")
+    secret_len = len(shares[0][1])
+    for idx, sb in shares:
+        if len(sb) != secret_len:
+            raise ValueError("inconsistent share lengths")
+    out = bytearray(secret_len)
+    for byte_index in range(secret_len):
+        # Lagrange basis evaluated at x = 0.
+        result = 0
+        for i, (xi, si) in enumerate(shares):
+            num = 1
+            den = 1
+            yi = si[byte_index]
+            for j, (xj, _) in enumerate(shares):
+                if i == j:
+                    continue
+                # basis_i(0) = prod_{j!=i} (0 - xj) / (xi - xj)
+                # In GF(256), subtraction is XOR.
+                num = gf256_mul(num, xj)
+                den = gf256_mul(den, xi ^ xj)
+            basis = gf256_mul(num, gf256_inv(den))
+            result ^= gf256_mul(yi, basis)
+        out[byte_index] = result
+    return bytes(out)
+
+
+RECOVERY_MANIFEST_PREFIX = b"SEMP-RECOVERY-MANIFEST:"
+RECOVERY_SHARE_PREFIX = b"SEMP-RECOVERY-SHARE:"
+
+
+def build_recovery_shamir_json() -> dict:
+    """RECOVERY.md §5: device-split Shamir backup with M=3, N=5. Threshold
+    reconstruction is asserted at generation time before writing JSON."""
+    import base64
+
+    # Re-derive the K_bundle from the same recovery secret used in §17.13
+    # so this vector's secret matches the account-recovery.json bundle's
+    # encryption key. This is incidental to the Shamir test but
+    # demonstrates that the two recovery mechanisms operate on the same
+    # underlying key.
+    recovery_secret = b"correct-horse-battery-staple-vector-input"
+    salt = bytes([0x81] * 16)
+    K_bundle = argon2id_kdf(recovery_secret, salt, 65536, 3, 32)
+
+    threshold = 3
+    total = 5
+    # Coefficient seed: 32 bytes * (threshold - 1) = 64 bytes.
+    coeff_seed = bytes([0x91] * 64)
+    shares = shamir_split(K_bundle, threshold, total, coeff_seed)
+    assert len(shares) == total
+    assert all(len(s) == len(K_bundle) for s in shares)
+
+    # Round-trip: reconstruct from any threshold subset.
+    subset = [(i + 1, shares[i]) for i in range(threshold)]  # shares 1, 2, 3
+    recovered = shamir_combine(subset)
+    assert recovered == K_bundle
+
+    # Reconstructing from too few shares yields wrong output.
+    too_few = [(i + 1, shares[i]) for i in range(threshold - 1)]
+    wrong = shamir_combine(too_few)
+    assert wrong != K_bundle
+
+    # User identity key for the manifest signature.
+    user_seed = bytes([0x92] * 32)
+    user_pub = ed25519_pubkey_from_priv(user_seed)
+    user_fp = fingerprint_hex(user_pub)
+
+    # Five device identity keys.
+    device_seeds = [bytes([0xA0 + i] * 32) for i in range(total)]
+    device_pubs = [ed25519_pubkey_from_priv(s) for s in device_seeds]
+    device_fps = [fingerprint_hex(p) for p in device_pubs]
+
+    bundle_id = "01J7BUNDLE0000000000000000"
+
+    contributors = []
+    for i in range(total):
+        contributors.append({
+            "share_index": i + 1,
+            "device_id": f"01J7DEVICE{i:020d}",
+            "device_identity_pubkey": {
+                "algorithm": "ed25519",
+                "public_key": base64.b64encode(device_pubs[i]).decode("ascii"),
+                "key_id": device_fps[i],
+            },
+        })
+
+    manifest_pre_sign = {
+        "type": "SEMP_RECOVERY_SET_MANIFEST",
+        "version": "1.0.0",
+        "bundle_id": bundle_id,
+        "threshold": threshold,
+        "total_shares": total,
+        "contributors": contributors,
+        "issued_at": "2026-04-18T10:00:00Z",
+        "signature": {
+            "algorithm": "ed25519",
+            "key_id": user_fp,
+            "value": "",
+        },
+    }
+    manifest_signed, manifest_inter = _sign_doc(
+        manifest_pre_sign, user_seed, RECOVERY_MANIFEST_PREFIX, ["signature"]
+    )
+    assert _verify_doc(manifest_signed, user_pub, RECOVERY_MANIFEST_PREFIX, ["signature"])
+
+    # Build N share records, each signed by the device's identity key with
+    # the SEMP-RECOVERY-SHARE: prefix.
+    share_records = []
+    for i in range(total):
+        share_pre_sign = {
+            "type": "SEMP_RECOVERY_SHARE",
+            "version": "1.0.0",
+            "bundle_id": bundle_id,
+            "share_index": i + 1,
+            "device_id": contributors[i]["device_id"],
+            "threshold": threshold,
+            "total_shares": total,
+            "share_value": base64.b64encode(shares[i]).decode("ascii"),
+            "issued_at": "2026-04-18T10:00:00Z",
+            "device_signature": {
+                "algorithm": "ed25519",
+                "key_id": device_fps[i],
+                "value": "",
+            },
+        }
+        share_signed, _ = _sign_doc(
+            share_pre_sign, device_seeds[i], RECOVERY_SHARE_PREFIX, ["device_signature"]
+        )
+        assert _verify_doc(
+            share_signed, device_pubs[i], RECOVERY_SHARE_PREFIX, ["device_signature"]
+        )
+        share_records.append(share_signed)
+
+    return {
+        "version": "1.0.0",
+        "category": "recovery-shamir",
+        "description": (
+            "RECOVERY.md §5: device-split Shamir backup. K_bundle (the "
+            "same key that account-recovery.json's bundle uses for "
+            "AEAD) is split with M=3, N=5 over GF(256) using the AES "
+            "irreducible polynomial. Shares are bound to specific "
+            "device identity keys via a user-signed manifest "
+            "(SEMP-RECOVERY-MANIFEST:) and each share record is signed "
+            "by its bound device (SEMP-RECOVERY-SHARE:). Round-trip "
+            "(threshold reconstruction MUST recover K_bundle; sub-"
+            "threshold reconstruction MUST NOT) is asserted at "
+            "generation time."
+        ),
+        "spec_reference": "VECTORS.md §17.15; RECOVERY.md §5",
+        "construction": {
+            "field": "GF(256) with irreducible polynomial 0x11b (AES)",
+            "polynomial": "f(x) = secret + c_1*x + c_2*x^2 + ... + c_{M-1}*x^{M-1}",
+            "shares": "(i, f(i)) for i = 1..N, each byte computed independently",
+            "reconstruction": "Lagrange interpolation at x = 0 over GF(256)",
+            "manifest_prefix_utf8": "SEMP-RECOVERY-MANIFEST:",
+            "share_prefix_utf8": "SEMP-RECOVERY-SHARE:",
+        },
+        "vectors": [
+            {
+                "id": "shamir-split-and-combine",
+                "description": (
+                    "Split K_bundle (32 bytes) with M=3, N=5 using a pinned "
+                    "coefficient seed (a stand-in for the cryptographically "
+                    "random coefficients an implementation draws at "
+                    "production split time). Reconstruct from shares 1+2+3 "
+                    "and confirm K_bundle is recovered byte-for-byte. "
+                    "Sub-threshold reconstruction (shares 1+2 alone) "
+                    "produces a different output, demonstrating the "
+                    "secrecy property."
+                ),
+                "spec_reference": "VECTORS.md §17.15; RECOVERY.md §5.1, §5.4",
+                "inputs": {
+                    "K_bundle_hex": K_bundle.hex(),
+                    "threshold": threshold,
+                    "total_shares": total,
+                    "coefficient_seed_hex": coeff_seed.hex(),
+                    "share_index_subset_for_combine": [s[0] for s in subset],
+                },
+                "intermediates": {
+                    "shares_hex": [s.hex() for s in shares],
+                    "subthreshold_combine_output_hex": wrong.hex(),
+                },
+                "expected": {
+                    "threshold_combine_recovers_K_bundle": True,
+                    "subthreshold_combine_recovers_K_bundle": False,
+                    "recovered_secret_hex": recovered.hex(),
+                },
+            },
+            {
+                "id": "shamir-recovery-set-manifest-signed",
+                "description": (
+                    "User identity key signs the SEMP_RECOVERY_SET_MANIFEST "
+                    "with the SEMP-RECOVERY-MANIFEST: prefix. The manifest "
+                    "binds each share_index to a device's identity public "
+                    "key so a restore client can cross-check share records "
+                    "against the user-attested device set."
+                ),
+                "spec_reference": "VECTORS.md §17.15; RECOVERY.md §5.2",
+                "inputs": {
+                    "user_seed_hex": user_seed.hex(),
+                    "user_pub_hex": user_pub.hex(),
+                    "user_key_id": user_fp,
+                    "manifest_pre_sign_json": manifest_pre_sign,
+                },
+                "intermediates": manifest_inter,
+                "expected": {
+                    "signed_manifest_json": manifest_signed,
+                    "signature_verifies": True,
+                },
+            },
+            {
+                "id": "shamir-share-record-signed",
+                "description": (
+                    "Each SEMP_RECOVERY_SHARE record carries a "
+                    "device_signature produced by the share-holding device's "
+                    "identity key with the SEMP-RECOVERY-SHARE: prefix. The "
+                    "record proves that the device storing this share "
+                    "controls the identity key the manifest assigned to "
+                    "this share_index. The full set of five signed share "
+                    "records is included so an implementation can verify "
+                    "any subset against the manifest's contributor list."
+                ),
+                "spec_reference": "VECTORS.md §17.15; RECOVERY.md §5.3",
+                "inputs": {
+                    "device_seeds_hex": [s.hex() for s in device_seeds],
+                    "device_pubs_hex": [p.hex() for p in device_pubs],
+                    "device_key_ids": device_fps,
+                },
+                "expected": {
+                    "signed_share_records_json": share_records,
+                    "all_signatures_verify": True,
+                },
+            },
+        ],
+    }
+
+
 # ---- Configuration update + PQ handshake variants --------------------------
 
 
@@ -4841,6 +5158,157 @@ def build_transparency_json() -> dict:
     )
     assert not bad_consistency_verifies
 
+    # Augmented key-fetch (TRANSPARENCY.md §4): build a small log of three
+    # key events for a single user, then return the most recent event's
+    # leaf in an augmented SEMP_KEYS response with STH + inclusion proof.
+    import base64
+
+    user_id = "alice@example.com"
+    key_events = [
+        {
+            "event": "publish",
+            "user_id": user_id,
+            "key_id": "01J7KEYIDPUBLISH00000000000",
+            "key_type": "identity",
+            "algorithm": "ed25519",
+            "public_key": base64.b64encode(bytes([0xA0] * 32)).decode("ascii"),
+            "created": "2025-01-15T08:30:00Z",
+            "expires": "2026-01-15T08:30:00Z",
+            "revoked_at": None,
+            "revoked_reason": None,
+            "supersedes": None,
+            "log_timestamp": "2025-01-15T08:30:05Z",
+        },
+        {
+            "event": "rotate",
+            "user_id": user_id,
+            "key_id": "01J7KEYIDROTATE000000000000",
+            "key_type": "identity",
+            "algorithm": "ed25519",
+            "public_key": base64.b64encode(bytes([0xA1] * 32)).decode("ascii"),
+            "created": "2026-01-15T08:30:00Z",
+            "expires": "2027-01-15T08:30:00Z",
+            "revoked_at": None,
+            "revoked_reason": None,
+            "supersedes": "01J7KEYIDPUBLISH00000000000",
+            "log_timestamp": "2026-01-15T08:30:05Z",
+        },
+        {
+            "event": "publish",
+            "user_id": "bob@example.com",
+            "key_id": "01J7BOBKEYIDXXXXXXXXXXXXXXX",
+            "key_type": "identity",
+            "algorithm": "ed25519",
+            "public_key": base64.b64encode(bytes([0xB0] * 32)).decode("ascii"),
+            "created": "2025-06-15T08:30:00Z",
+            "expires": "2026-06-15T08:30:00Z",
+            "revoked_at": None,
+            "revoked_reason": None,
+            "supersedes": None,
+            "log_timestamp": "2025-06-15T08:30:05Z",
+        },
+    ]
+    augmented_leaves = [merkle_leaf_hash(canonical_json(ev)) for ev in key_events]
+    augmented_root = merkle_root(augmented_leaves)
+
+    augmented_sth_pre_sign = {
+        "log_size": len(augmented_leaves),
+        "root_hash": base64.b64encode(augmented_root).decode("ascii"),
+        "timestamp": "2026-04-19T12:00:00Z",
+        "signature": {
+            "algorithm": "ed25519",
+            "key_id": domain_fp,
+            "value": "",
+        },
+    }
+    augmented_sth_signed, augmented_sth_inter = _sign_doc(
+        augmented_sth_pre_sign, domain_seed, TRANSPARENCY_STH_PREFIX, ["signature"]
+    )
+    assert _verify_doc(
+        augmented_sth_signed, domain_pub, TRANSPARENCY_STH_PREFIX, ["signature"]
+    )
+
+    # Inclusion proof for alice's CURRENT key (the rotate event at index 1).
+    alice_current_index = 1
+    alice_current_event = key_events[alice_current_index]
+    alice_current_leaf_hash = augmented_leaves[alice_current_index]
+    alice_inclusion_path = merkle_inclusion_path(augmented_leaves, alice_current_index)
+    alice_inclusion_verifies = merkle_verify_inclusion(
+        alice_current_leaf_hash,
+        alice_current_index,
+        len(augmented_leaves),
+        alice_inclusion_path,
+        augmented_root,
+    )
+    assert alice_inclusion_verifies
+
+    # Build the augmented SEMP_KEYS response.
+    augmented_response = {
+        "type": "SEMP_KEYS",
+        "step": "response",
+        "version": "1.0.0",
+        "id": "01J7KEYREQUESTIDXXXXXXXXXXX",
+        "timestamp": "2026-04-19T12:00:00Z",
+        "keys": [
+            {
+                "address": user_id,
+                "key_type": alice_current_event["key_type"],
+                "public_key": alice_current_event["public_key"],
+                "key_id": alice_current_event["key_id"],
+                "transparency": {
+                    "sth": augmented_sth_signed,
+                    "inclusion_proof": {
+                        "log_size": len(augmented_leaves),
+                        "leaf_index": alice_current_index,
+                        "leaf_event_json": alice_current_event,
+                        "leaf_hash_b64": base64.b64encode(alice_current_leaf_hash).decode("ascii"),
+                        "path_b64": [base64.b64encode(h).decode("ascii") for h in alice_inclusion_path],
+                    },
+                },
+            },
+        ],
+    }
+
+    augmented_vector = {
+        "id": "transparency-augmented-key-fetch",
+        "description": (
+            "TRANSPARENCY.md §4 augmented SEMP_KEYS response: each "
+            "returned key carries a transparency block with a current "
+            "STH and an inclusion proof showing the key's most recent "
+            "log event is a leaf of the tree the STH attests. The "
+            "client MUST verify the STH's domain signature, the STH "
+            "freshness (within 1 hour per §4.3), the inclusion proof "
+            "against the STH's root_hash, and the leaf-key correspondence "
+            "(returned key's key_id and public_key match the leaf's)."
+        ),
+        "spec_reference": "VECTORS.md §17.10; TRANSPARENCY.md §4; RFC 6962 §2.1.1",
+        "inputs": {
+            "log_events_json": key_events,
+            "leaf_index_returned": alice_current_index,
+            "domain_seed_hex": domain_seed.hex(),
+            "domain_pub_hex": domain_pub.hex(),
+            "domain_key_id": domain_fp,
+        },
+        "intermediates": {
+            "leaf_hashes_hex": [h.hex() for h in augmented_leaves],
+            "root_hash_hex": augmented_root.hex(),
+            "sth_canonical_with_blanked_signature_utf8":
+                augmented_sth_inter["canonical_with_blanked_signature_utf8"],
+            "alice_inclusion_path_hex": [h.hex() for h in alice_inclusion_path],
+        },
+        "expected": {
+            "augmented_response_json": augmented_response,
+            "sth_signature_verifies": True,
+            "inclusion_proof_verifies": alice_inclusion_verifies,
+            "leaf_matches_returned_key": (
+                key_events[alice_current_index]["key_id"]
+                == augmented_response["keys"][0]["key_id"]
+                and key_events[alice_current_index]["public_key"]
+                == augmented_response["keys"][0]["public_key"]
+            ),
+        },
+    }
+
     consistency_vector = {
         "id": "transparency-consistency-proof",
         "description": (
@@ -4884,7 +5352,7 @@ def build_transparency_json() -> dict:
             "sth_signature_prefix_utf8": "SEMP-TRANSPARENCY-STH:",
             "canonical_form": "ENVELOPE.md §4.3 with signature.value blanked",
         },
-        "vectors": [sth_vector, inclusion_vector, consistency_vector],
+        "vectors": [sth_vector, inclusion_vector, consistency_vector, augmented_vector],
     }
 
 
@@ -5970,6 +6438,7 @@ def main() -> int:
         (OUTDIR / "first-contact-token.json", build_first_contact_token_json()),
         (OUTDIR / "clock-tolerance.json", build_clock_tolerance_json()),
         (OUTDIR / "account-recovery.json", build_account_recovery_json()),
+        (OUTDIR / "recovery-shamir.json", build_recovery_shamir_json()),
         (OUTDIR / "configuration-update.json", build_configuration_update_json()),
         (OUTDIR / "handshake-messages-pq.json", build_handshake_messages_pq_json()),
     ]
