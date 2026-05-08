@@ -63,6 +63,8 @@
     },
     {
       "id": "sender-signature-tampered-body",
+      "must_reject": true,
+      "rejection_class": "sender.signature-tampered-body",
       "description": "Take the §17.2/sender-signature-valid output and change one byte of the body text/plain. The reconstructed canonical bytes differ from what was signed, so Ed25519 verify MUST reject.",
       "spec_reference": "VECTORS.md §17.2; ENVELOPE.md §6.5.3",
       "inputs": {
@@ -90,6 +92,8 @@
     },
     {
       "id": "sender-signature-wrong-key",
+      "must_reject": true,
+      "rejection_class": "sender.signature-wrong-key",
       "description": "Enclosure has key_id pointing at identity A but was actually signed by identity B's private key. Verification against A's public key MUST fail; sanity-check that the signature DOES verify against B's public key, isolating the failure to the key-mismatch path.",
       "spec_reference": "VECTORS.md §17.2; ENVELOPE.md §6.5.3",
       "inputs": {

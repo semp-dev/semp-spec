@@ -1,0 +1,263 @@
+{
+  "version": "1.0.0",
+  "category": "must-reject-index",
+  "description": "Generated cross-reference of every must-reject vector across all files under v1.0.0/. A 'must-reject' vector pins an input that conformant implementations MUST refuse and asserts the refusal at generation time. Operation-specific tampers live alongside their positive case for locality; this index collects them by rejection_class so a runner or auditor can enumerate must-reject coverage without grepping. Regenerated from must_reject:true flags on the underlying vector entries; do NOT edit by hand.",
+  "spec_reference": "vectors/README.md § Must-reject coverage",
+  "convention": {
+    "flag": "must_reject: true on the vector entry",
+    "class_field": "rejection_class (dotted lowercase identifier)",
+    "pointer_format": "<filename>#<vector_id>",
+    "regeneration": "generators/generate.py builds this file last so it sees every other file's must_reject flags."
+  },
+  "summary": {
+    "total_must_reject_vectors": 11,
+    "rejection_classes": [
+      "delivery-receipt.body-tampered",
+      "delivery-receipt.envelope-tampered",
+      "envelope.postmark-expired",
+      "envelope.seal-signature-invalid",
+      "envelope.session-mac-invalid",
+      "first-contact-token.replay-rejected",
+      "forwarding.original-content-tampered",
+      "large-attachment.ciphertext-tampered",
+      "large-attachment.metadata-tampered",
+      "sender.signature-tampered-body",
+      "sender.signature-wrong-key"
+    ]
+  },
+  "by_class": [
+    {
+      "rejection_class": "delivery-receipt.body-tampered",
+      "entries": [
+        {
+          "rejection_class": "delivery-receipt.body-tampered",
+          "file": "delivery-receipt.json",
+          "id": "delivery-receipt-tampered-body",
+          "pointer": "delivery-receipt.json#delivery-receipt-tampered-body",
+          "spec_reference": "VECTORS.md §17.5; DELIVERY.md §1.1.1.4",
+          "description": "Take the valid signed receipt and change accepted_at by one second. The reconstructed canonical bytes differ from what was signed, so Ed25519 verify rejects. Demonstrates that every receipt field other than signature.value is bound by the signature."
+        }
+      ]
+    },
+    {
+      "rejection_class": "delivery-receipt.envelope-tampered",
+      "entries": [
+        {
+          "rejection_class": "delivery-receipt.envelope-tampered",
+          "file": "delivery-receipt.json",
+          "id": "delivery-receipt-tampered-envelope",
+          "pointer": "delivery-receipt.json#delivery-receipt-tampered-envelope",
+          "spec_reference": "VECTORS.md §17.5; DELIVERY.md §1.1.1.7",
+          "description": "The receipt is genuine (signature still verifies) but the envelope has been altered. A verifier holding both the receipt and the tampered envelope recomputes a SHA-256 that differs from receipt.envelope_hash.value, so the §1.1.1.7 step 4 comparison fails. The receipt MUST NOT be treated as proof for this envelope."
+        }
+      ]
+    },
+    {
+      "rejection_class": "envelope.postmark-expired",
+      "entries": [
+        {
+          "rejection_class": "envelope.postmark-expired",
+          "file": "negative-envelope-rejection.json",
+          "id": "envelope-expired",
+          "pointer": "negative-envelope-rejection.json#envelope-expired",
+          "spec_reference": "VECTORS.md §17.7; ENVELOPE.md §7.2 step 2; ERRORS.md envelope_expired",
+          "description": "A well-formed envelope whose postmark.expires is in the past. §7.2 step 1 (seal.signature verification) still passes — the envelope was correctly signed over its own canonical bytes — but step 2 MUST reject with reason_code envelope_expired before any further processing."
+        }
+      ]
+    },
+    {
+      "rejection_class": "envelope.seal-signature-invalid",
+      "entries": [
+        {
+          "rejection_class": "envelope.seal-signature-invalid",
+          "file": "negative-envelope-rejection.json",
+          "id": "seal-signature-invalid",
+          "pointer": "negative-envelope-rejection.json#seal-signature-invalid",
+          "spec_reference": "VECTORS.md §17.7; ENVELOPE.md §7.2 step 1; ERRORS.md seal_invalid",
+          "description": "Take the valid envelope and replace seal.signature with a well-formed but unrelated Ed25519 signature (signed over different bytes). §7.2 step 1 MUST reject with reason_code seal_invalid before any further processing. Routing servers perform this verification per §4.3 'Two-Layer Verification'."
+        }
+      ]
+    },
+    {
+      "rejection_class": "envelope.session-mac-invalid",
+      "entries": [
+        {
+          "rejection_class": "envelope.session-mac-invalid",
+          "file": "negative-envelope-rejection.json",
+          "id": "session-mac-invalid",
+          "pointer": "negative-envelope-rejection.json#session-mac-invalid",
+          "spec_reference": "VECTORS.md §17.7; ENVELOPE.md §7.2 step 4; ERRORS.md session_mac_invalid",
+          "description": "Take the valid envelope and replace seal.session_mac with an HMAC computed under a different key. §4.3 canonicalization blanks both seal.signature and seal.session_mac before either is computed, so seal.signature still verifies (step 1 passes) — this is the receiving-server-only check at step 4. The recipient server MUST reject with reason_code session_mac_invalid; the rejection is distinct from seal_invalid because routing servers cannot perform this check (they do not hold K_env_mac)."
+        }
+      ]
+    },
+    {
+      "rejection_class": "first-contact-token.replay-rejected",
+      "entries": [
+        {
+          "rejection_class": "first-contact-token.replay-rejected",
+          "file": "first-contact-token.json",
+          "id": "first-contact-token-replay-rejected",
+          "pointer": "first-contact-token.json#first-contact-token-replay-rejected",
+          "spec_reference": "VECTORS.md §17.12; HANDSHAKE.md §2.2a.4",
+          "description": "Same valid token presented inside a DIFFERENT envelope (different postmark.id). The PoW difficulty check still passes, but the postmark binding check fails, so the recipient server MUST reject with reason_code policy_forbidden per §2.2a.4. This demonstrates §2.2a.4's per-envelope single-use enforcement."
+        }
+      ]
+    },
+    {
+      "rejection_class": "forwarding.original-content-tampered",
+      "entries": [
+        {
+          "rejection_class": "forwarding.original-content-tampered",
+          "file": "forwarding.json",
+          "id": "forward-tampered-original-content",
+          "pointer": "forwarding.json#forward-tampered-original-content",
+          "spec_reference": "VECTORS.md §17.3; ENVELOPE.md §6.6.4",
+          "description": "Take the §17.3/forward-valid-three-step-chain output and alter one byte of forwarded_from.original_enclosure_plaintext.body. Multiple checks MUST reject because the outer canonical bytes and the forwarded_from canonical bytes both cover this region. The recorded results below show which steps in the §6.6.4 verification chain fail."
+        }
+      ]
+    },
+    {
+      "rejection_class": "large-attachment.ciphertext-tampered",
+      "entries": [
+        {
+          "rejection_class": "large-attachment.ciphertext-tampered",
+          "file": "large-attachment.json",
+          "id": "large-attachment-tampered-ciphertext",
+          "pointer": "large-attachment.json#large-attachment-tampered-ciphertext",
+          "spec_reference": "VECTORS.md §17.6; ATTACHMENTS.md §3, §6",
+          "description": "Flip one bit of the ciphertext stored at item.url. Two independent integrity layers reject: (a) SHA-256(ciphertext) no longer equals item.ciphertext_hash, surfaced before decryption attempts; (b) the Poly1305 tag fails to verify on AEAD.Open. A receiver SHOULD short-circuit on (a) to avoid feeding adversarial input to the AEAD."
+        }
+      ]
+    },
+    {
+      "rejection_class": "large-attachment.metadata-tampered",
+      "entries": [
+        {
+          "rejection_class": "large-attachment.metadata-tampered",
+          "file": "large-attachment.json",
+          "id": "large-attachment-tampered-metadata",
+          "pointer": "large-attachment.json#large-attachment-tampered-metadata",
+          "spec_reference": "VECTORS.md §17.6; ATTACHMENTS.md §3.2",
+          "description": "Take the valid output and change item.filename. The recomputed AEAD AAD differs from the AAD used at encryption time, so the Poly1305 tag fails to verify and decryption rejects. Demonstrates the §3.2 metadata binding."
+        }
+      ]
+    },
+    {
+      "rejection_class": "sender.signature-tampered-body",
+      "entries": [
+        {
+          "rejection_class": "sender.signature-tampered-body",
+          "file": "sender-signature.json",
+          "id": "sender-signature-tampered-body",
+          "pointer": "sender-signature.json#sender-signature-tampered-body",
+          "spec_reference": "VECTORS.md §17.2; ENVELOPE.md §6.5.3",
+          "description": "Take the §17.2/sender-signature-valid output and change one byte of the body text/plain. The reconstructed canonical bytes differ from what was signed, so Ed25519 verify MUST reject."
+        }
+      ]
+    },
+    {
+      "rejection_class": "sender.signature-wrong-key",
+      "entries": [
+        {
+          "rejection_class": "sender.signature-wrong-key",
+          "file": "sender-signature.json",
+          "id": "sender-signature-wrong-key",
+          "pointer": "sender-signature.json#sender-signature-wrong-key",
+          "spec_reference": "VECTORS.md §17.2; ENVELOPE.md §6.5.3",
+          "description": "Enclosure has key_id pointing at identity A but was actually signed by identity B's private key. Verification against A's public key MUST fail; sanity-check that the signature DOES verify against B's public key, isolating the failure to the key-mismatch path."
+        }
+      ]
+    }
+  ],
+  "flat": [
+    {
+      "rejection_class": "delivery-receipt.body-tampered",
+      "file": "delivery-receipt.json",
+      "id": "delivery-receipt-tampered-body",
+      "pointer": "delivery-receipt.json#delivery-receipt-tampered-body",
+      "spec_reference": "VECTORS.md §17.5; DELIVERY.md §1.1.1.4",
+      "description": "Take the valid signed receipt and change accepted_at by one second. The reconstructed canonical bytes differ from what was signed, so Ed25519 verify rejects. Demonstrates that every receipt field other than signature.value is bound by the signature."
+    },
+    {
+      "rejection_class": "delivery-receipt.envelope-tampered",
+      "file": "delivery-receipt.json",
+      "id": "delivery-receipt-tampered-envelope",
+      "pointer": "delivery-receipt.json#delivery-receipt-tampered-envelope",
+      "spec_reference": "VECTORS.md §17.5; DELIVERY.md §1.1.1.7",
+      "description": "The receipt is genuine (signature still verifies) but the envelope has been altered. A verifier holding both the receipt and the tampered envelope recomputes a SHA-256 that differs from receipt.envelope_hash.value, so the §1.1.1.7 step 4 comparison fails. The receipt MUST NOT be treated as proof for this envelope."
+    },
+    {
+      "rejection_class": "envelope.postmark-expired",
+      "file": "negative-envelope-rejection.json",
+      "id": "envelope-expired",
+      "pointer": "negative-envelope-rejection.json#envelope-expired",
+      "spec_reference": "VECTORS.md §17.7; ENVELOPE.md §7.2 step 2; ERRORS.md envelope_expired",
+      "description": "A well-formed envelope whose postmark.expires is in the past. §7.2 step 1 (seal.signature verification) still passes — the envelope was correctly signed over its own canonical bytes — but step 2 MUST reject with reason_code envelope_expired before any further processing."
+    },
+    {
+      "rejection_class": "envelope.seal-signature-invalid",
+      "file": "negative-envelope-rejection.json",
+      "id": "seal-signature-invalid",
+      "pointer": "negative-envelope-rejection.json#seal-signature-invalid",
+      "spec_reference": "VECTORS.md §17.7; ENVELOPE.md §7.2 step 1; ERRORS.md seal_invalid",
+      "description": "Take the valid envelope and replace seal.signature with a well-formed but unrelated Ed25519 signature (signed over different bytes). §7.2 step 1 MUST reject with reason_code seal_invalid before any further processing. Routing servers perform this verification per §4.3 'Two-Layer Verification'."
+    },
+    {
+      "rejection_class": "envelope.session-mac-invalid",
+      "file": "negative-envelope-rejection.json",
+      "id": "session-mac-invalid",
+      "pointer": "negative-envelope-rejection.json#session-mac-invalid",
+      "spec_reference": "VECTORS.md §17.7; ENVELOPE.md §7.2 step 4; ERRORS.md session_mac_invalid",
+      "description": "Take the valid envelope and replace seal.session_mac with an HMAC computed under a different key. §4.3 canonicalization blanks both seal.signature and seal.session_mac before either is computed, so seal.signature still verifies (step 1 passes) — this is the receiving-server-only check at step 4. The recipient server MUST reject with reason_code session_mac_invalid; the rejection is distinct from seal_invalid because routing servers cannot perform this check (they do not hold K_env_mac)."
+    },
+    {
+      "rejection_class": "first-contact-token.replay-rejected",
+      "file": "first-contact-token.json",
+      "id": "first-contact-token-replay-rejected",
+      "pointer": "first-contact-token.json#first-contact-token-replay-rejected",
+      "spec_reference": "VECTORS.md §17.12; HANDSHAKE.md §2.2a.4",
+      "description": "Same valid token presented inside a DIFFERENT envelope (different postmark.id). The PoW difficulty check still passes, but the postmark binding check fails, so the recipient server MUST reject with reason_code policy_forbidden per §2.2a.4. This demonstrates §2.2a.4's per-envelope single-use enforcement."
+    },
+    {
+      "rejection_class": "forwarding.original-content-tampered",
+      "file": "forwarding.json",
+      "id": "forward-tampered-original-content",
+      "pointer": "forwarding.json#forward-tampered-original-content",
+      "spec_reference": "VECTORS.md §17.3; ENVELOPE.md §6.6.4",
+      "description": "Take the §17.3/forward-valid-three-step-chain output and alter one byte of forwarded_from.original_enclosure_plaintext.body. Multiple checks MUST reject because the outer canonical bytes and the forwarded_from canonical bytes both cover this region. The recorded results below show which steps in the §6.6.4 verification chain fail."
+    },
+    {
+      "rejection_class": "large-attachment.ciphertext-tampered",
+      "file": "large-attachment.json",
+      "id": "large-attachment-tampered-ciphertext",
+      "pointer": "large-attachment.json#large-attachment-tampered-ciphertext",
+      "spec_reference": "VECTORS.md §17.6; ATTACHMENTS.md §3, §6",
+      "description": "Flip one bit of the ciphertext stored at item.url. Two independent integrity layers reject: (a) SHA-256(ciphertext) no longer equals item.ciphertext_hash, surfaced before decryption attempts; (b) the Poly1305 tag fails to verify on AEAD.Open. A receiver SHOULD short-circuit on (a) to avoid feeding adversarial input to the AEAD."
+    },
+    {
+      "rejection_class": "large-attachment.metadata-tampered",
+      "file": "large-attachment.json",
+      "id": "large-attachment-tampered-metadata",
+      "pointer": "large-attachment.json#large-attachment-tampered-metadata",
+      "spec_reference": "VECTORS.md §17.6; ATTACHMENTS.md §3.2",
+      "description": "Take the valid output and change item.filename. The recomputed AEAD AAD differs from the AAD used at encryption time, so the Poly1305 tag fails to verify and decryption rejects. Demonstrates the §3.2 metadata binding."
+    },
+    {
+      "rejection_class": "sender.signature-tampered-body",
+      "file": "sender-signature.json",
+      "id": "sender-signature-tampered-body",
+      "pointer": "sender-signature.json#sender-signature-tampered-body",
+      "spec_reference": "VECTORS.md §17.2; ENVELOPE.md §6.5.3",
+      "description": "Take the §17.2/sender-signature-valid output and change one byte of the body text/plain. The reconstructed canonical bytes differ from what was signed, so Ed25519 verify MUST reject."
+    },
+    {
+      "rejection_class": "sender.signature-wrong-key",
+      "file": "sender-signature.json",
+      "id": "sender-signature-wrong-key",
+      "pointer": "sender-signature.json#sender-signature-wrong-key",
+      "spec_reference": "VECTORS.md §17.2; ENVELOPE.md §6.5.3",
+      "description": "Enclosure has key_id pointing at identity A but was actually signed by identity B's private key. Verification against A's public key MUST fail; sanity-check that the signature DOES verify against B's public key, isolating the failure to the key-mismatch path."
+    }
+  ]
+}

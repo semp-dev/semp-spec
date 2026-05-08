@@ -98,47 +98,81 @@ A runner is a small, language-idiomatic test harness — typically a few hundred
 
 ## Coverage
 
-| Layer | Category                        | File                       | Status        |
-|-------|---------------------------------|----------------------------|---------------|
-| 1     | HKDF-SHA-512 key derivation     | `hkdf.json`                | seeded        |
-| 1     | HMAC-SHA-256 envelope MAC       | `session-mac.json`         | seeded        |
-| 1     | Confirmation hash               | `confirmation-hash.json`   | seeded        |
-| 1     | Proof of work                   | `pow.json`                 | seeded        |
-| 2     | Canonical JSON serialization    | `envelope-canonical.json`  | seeded        |
-| 2     | Envelope size + recipient buckets | `envelope-buckets.json`  | seeded        |
-| 2     | Discovery response + TXT parsing | `discovery.json`          | seeded        |
-| 2     | Rejection-code recoverability   | `rejection-codes.json`     | seeded        |
-| 2     | Extension entry validation      | `extension-entries.json`   | seeded        |
-| 2     | Session lifecycle               | `session-lifecycle.json`   | seeded        |
-| 2     | Delivery + submission status    | `delivery-status.json`     | seeded        |
-| 2     | Key revocation handling         | `key-revocation.json`      | seeded        |
-| 2     | Scoped device certificates      | `device-certificates.json` | seeded        |
-| 2     | Recipient status visibility     | `recipient-status.json`    | seeded        |
-| 3     | Seal wrap / unwrap (round-trip) | `seal-roundtrip.json`      | seeded (baseline + PQ) |
-| 3     | Envelope compose / open         | `envelope-roundtrip.json`  | seeded (baseline + PQ) |
-| 3     | Sender identity signature       | `sender-signature.json`    | seeded        |
-| 3     | Forwarding primitive (3-step)   | `forwarding.json`          | seeded        |
-| 3     | Signed delivery receipt         | `delivery-receipt.json`    | seeded        |
-| 3     | Large-attachment AEAD           | `large-attachment.json`    | seeded (baseline + PQ) |
-| 4     | Handshake message bytes (baseline) | `handshake-messages.json` | seeded     |
-| 4     | Handshake message bytes (PQ)      | `handshake-messages-pq.json` | seeded   |
-| 4     | Session resumption ticket       | `session-resumption.json`  | seeded        |
-| 4     | First-contact token              | `first-contact-token.json`| seeded        |
-| 9     | Clock tolerance boundaries      | `clock-tolerance.json`     | seeded        |
-| 5     | Discovery signature verification | `discovery-signed.json`   | seeded        |
-| 5     | Configuration versioning        | `configuration-update.json`| seeded        |
-| 5     | Key transparency proofs         | `transparency.json`        | seeded (STH + inclusion + consistency + §4 augmented fetch) |
-| 5     | Account recovery bundle         | `account-recovery.json`    | seeded        |
-| 5     | Shamir device-split recovery    | `recovery-shamir.json`     | seeded        |
-| 5     | Provider migration              | `migration.json`           | seeded        |
-| 5     | Account closure                 | `account-closure.json`     | seeded        |
-| 5     | User policy update              | `user-policy.json`         | seeded        |
-| 6     | Envelope rejection (must-reject) | `negative-envelope-rejection.json` | seeded |
-| 6     | Other must-reject cases          | `negative-*.json`          | partial (tampered cases live in their own categories) |
+| Category                            | File                              | Status        |
+|-------------------------------------|-----------------------------------|---------------|
+| HKDF-SHA-512 key derivation         | `hkdf.json`                       | seeded        |
+| HMAC-SHA-256 envelope MAC           | `session-mac.json`                | seeded        |
+| Confirmation hash                   | `confirmation-hash.json`          | seeded        |
+| Proof of work                       | `pow.json`                        | seeded        |
+| Canonical JSON serialization        | `envelope-canonical.json`         | seeded        |
+| Envelope size + recipient buckets   | `envelope-buckets.json`           | seeded        |
+| Discovery response + TXT parsing    | `discovery.json`                  | seeded        |
+| Rejection-code recoverability       | `rejection-codes.json`            | seeded        |
+| Extension entry validation          | `extension-entries.json`          | seeded        |
+| Session lifecycle                   | `session-lifecycle.json`          | seeded        |
+| Delivery + submission status        | `delivery-status.json`            | seeded        |
+| Key revocation handling             | `key-revocation.json`             | seeded        |
+| Scoped device certificates          | `device-certificates.json`        | seeded        |
+| Recipient status visibility         | `recipient-status.json`           | seeded        |
+| Seal wrap / unwrap (round-trip)     | `seal-roundtrip.json`             | seeded (baseline + PQ) |
+| Envelope compose / open             | `envelope-roundtrip.json`         | seeded (baseline + PQ) |
+| Sender identity signature           | `sender-signature.json`           | seeded        |
+| Forwarding primitive (3-step)       | `forwarding.json`                 | seeded        |
+| Signed delivery receipt             | `delivery-receipt.json`           | seeded        |
+| Large-attachment AEAD               | `large-attachment.json`           | seeded (baseline + PQ) |
+| Handshake message bytes (baseline)  | `handshake-messages.json`         | seeded        |
+| Handshake message bytes (PQ)        | `handshake-messages-pq.json`      | seeded        |
+| Session resumption ticket           | `session-resumption.json`         | seeded        |
+| First-contact token                 | `first-contact-token.json`        | seeded        |
+| Clock tolerance boundaries          | `clock-tolerance.json`            | seeded        |
+| Discovery signature verification    | `discovery-signed.json`           | seeded        |
+| Configuration versioning            | `configuration-update.json`       | seeded        |
+| Key transparency proofs             | `transparency.json`               | seeded (STH + inclusion + consistency + §4 augmented fetch) |
+| Account recovery bundle             | `account-recovery.json`           | seeded        |
+| Shamir device-split recovery        | `recovery-shamir.json`            | seeded        |
+| Provider migration                  | `migration.json`                  | seeded        |
+| Account closure                     | `account-closure.json`            | seeded        |
+| User policy update                  | `user-policy.json`                | seeded        |
+| Envelope-level rejection            | `negative-envelope-rejection.json`| seeded        |
+| Must-reject coverage index          | `must-reject-index.json`          | seeded        |
 
-`seeded` means the file exists with a starter set of vectors. `TODO` means the layer is acknowledged but not yet machine-readable.
+`seeded` means the file exists with a starter set of vectors. The rich
+human-readable vectors in `VECTORS.md` (PoW solutions, extension entries,
+scoped device certificates, session lifecycle, recipient status, etc.)
+are next on the porting list.
 
-The rich human-readable vectors in `VECTORS.md` (PoW solutions, extension entries, scoped device certificates, session lifecycle, recipient status, etc.) are next on the porting list.
+## Must-reject coverage
+
+A "must-reject" vector pins an input that conformant implementations
+MUST refuse and asserts the refusal at generation time. They split into
+three buckets by where they live:
+
+1. **Operation-specific tampers** (e.g. a flipped bit in a forwarded
+   envelope, a sender_signature signed by the wrong key, a tampered
+   large-attachment ciphertext) live alongside the positive case for
+   the same operation. They share pinned inputs with the positive
+   case so a single regeneration keeps the two in lock-step. Examples:
+   `sender-signature-tampered-body`, `forward-tampered-original-content`,
+   `delivery-receipt-tampered-envelope`, `large-attachment-tampered-ciphertext`.
+2. **Envelope-level rejection** (expired postmark, invalid seal, invalid
+   session MAC) lives in `negative-envelope-rejection.json`. These reject
+   reasons are not tied to any single operation, so a dedicated file is
+   the right home.
+3. **Reject-code decision tables** (which numeric code, which is
+   recoverable, what the client/server next-step is) live in
+   `rejection-codes.json`.
+
+Every must-reject vector entry carries a `must_reject: true` flag and a
+`rejection_class` identifier (e.g. `envelope.seal-invalid`,
+`sender.signature-tampered`, `forwarding.original-content-tampered`).
+A runner can enumerate the must-reject coverage by walking all `*.json`
+files under `vN.M.P/` and collecting entries with the flag.
+
+`must-reject-index.json` is a generated cross-reference that lists every
+must-reject vector across all files, grouped by `rejection_class`, with
+a pointer of the form `<file>#<vector_id>` and the spec section it
+exercises. The index is regenerated by `generators/generate.py` whenever
+the underlying flags change; do not edit it by hand.
 
 ## Round-trip layers
 

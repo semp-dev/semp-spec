@@ -95,6 +95,8 @@
     },
     {
       "id": "delivery-receipt-tampered-envelope",
+      "must_reject": true,
+      "rejection_class": "delivery-receipt.envelope-tampered",
       "description": "The receipt is genuine (signature still verifies) but the envelope has been altered. A verifier holding both the receipt and the tampered envelope recomputes a SHA-256 that differs from receipt.envelope_hash.value, so the §1.1.1.7 step 4 comparison fails. The receipt MUST NOT be treated as proof for this envelope.",
       "spec_reference": "VECTORS.md §17.5; DELIVERY.md §1.1.1.7",
       "inputs": {
@@ -155,6 +157,8 @@
     },
     {
       "id": "delivery-receipt-tampered-body",
+      "must_reject": true,
+      "rejection_class": "delivery-receipt.body-tampered",
       "description": "Take the valid signed receipt and change accepted_at by one second. The reconstructed canonical bytes differ from what was signed, so Ed25519 verify rejects. Demonstrates that every receipt field other than signature.value is bound by the signature.",
       "spec_reference": "VECTORS.md §17.5; DELIVERY.md §1.1.1.4",
       "inputs": {

@@ -33,6 +33,8 @@
     },
     {
       "id": "first-contact-token-replay-rejected",
+      "must_reject": true,
+      "rejection_class": "first-contact-token.replay-rejected",
       "description": "Same valid token presented inside a DIFFERENT envelope (different postmark.id). The PoW difficulty check still passes, but the postmark binding check fails, so the recipient server MUST reject with reason_code policy_forbidden per §2.2a.4. This demonstrates §2.2a.4's per-envelope single-use enforcement.",
       "spec_reference": "VECTORS.md §17.12; HANDSHAKE.md §2.2a.4",
       "inputs": {

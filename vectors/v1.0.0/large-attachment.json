@@ -62,6 +62,8 @@
     },
     {
       "id": "large-attachment-tampered-metadata",
+      "must_reject": true,
+      "rejection_class": "large-attachment.metadata-tampered",
       "description": "Take the valid output and change item.filename. The recomputed AEAD AAD differs from the AAD used at encryption time, so the Poly1305 tag fails to verify and decryption rejects. Demonstrates the §3.2 metadata binding.",
       "spec_reference": "VECTORS.md §17.6; ATTACHMENTS.md §3.2",
       "inputs": {
@@ -91,6 +93,8 @@
     },
     {
       "id": "large-attachment-tampered-ciphertext",
+      "must_reject": true,
+      "rejection_class": "large-attachment.ciphertext-tampered",
       "description": "Flip one bit of the ciphertext stored at item.url. Two independent integrity layers reject: (a) SHA-256(ciphertext) no longer equals item.ciphertext_hash, surfaced before decryption attempts; (b) the Poly1305 tag fails to verify on AEAD.Open. A receiver SHOULD short-circuit on (a) to avoid feeding adversarial input to the AEAD.",
       "spec_reference": "VECTORS.md §17.6; ATTACHMENTS.md §3, §6",
       "inputs": {

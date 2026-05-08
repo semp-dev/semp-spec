@@ -102,6 +102,8 @@
     },
     {
       "id": "forward-tampered-original-content",
+      "must_reject": true,
+      "rejection_class": "forwarding.original-content-tampered",
       "description": "Take the §17.3/forward-valid-three-step-chain output and alter one byte of forwarded_from.original_enclosure_plaintext.body. Multiple checks MUST reject because the outer canonical bytes and the forwarded_from canonical bytes both cover this region. The recorded results below show which steps in the §6.6.4 verification chain fail.",
       "spec_reference": "VECTORS.md §17.3; ENVELOPE.md §6.6.4",
       "inputs": {

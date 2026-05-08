@@ -2429,6 +2429,8 @@ def build_sender_signature_json() -> dict:
             },
             {
                 "id": "sender-signature-tampered-body",
+                "must_reject": True,
+                "rejection_class": "sender.signature-tampered-body",
                 "description": (
                     "Take the §17.2/sender-signature-valid output and change "
                     "one byte of the body text/plain. The reconstructed "
@@ -2447,6 +2449,8 @@ def build_sender_signature_json() -> dict:
             },
             {
                 "id": "sender-signature-wrong-key",
+                "must_reject": True,
+                "rejection_class": "sender.signature-wrong-key",
                 "description": (
                     "Enclosure has key_id pointing at identity A but was "
                     "actually signed by identity B's private key. Verification "
@@ -3030,6 +3034,8 @@ def build_large_attachment_json() -> dict:
 
     tampered_meta_vector = {
         "id": "large-attachment-tampered-metadata",
+        "must_reject": True,
+        "rejection_class": "large-attachment.metadata-tampered",
         "description": (
             "Take the valid output and change item.filename. The recomputed "
             "AEAD AAD differs from the AAD used at encryption time, so the "
@@ -3074,6 +3080,8 @@ def build_large_attachment_json() -> dict:
 
     tampered_ct_vector = {
         "id": "large-attachment-tampered-ciphertext",
+        "must_reject": True,
+        "rejection_class": "large-attachment.ciphertext-tampered",
         "description": (
             "Flip one bit of the ciphertext stored at item.url. Two "
             "independent integrity layers reject: (a) SHA-256(ciphertext) "
@@ -3383,6 +3391,8 @@ def build_delivery_receipt_json() -> dict:
             },
             {
                 "id": "delivery-receipt-tampered-envelope",
+                "must_reject": True,
+                "rejection_class": "delivery-receipt.envelope-tampered",
                 "description": (
                     "The receipt is genuine (signature still verifies) but "
                     "the envelope has been altered. A verifier holding both "
@@ -3413,6 +3423,8 @@ def build_delivery_receipt_json() -> dict:
             },
             {
                 "id": "delivery-receipt-tampered-body",
+                "must_reject": True,
+                "rejection_class": "delivery-receipt.body-tampered",
                 "description": (
                     "Take the valid signed receipt and change accepted_at "
                     "by one second. The reconstructed canonical bytes differ "
@@ -3653,6 +3665,8 @@ def build_forwarding_json() -> dict:
     # cover the inner block too.
     tampered_vector = {
         "id": "forward-tampered-original-content",
+        "must_reject": True,
+        "rejection_class": "forwarding.original-content-tampered",
         "description": (
             "Take the §17.3/forward-valid-three-step-chain output and alter "
             "one byte of forwarded_from.original_enclosure_plaintext.body. "
@@ -4539,6 +4553,8 @@ def build_first_contact_token_json() -> dict:
             },
             {
                 "id": "first-contact-token-replay-rejected",
+                "must_reject": True,
+                "rejection_class": "first-contact-token.replay-rejected",
                 "description": (
                     "Same valid token presented inside a DIFFERENT envelope "
                     "(different postmark.id). The PoW difficulty check "
@@ -6150,6 +6166,8 @@ def build_negative_envelope_rejection_json() -> dict:
 
     expired_vector = {
         "id": "envelope-expired",
+        "must_reject": True,
+        "rejection_class": "envelope.postmark-expired",
         "description": (
             "A well-formed envelope whose postmark.expires is in the past. "
             "§7.2 step 1 (seal.signature verification) still passes — the "
@@ -6187,6 +6205,8 @@ def build_negative_envelope_rejection_json() -> dict:
 
     bad_sig_vector = {
         "id": "seal-signature-invalid",
+        "must_reject": True,
+        "rejection_class": "envelope.seal-signature-invalid",
         "description": (
             "Take the valid envelope and replace seal.signature with a "
             "well-formed but unrelated Ed25519 signature (signed over "
@@ -6230,6 +6250,8 @@ def build_negative_envelope_rejection_json() -> dict:
 
     bad_mac_vector = {
         "id": "session-mac-invalid",
+        "must_reject": True,
+        "rejection_class": "envelope.session-mac-invalid",
         "description": (
             "Take the valid envelope and replace seal.session_mac with an "
             "HMAC computed under a different key. §4.3 canonicalization "
@@ -6346,6 +6368,77 @@ def build_recipient_status_json() -> dict:
 
 
 # ---------------------------------------------------------------------------
+# Must-reject index (cross-cutting; built from already-built file objects)
+
+
+def build_must_reject_index_json(files: list[tuple]) -> dict:
+    """Walk every (path, file_obj) pair in `files` and collect every vector
+    entry carrying `must_reject: true`. Group by `rejection_class`, with a
+    pointer of the form `<filename>#<vector_id>` and the spec section the
+    entry exercises. The result is a generated cross-reference; consumers
+    SHOULD treat it as derived data and regenerate it whenever the
+    underlying vector files change."""
+    by_class: dict[str, list[dict]] = {}
+    flat: list[dict] = []
+    for path, obj in files:
+        filename = path.name
+        for entry in obj.get("vectors", []):
+            if not entry.get("must_reject"):
+                continue
+            rclass = entry.get("rejection_class") or "uncategorized"
+            ref = {
+                "rejection_class": rclass,
+                "file": filename,
+                "id": entry["id"],
+                "pointer": f"{filename}#{entry['id']}",
+                "spec_reference": entry.get("spec_reference", ""),
+                "description": entry.get("description", ""),
+            }
+            by_class.setdefault(rclass, []).append(ref)
+            flat.append(ref)
+
+    # Stable ordering: sort classes alphabetically; sort entries within a
+    # class by file then id, so the index is reproducible across runs.
+    grouped = []
+    for rclass in sorted(by_class):
+        entries = sorted(by_class[rclass], key=lambda e: (e["file"], e["id"]))
+        grouped.append({"rejection_class": rclass, "entries": entries})
+    flat_sorted = sorted(flat, key=lambda e: (e["rejection_class"], e["file"], e["id"]))
+
+    return {
+        "version": "1.0.0",
+        "category": "must-reject-index",
+        "description": (
+            "Generated cross-reference of every must-reject vector across "
+            "all files under v1.0.0/. A 'must-reject' vector pins an input "
+            "that conformant implementations MUST refuse and asserts the "
+            "refusal at generation time. Operation-specific tampers live "
+            "alongside their positive case for locality; this index "
+            "collects them by rejection_class so a runner or auditor can "
+            "enumerate must-reject coverage without grepping. Regenerated "
+            "from must_reject:true flags on the underlying vector entries; "
+            "do NOT edit by hand."
+        ),
+        "spec_reference": "vectors/README.md § Must-reject coverage",
+        "convention": {
+            "flag": "must_reject: true on the vector entry",
+            "class_field": "rejection_class (dotted lowercase identifier)",
+            "pointer_format": "<filename>#<vector_id>",
+            "regeneration": (
+                "generators/generate.py builds this file last so it sees "
+                "every other file's must_reject flags."
+            ),
+        },
+        "summary": {
+            "total_must_reject_vectors": len(flat_sorted),
+            "rejection_classes": [g["rejection_class"] for g in grouped],
+        },
+        "by_class": grouped,
+        "flat": flat_sorted,
+    }
+
+
+# ---------------------------------------------------------------------------
 # Drive
 
 OUTDIR = Path(__file__).resolve().parent.parent / "v1.0.0"
@@ -6442,6 +6535,13 @@ def main() -> int:
         (OUTDIR / "configuration-update.json", build_configuration_update_json()),
         (OUTDIR / "handshake-messages-pq.json", build_handshake_messages_pq_json()),
     ]
+
+    # Must-reject index is built last so it sees every prior file's
+    # must_reject flags. Append to the end of the files list so it is
+    # written / verified in the same loop.
+    files.append(
+        (OUTDIR / "must-reject-index.json", build_must_reject_index_json(files))
+    )
 
     ok = True
     for path, obj in files:

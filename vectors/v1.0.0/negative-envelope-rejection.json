@@ -6,6 +6,8 @@
   "vectors": [
     {
       "id": "envelope-expired",
+      "must_reject": true,
+      "rejection_class": "envelope.postmark-expired",
       "description": "A well-formed envelope whose postmark.expires is in the past. §7.2 step 1 (seal.signature verification) still passes — the envelope was correctly signed over its own canonical bytes — but step 2 MUST reject with reason_code envelope_expired before any further processing.",
       "spec_reference": "VECTORS.md §17.7; ENVELOPE.md §7.2 step 2; ERRORS.md envelope_expired",
       "inputs": {
@@ -49,6 +51,8 @@
     },
     {
       "id": "seal-signature-invalid",
+      "must_reject": true,
+      "rejection_class": "envelope.seal-signature-invalid",
       "description": "Take the valid envelope and replace seal.signature with a well-formed but unrelated Ed25519 signature (signed over different bytes). §7.2 step 1 MUST reject with reason_code seal_invalid before any further processing. Routing servers perform this verification per §4.3 'Two-Layer Verification'.",
       "spec_reference": "VECTORS.md §17.7; ENVELOPE.md §7.2 step 1; ERRORS.md seal_invalid",
       "inputs": {
@@ -89,6 +93,8 @@
     },
     {
       "id": "session-mac-invalid",
+      "must_reject": true,
+      "rejection_class": "envelope.session-mac-invalid",
       "description": "Take the valid envelope and replace seal.session_mac with an HMAC computed under a different key. §4.3 canonicalization blanks both seal.signature and seal.session_mac before either is computed, so seal.signature still verifies (step 1 passes) — this is the receiving-server-only check at step 4. The recipient server MUST reject with reason_code session_mac_invalid; the rejection is distinct from seal_invalid because routing servers cannot perform this check (they do not hold K_env_mac).",
       "spec_reference": "VECTORS.md §17.7; ENVELOPE.md §7.2 step 4; ERRORS.md session_mac_invalid",
       "inputs": {
