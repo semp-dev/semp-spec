@@ -175,9 +175,11 @@ entry `id: envelope-canonical-with-extensions`.
 
 Reference: `ENVELOPE.md` §2.4.1.
 
-**Rule:** `bucket = max(1024, smallest power of two >= unpadded_size)`. The
+**Rule:** `bucket = max(4096, smallest power of two >= unpadded_size)`. The
 final value is then clamped to the operator-configured `max_envelope_size`
-(typically 25 MiB / 26 214 400 bytes).
+(typically 25 MiB / 26 214 400 bytes). The 4096-byte floor is the protocol
+minimum per `ENVELOPE.md` §2.4.1; smaller messages still occupy a full
+4 KB bucket on the wire.
 
 The padding-byte count is `selected_bucket - unpadded_size`. The padding
 bytes, base64-encoded in `padding`, will enlarge the envelope by a factor

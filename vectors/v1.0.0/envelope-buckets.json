@@ -6,29 +6,29 @@
   "vectors": [
     {
       "id": "envelope-size-buckets",
-      "description": "Maps unpadded envelope size in bytes to the selected power-of-two padding bucket. Rule: next power of two with minimum 1024.",
+      "description": "Maps unpadded envelope size in bytes to the selected power-of-two padding bucket. Rule: next power of two with minimum 4096 (the protocol floor per ENVELOPE.md §2.4.1).",
       "spec_reference": "VECTORS.md §3.3; ENVELOPE.md §2.4.1",
-      "rule": "bucket = max(1024, smallest power of two >= unpadded_size)",
+      "rule": "bucket = max(4096, smallest power of two >= unpadded_size)",
       "samples": [
         {
           "unpadded_size_bytes": 1,
-          "bucket_size_bytes": 1024
+          "bucket_size_bytes": 4096
         },
         {
           "unpadded_size_bytes": 1023,
-          "bucket_size_bytes": 1024
+          "bucket_size_bytes": 4096
         },
         {
           "unpadded_size_bytes": 1024,
-          "bucket_size_bytes": 1024
+          "bucket_size_bytes": 4096
         },
         {
           "unpadded_size_bytes": 1025,
-          "bucket_size_bytes": 2048
+          "bucket_size_bytes": 4096
         },
         {
           "unpadded_size_bytes": 2048,
-          "bucket_size_bytes": 2048
+          "bucket_size_bytes": 4096
         },
         {
           "unpadded_size_bytes": 2049,

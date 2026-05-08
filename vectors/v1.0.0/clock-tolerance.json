@@ -31,8 +31,13 @@
         },
         {
           "T_minus_now_seconds": 900,
+          "expected": "accept_or_reject_at_implementor_choice",
+          "reason": "boundary: MUST reject when T - now > 15 min; at equality either verdict is conformant"
+        },
+        {
+          "T_minus_now_seconds": 901,
           "expected": "reject",
-          "reason": "boundary: MUST reject when T - now > 15 min; equality is the limit"
+          "reason": "15 min + 1 sec ahead: strictly greater than 15 min, MUST reject"
         },
         {
           "T_minus_now_seconds": 1800,

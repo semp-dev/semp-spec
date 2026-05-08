@@ -403,14 +403,16 @@ def build_confirmation_hash_json() -> dict:
 
 
 def envelope_size_bucket(size: int) -> int:
-    """ENVELOPE.md §2.4.1: next power of 2, minimum 1024.
+    """ENVELOPE.md §2.4.1: next power of 2, minimum 4096.
 
-    Implementations clamp the final value to the operator-configured
-    `max_envelope_size` (typically 25 MiB / 26214400 bytes). The clamp
-    happens at the deployment boundary, not in this function — the
-    raw next-power-of-2 value is the canonical mathematical answer.
+    The 4096-byte floor is the protocol minimum (every envelope
+    occupies at least 4 KB on the wire). Implementations clamp the
+    final value to the operator-configured `max_envelope_size`
+    (typically 25 MiB / 26214400 bytes). The clamp happens at the
+    deployment boundary, not in this function — the raw
+    next-power-of-2 value is the canonical mathematical answer.
     """
-    bucket = 1024
+    bucket = 4096
     while bucket < size:
         bucket *= 2
     return bucket
@@ -488,10 +490,10 @@ def build_envelope_buckets_json() -> dict:
                 "description": (
                     "Maps unpadded envelope size in bytes to the selected "
                     "power-of-two padding bucket. Rule: next power of two with "
-                    "minimum 1024."
+                    "minimum 4096 (the protocol floor per ENVELOPE.md §2.4.1)."
                 ),
                 "spec_reference": "VECTORS.md §3.3; ENVELOPE.md §2.4.1",
-                "rule": "bucket = max(1024, smallest power of two >= unpadded_size)",
+                "rule": "bucket = max(4096, smallest power of two >= unpadded_size)",
                 "samples": size_samples,
             },
             {
@@ -4597,8 +4599,10 @@ def build_clock_tolerance_json() -> dict:
          "reason": "boundary: SHOULD reject at >5 min, MUST accept at <=5 min"},
         {**fut(10 * 60), "expected": "accept_or_reject_at_implementor_choice",
          "reason": "between SHOULD-reject (5 min) and MUST-reject (15 min)"},
-        {**fut(15 * 60), "expected": "reject",
-         "reason": "boundary: MUST reject when T - now > 15 min; equality is the limit"},
+        {**fut(15 * 60), "expected": "accept_or_reject_at_implementor_choice",
+         "reason": "boundary: MUST reject when T - now > 15 min; at equality either verdict is conformant"},
+        {**fut(15*60 + 1), "expected": "reject",
+         "reason": "15 min + 1 sec ahead: strictly greater than 15 min, MUST reject"},
         {**fut(30 * 60), "expected": "reject", "reason": "30 min ahead, well past 15"},
     ]
 
