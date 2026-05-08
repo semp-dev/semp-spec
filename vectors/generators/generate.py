@@ -1844,6 +1844,135 @@ def seal_unwrap_baseline(
     return chacha20_poly1305_open(wrap_key, nonce, aead_ct, recipient_pub)
 
 
+# Kyber768 / ML-KEM-768 deterministic API via kyber-py.
+KYBER768_EK_SIZE = 1184       # encapsulation (public) key
+KYBER768_DK_SIZE = 2400       # decapsulation (private) key
+KYBER768_CT_SIZE = 1088       # ciphertext
+PQ_RECIPIENT_PUB_SIZE = KYBER768_EK_SIZE + 32  # || X25519 pub
+PQ_KEM_CT_SIZE = KYBER768_CT_SIZE + 32         # || X25519 ephemeral pub
+
+
+def kyber768_keygen_internal(d_seed: bytes, z_seed: bytes) -> tuple[bytes, bytes]:
+    """FIPS 203 ML-KEM-768 deterministic keygen. d, z are each 32 bytes."""
+    from kyber_py.ml_kem import ML_KEM_768
+
+    return ML_KEM_768._keygen_internal(d_seed, z_seed)
+
+
+def kyber768_encaps_internal(ek: bytes, m: bytes) -> tuple[bytes, bytes]:
+    """FIPS 203 ML-KEM-768 deterministic encaps. m is 32 bytes of randomness.
+    Returns (shared_secret_32B, ciphertext_1088B)."""
+    from kyber_py.ml_kem import ML_KEM_768
+
+    return ML_KEM_768._encaps_internal(ek, m)
+
+
+def kyber768_decaps_internal(dk: bytes, ct: bytes) -> bytes:
+    from kyber_py.ml_kem import ML_KEM_768
+
+    return ML_KEM_768._decaps_internal(dk, ct)
+
+
+def seal_wrap_pq(
+    K: bytes,
+    recipient_pub: bytes,
+    ephemeral_priv: bytes,
+    kyber_encaps_randomness: bytes,
+) -> tuple[bytes, dict]:
+    """Wrap K under recipient_pub using pq-kyber768-x25519 per ENVELOPE.md
+    §4.4.1 (PQ branch).
+
+    recipient_pub is the 1216-byte hybrid public key:
+      kyber768_ek (1184) || x25519_pub (32).
+    ephemeral_priv is the 32-byte X25519 ephemeral private key.
+    kyber_encaps_randomness is the 32-byte input to ML-KEM-768 encaps that
+    determines kyber_ct and kyber_ss; pinning it makes the wrap output
+    byte-deterministic.
+    """
+    if len(recipient_pub) != PQ_RECIPIENT_PUB_SIZE:
+        raise ValueError(
+            f"pq suite expects {PQ_RECIPIENT_PUB_SIZE}-byte recipient pub"
+        )
+    if len(ephemeral_priv) != 32:
+        raise ValueError("pq suite expects 32-byte X25519 ephemeral priv")
+    if len(kyber_encaps_randomness) != 32:
+        raise ValueError("pq suite expects 32-byte kyber encaps randomness")
+
+    rcp_kyber_pub = recipient_pub[:KYBER768_EK_SIZE]
+    rcp_x25519_pub = recipient_pub[KYBER768_EK_SIZE:]
+
+    kyber_ss, kyber_ct = kyber768_encaps_internal(rcp_kyber_pub, kyber_encaps_randomness)
+    ephemeral_pub = x25519_pubkey_from_priv(ephemeral_priv)
+    x25519_ss = x25519_ecdh(ephemeral_priv, rcp_x25519_pub)
+
+    shared_secret = kyber_ss + x25519_ss              # 64 bytes
+    kem_ct = kyber_ct + ephemeral_pub                 # 1120 bytes
+
+    salt = kem_ct + recipient_pub
+    prk = hkdf_extract(salt, shared_secret)
+    wrap_key = hkdf_expand(prk, WRAP_INFO, 32)
+
+    nonce = b"\x00" * 12
+    aead_ct = chacha20_poly1305_seal(wrap_key, nonce, K, recipient_pub)
+
+    wrapped = kem_ct + aead_ct
+    import base64
+
+    inter = {
+        "kyber_ct_hex": kyber_ct.hex(),
+        "kyber_shared_secret_hex": kyber_ss.hex(),
+        "ephemeral_pub_hex": ephemeral_pub.hex(),
+        "x25519_shared_secret_hex": x25519_ss.hex(),
+        "shared_secret_hex": shared_secret.hex(),
+        "kem_ct_hex": kem_ct.hex(),
+        "hkdf_salt_hex": salt.hex(),
+        "prk_hex": prk.hex(),
+        "wrap_key_hex": wrap_key.hex(),
+        "aead_nonce_hex": nonce.hex(),
+        "aead_aad_hex": recipient_pub.hex(),
+        "aead_ct_hex": aead_ct.hex(),
+        "wrapped_bytes_length": len(wrapped),
+    }
+    return base64.b64encode(wrapped).decode("ascii"), inter
+
+
+def seal_unwrap_pq(
+    wrapped_b64: str, recipient_priv: bytes, recipient_pub: bytes
+) -> bytes:
+    """Reverse seal_wrap_pq. recipient_priv is 32 bytes X25519 || the
+    Kyber dk (2400 bytes), in that concatenation order: recipient_priv =
+    kyber_dk (2400) || x25519_priv (32). recipient_pub matches the
+    encapsulation order kyber_ek (1184) || x25519_pub (32)."""
+    import base64
+
+    if len(recipient_priv) != KYBER768_DK_SIZE + 32:
+        raise ValueError(
+            f"pq suite expects {KYBER768_DK_SIZE + 32}-byte recipient priv"
+        )
+    raw = base64.b64decode(wrapped_b64)
+    if len(raw) < PQ_KEM_CT_SIZE + 16:
+        raise ValueError("wrapped payload too short for pq suite")
+
+    kem_ct = raw[:PQ_KEM_CT_SIZE]
+    aead_ct = raw[PQ_KEM_CT_SIZE:]
+    kyber_ct = kem_ct[:KYBER768_CT_SIZE]
+    ephemeral_pub = kem_ct[KYBER768_CT_SIZE:]
+
+    rcp_kyber_dk = recipient_priv[:KYBER768_DK_SIZE]
+    rcp_x25519_priv = recipient_priv[KYBER768_DK_SIZE:]
+
+    kyber_ss = kyber768_decaps_internal(rcp_kyber_dk, kyber_ct)
+    x25519_ss = x25519_ecdh(rcp_x25519_priv, ephemeral_pub)
+    shared_secret = kyber_ss + x25519_ss
+
+    salt = kem_ct + recipient_pub
+    prk = hkdf_extract(salt, shared_secret)
+    wrap_key = hkdf_expand(prk, WRAP_INFO, 32)
+
+    nonce = b"\x00" * 12
+    return chacha20_poly1305_open(wrap_key, nonce, aead_ct, recipient_pub)
+
+
 def build_seal_roundtrip_json() -> dict:
     """Three pinned-input wrap cases for the baseline suite. Every byte is
     deterministic given the inputs; an implementation that produces the same
@@ -1953,33 +2082,140 @@ def build_seal_roundtrip_json() -> dict:
         },
     })
 
+    # ---- PQ suite (pq-kyber768-x25519) cases --------------------------------
+
+    K4 = bytes.fromhex("9090909090909090909090909090909090909090909090909090909090909090")
+    rcp_kyber_d_4 = bytes([0x60] * 32)
+    rcp_kyber_z_4 = bytes([0x61] * 32)
+    rcp_x25519_priv_4 = bytes([0x62] * 32)
+    rcp_kyber_ek_4, rcp_kyber_dk_4 = kyber768_keygen_internal(
+        rcp_kyber_d_4, rcp_kyber_z_4
+    )
+    rcp_x25519_pub_4 = x25519_pubkey_from_priv(rcp_x25519_priv_4)
+    rcp_pub_4 = rcp_kyber_ek_4 + rcp_x25519_pub_4
+    rcp_priv_4 = rcp_kyber_dk_4 + rcp_x25519_priv_4
+
+    eph_priv_4 = bytes([0x63] * 32)
+    kyber_encaps_m_4 = bytes([0x64] * 32)
+    wrapped_4, inter_4 = seal_wrap_pq(K4, rcp_pub_4, eph_priv_4, kyber_encaps_m_4)
+    assert seal_unwrap_pq(wrapped_4, rcp_priv_4, rcp_pub_4) == K4
+    cases.append({
+        "id": "seal-wrap-pq-32B-key",
+        "description": (
+            "Hybrid pq-kyber768-x25519 wrap of a 32-byte symmetric key. "
+            "Both the X25519 ephemeral priv and the ML-KEM-768 encaps "
+            "randomness (m) are pinned, so the entire wrapped output is "
+            "byte-deterministic. The recipient public key is the 1216-byte "
+            "concatenation kyber_ek || x25519_pub; the recipient private "
+            "key is kyber_dk || x25519_priv."
+        ),
+        "spec_reference": "ENVELOPE.md §4.4.1; VECTORS.md §17.1",
+        "inputs": {
+            "suite": "pq-kyber768-x25519",
+            "symmetric_key_hex": K4.hex(),
+            "recipient_kyber_keygen_d_hex": rcp_kyber_d_4.hex(),
+            "recipient_kyber_keygen_z_hex": rcp_kyber_z_4.hex(),
+            "recipient_x25519_private_key_hex": rcp_x25519_priv_4.hex(),
+            "recipient_kyber_public_key_hex": rcp_kyber_ek_4.hex(),
+            "recipient_x25519_public_key_hex": rcp_x25519_pub_4.hex(),
+            "recipient_hybrid_public_key_hex": rcp_pub_4.hex(),
+            "ephemeral_x25519_private_key_hex": eph_priv_4.hex(),
+            "kyber_encaps_randomness_m_hex": kyber_encaps_m_4.hex(),
+        },
+        "intermediates": inter_4,
+        "expected": {
+            "wrapped_b64": wrapped_4,
+            "wrapped_byte_length": (PQ_KEM_CT_SIZE + len(K4) + 16),
+            "round_trip_recovers_K": True,
+        },
+    })
+
+    K5 = bytes.fromhex("0011223344556677889900aabbccddeeff00112233445566778899aabbccddee")
+    rcp_kyber_d_5 = bytes([0x70] * 32)
+    rcp_kyber_z_5 = bytes([0x71] * 32)
+    rcp_x25519_priv_5 = bytes([0x72] * 32)
+    rcp_kyber_ek_5, rcp_kyber_dk_5 = kyber768_keygen_internal(
+        rcp_kyber_d_5, rcp_kyber_z_5
+    )
+    rcp_x25519_pub_5 = x25519_pubkey_from_priv(rcp_x25519_priv_5)
+    rcp_pub_5 = rcp_kyber_ek_5 + rcp_x25519_pub_5
+    rcp_priv_5 = rcp_kyber_dk_5 + rcp_x25519_priv_5
+
+    eph_priv_5 = bytes([0x73] * 32)
+    kyber_encaps_m_5 = bytes([0x74] * 32)
+    wrapped_5, inter_5 = seal_wrap_pq(K5, rcp_pub_5, eph_priv_5, kyber_encaps_m_5)
+    assert seal_unwrap_pq(wrapped_5, rcp_priv_5, rcp_pub_5) == K5
+    cases.append({
+        "id": "seal-wrap-pq-distinct-recipient",
+        "description": (
+            "Same suite as the previous case, different recipient hybrid "
+            "key and different X25519 ephemeral / Kyber encaps randomness. "
+            "Confirms the construction is deterministic with respect to "
+            "inputs and produces independent ciphertexts for independent "
+            "recipients."
+        ),
+        "spec_reference": "ENVELOPE.md §4.4.1; VECTORS.md §17.1",
+        "inputs": {
+            "suite": "pq-kyber768-x25519",
+            "symmetric_key_hex": K5.hex(),
+            "recipient_kyber_keygen_d_hex": rcp_kyber_d_5.hex(),
+            "recipient_kyber_keygen_z_hex": rcp_kyber_z_5.hex(),
+            "recipient_x25519_private_key_hex": rcp_x25519_priv_5.hex(),
+            "recipient_kyber_public_key_hex": rcp_kyber_ek_5.hex(),
+            "recipient_x25519_public_key_hex": rcp_x25519_pub_5.hex(),
+            "recipient_hybrid_public_key_hex": rcp_pub_5.hex(),
+            "ephemeral_x25519_private_key_hex": eph_priv_5.hex(),
+            "kyber_encaps_randomness_m_hex": kyber_encaps_m_5.hex(),
+        },
+        "intermediates": inter_5,
+        "expected": {
+            "wrapped_b64": wrapped_5,
+            "wrapped_byte_length": (PQ_KEM_CT_SIZE + len(K5) + 16),
+            "round_trip_recovers_K": True,
+        },
+    })
+
     return {
         "version": "1.0.0",
         "category": "seal-roundtrip",
         "description": (
             "Layer 3 round-trip vectors for the seal wrap construction "
-            "pinned in ENVELOPE.md §4.4.1. Every random input (the "
-            "ephemeral private key) is supplied as part of the vector so "
-            "the wrapped output is byte-deterministic. Implementations "
-            "MUST expose a deterministic-compose code path that accepts "
-            "ephemeral material instead of generating it; that path is "
-            "test-only and MUST NOT be reachable from production senders."
+            "pinned in ENVELOPE.md §4.4.1. Every random input is supplied "
+            "as part of the vector so the wrapped output is "
+            "byte-deterministic. Implementations MUST expose a "
+            "deterministic-compose code path that accepts random material "
+            "instead of generating it; that path is test-only and MUST NOT "
+            "be reachable from production senders."
         ),
         "spec_reference": "VECTORS.md §17.1; ENVELOPE.md §4.4.1",
         "construction": {
-            "shared_secret": "X25519 ECDH(ephemeral_priv, recipient_pub)",
-            "kem_ct": "ephemeral_pub (32 bytes)",
-            "hkdf_salt": "kem_ct || recipient_pub (64 bytes)",
-            "hkdf_info_utf8": "SEMP-v1-wrap",
-            "hkdf_hash": "SHA-512",
-            "wrap_key_length_bytes": 32,
-            "aead": "ChaCha20-Poly1305",
-            "aead_nonce": "12 bytes of 0x00",
-            "aead_aad": "recipient_pub (32 bytes)",
-            "wire_format": "base64( kem_ct || aead_ct )",
+            "baseline": {
+                "shared_secret": "X25519 ECDH(ephemeral_priv, recipient_pub)",
+                "kem_ct": "ephemeral_pub (32 bytes)",
+                "wrapped_byte_length_for_32B_K": 80,
+            },
+            "pq_kyber768_x25519": {
+                "shared_secret": "kyber_ss (32 B) || x25519_ss (32 B) = 64 bytes",
+                "kem_ct": "kyber_ct (1088 B) || ephemeral_pub (32 B) = 1120 bytes",
+                "recipient_pub_layout": "kyber_ek (1184 B) || x25519_pub (32 B) = 1216 bytes",
+                "recipient_priv_layout": "kyber_dk (2400 B) || x25519_priv (32 B) = 2432 bytes",
+                "wrapped_byte_length_for_32B_K": 1168,
+            },
+            "shared": {
+                "hkdf_salt": "kem_ct || recipient_pub",
+                "hkdf_info_utf8": "SEMP-v1-wrap",
+                "hkdf_hash": "SHA-512",
+                "wrap_key_length_bytes": 32,
+                "aead": "ChaCha20-Poly1305",
+                "aead_nonce": "12 bytes of 0x00",
+                "aead_aad": "recipient_pub (full hybrid pub for pq)",
+                "wire_format": "base64( kem_ct || aead_ct )",
+            },
         },
-        "suites_covered": ["x25519-chacha20-poly1305"],
-        "suites_pending": ["pq-kyber768-x25519 (requires pqcrypto dependency)"],
+        "suites_covered": [
+            "x25519-chacha20-poly1305",
+            "pq-kyber768-x25519",
+        ],
         "vectors": cases,
     }
 

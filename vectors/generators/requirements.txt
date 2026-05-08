@@ -10,8 +10,10 @@
 # No other packages are permitted. The reference implementation semp.dev/semp-go
 # is NEVER a dependency of the generator.
 #
-# Layer 1 + Layer 2 use stdlib only. Layer 3 (round-trip vectors) requires
-# X25519, ChaCha20-Poly1305, and Ed25519, all from pyca/cryptography. Kyber768
-# (pq-kyber768-x25519 suite) will be added when post-quantum vectors land.
+# Layer 1 + Layer 2 use stdlib only. Layer 3 needs X25519, ChaCha20-Poly1305,
+# and Ed25519 (from pyca/cryptography) and ML-KEM-768 / Kyber768 (from
+# kyber-py, which exposes the FIPS 203 deterministic-internal API needed
+# for byte-reproducible vectors).
 
 cryptography>=42,<46
+kyber-py>=1.0,<2

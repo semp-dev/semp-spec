@@ -815,16 +815,29 @@ Vectors pin the recipient key pair, the ephemeral private key, and the
 symmetric key. Implementations match by reproducing the wrapped output
 byte-for-byte, then by recovering the symmetric key on unwrap.
 
-**Bytes:** see [`vectors/v1.0.0/seal-roundtrip.json`](vectors/v1.0.0/seal-roundtrip.json),
-entries `id: seal-wrap-baseline-32B-key`,
-`id: seal-wrap-baseline-distinct-recipient`, and
-`id: seal-wrap-baseline-ephemeral-changes-output`. Each vector also lists
-its `intermediates` (shared secret, salt, PRK, wrap key, AEAD inputs) so
-implementers can localise mismatches to a specific step of the
-construction.
+**Baseline suite vectors:** `id: seal-wrap-baseline-32B-key`,
+`id: seal-wrap-baseline-distinct-recipient`,
+`id: seal-wrap-baseline-ephemeral-changes-output`. The third confirms that
+changing only the ephemeral private key produces a different wrapped output
+while round-trip still recovers `K`, isolating the ephemeral as the source
+of nonce-uniqueness.
 
-The post-quantum suite (`pq-kyber768-x25519`) hybrid wrap will land in a
-follow-up vector once the Python generator wires up Kyber768 support.
+**Post-quantum suite vectors:** `id: seal-wrap-pq-32B-key`,
+`id: seal-wrap-pq-distinct-recipient`. The recipient public key is the
+1216-byte concatenation `kyber_ek (1184 B) || x25519_pub (32 B)`; the
+recipient private key is `kyber_dk (2400 B) || x25519_priv (32 B)`. The
+wrap output is 1168 bytes (1088 Kyber ciphertext + 32 X25519 ephemeral
+public + 48 AEAD ciphertext+tag). Both the X25519 ephemeral private key
+and the ML-KEM-768 encaps randomness `m` are pinned in the inputs so the
+wrapped output is byte-deterministic; implementations MUST use the
+FIPS 203 internal-encaps API (or equivalent) that accepts the
+randomness explicitly.
+
+**Bytes:** see [`vectors/v1.0.0/seal-roundtrip.json`](vectors/v1.0.0/seal-roundtrip.json).
+Each vector lists its `intermediates` (Kyber ciphertext and shared secret
+for PQ cases, plus the X25519 shared secret, combined shared secret, salt,
+PRK, wrap key, and AEAD inputs) so implementers can localise mismatches
+to a specific step of the construction.
 
 ### 17.2 Sender Signature
 
