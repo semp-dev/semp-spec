@@ -1,10 +1,9 @@
 {
   "version": "1.0.0",
   "category": "envelope-roundtrip",
-  "description": "Layer 3 round-trip vector covering the full ENVELOPE.md §7.1 compose flow and §7.2 verification path. Every random input (symmetric keys, nonces, ephemerals) is pinned so the final envelope JSON is byte-deterministic. Baseline suite only (x25519-chacha20-poly1305); PQ suite lands once Kyber768 is wired into the generator.",
+  "description": "Layer 3 round-trip vectors covering the full ENVELOPE.md §7.1 compose flow and §7.2 verification path. Every random input (symmetric keys, nonces, ephemerals, Kyber encaps randomness) is pinned so the final envelope JSON is byte-deterministic. Both currently-defined suites are exercised.",
   "spec_reference": "VECTORS.md §17.4; ENVELOPE.md §4, §6.5, §7.1, §7.1.1, §7.2",
   "construction": {
-    "suite": "x25519-chacha20-poly1305",
     "seal_signature_prefix_utf8": "SEMP-ENVELOPE:",
     "session_mac_algorithm": "HMAC-SHA-256",
     "brief_aead": "ChaCha20-Poly1305(K_brief, brief_nonce, canonical_brief_json, aad=postmark.id)",
@@ -14,10 +13,14 @@
     "seal_wrap_construction": "ENVELOPE.md §4.4.1 (see seal-roundtrip.json)",
     "sender_signature_construction": "ENVELOPE.md §6.5 (see sender-signature.json)"
   },
+  "suites_covered": [
+    "x25519-chacha20-poly1305",
+    "pq-kyber768-x25519"
+  ],
   "vectors": [
     {
       "id": "envelope-roundtrip-baseline-single-recipient",
-      "description": "End-to-end compose for a single-recipient envelope: brief is wrapped for both the recipient server domain and the recipient client; enclosure is wrapped for the recipient client only. The vector pins every random input and records the final envelope JSON; round-trip verification is asserted at generation time across all seven §7.2 steps (seal.signature, seal.session_mac, server K_brief unwrap, brief decrypt, client K_brief unwrap, K_enclosure unwrap, enclosure decrypt + sender_signature).",
+      "description": "End-to-end compose for a single-recipient envelope under the baseline suite (x25519-chacha20-poly1305): brief is wrapped for both the recipient server domain and the recipient client; enclosure is wrapped for the recipient client only. The vector pins every random input and records the final envelope JSON; round-trip verification is asserted at generation time across all seven §7.2 steps.",
       "spec_reference": "VECTORS.md §17.4; ENVELOPE.md §7.1, §7.1.1, §7.2",
       "inputs": {
         "sender_identity_seed_hex": "a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1",
@@ -26,19 +29,14 @@
         "sender_domain_signing_seed_hex": "a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2",
         "sender_domain_signing_pub_hex": "65e8f9b0bc6eae124169f0576f97362d295a8cf5f770b45e14357ce647d33eec",
         "sender_domain_signing_key_id": "c7b9b30e8b344118e2cf93b98c6b59b70eda4309b5ff36831ab09ac426a838e1",
-        "recipient_client_priv_hex": "b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1",
         "recipient_client_pub_hex": "d3337e4d4ee503a66976feb1fadf5bd21ba96fc2b1571b3e980d87cf49797510",
         "recipient_client_key_id": "a2073cdb817e01f63d81d1a69dbbaa25c557223cd9e9001562eea5f82ce3c08f",
-        "recipient_server_domain_priv_hex": "b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2",
         "recipient_server_domain_pub_hex": "db48257e1237976a74ad8cfedca00213408fe89ac6251f1b930245f242b5c31a",
         "recipient_server_domain_key_id": "3fa76f6244743c27a452a7388b2100428c535a97a79e31dcc84f2f9aaab69474",
         "K_brief_hex": "d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1",
         "K_enclosure_hex": "d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2",
         "brief_aead_nonce_hex": "e1e1e1e1e1e1e1e1e1e1e1e1",
         "enclosure_aead_nonce_hex": "e2e2e2e2e2e2e2e2e2e2e2e2",
-        "ephemeral_priv_brief_for_client_hex": "c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1",
-        "ephemeral_priv_brief_for_domain_hex": "c2c2c2c2c2c2c2c2c2c2c2c2c2c2c2c2c2c2c2c2c2c2c2c2c2c2c2c2c2c2c2c2",
-        "ephemeral_priv_enclosure_for_client_hex": "c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3",
         "K_env_mac_hex": "f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1",
         "brief_pre_encrypt_json": {
           "message_id": "msg-2026-05-08-0001",
@@ -78,7 +76,12 @@
             "value": "L1sgdPdGCUm13JHLUZ9GmO7qnpYTn1OLw2N/sfaNsfO8df2FvQDxk1GxdKBSPk+1JFdIPA10ANLFsxoF23BNCw=="
           }
         },
-        "postmark_id": "01J7TESTPOSTMARKIDXXXXXXXXXX"
+        "postmark_id": "01J7TESTPOSTMARKIDXXXXXXXXXX",
+        "recipient_client_priv_hex": "b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1",
+        "recipient_server_domain_priv_hex": "b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2",
+        "ephemeral_priv_brief_for_client_hex": "c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1",
+        "ephemeral_priv_brief_for_domain_hex": "c2c2c2c2c2c2c2c2c2c2c2c2c2c2c2c2c2c2c2c2c2c2c2c2c2c2c2c2c2c2c2c2",
+        "ephemeral_priv_enclosure_for_client_hex": "c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3"
       },
       "intermediates": {
         "brief_canonical_utf8": "{\"from\":\"alice@a.example\",\"message_id\":\"msg-2026-05-08-0001\",\"sent_at\":\"2026-05-08T09:00:00Z\",\"to\":[\"bob@b.example\"]}",
@@ -116,6 +119,122 @@
           },
           "brief": "4eHh4eHh4eHh4eHh9avHqv9G9N7tMEyhEBpdmWn1c1+vrhLr7BaYiE0FHrP/fwELuQlynZIAFnSK9Mg1DTQkfJzD36Ei93uvK8ehr+VTc1+vm9RAtlQ54SoqVIaEk4MFElH5pRcC82E0lszU2AzYdGZLBBiZ1OqEKGbybvUjzkt5qnA69vFBwwg2yn7i9jQ/zw==",
           "enclosure": "4uLi4uLi4uLi4uLiPqLF3C+LPqXQ6OIKoqB31xihVYq1mclJ0mjq0hl8wGsH7I1ornd7gGjvfJ8LyN9jPNlrfovv52WRJ2syuBzBQScIHvDYrxKnigBCMaJd+eEdFi0qWSm4fYsEqpJXgpfVU/FOPivFpg0Rx+fC/epsKkJXy0ca1CJI16i9j6lwyB/q5l1UqtAnl5S9/ednEKFZlsmZ0LCa1MjeJHcLJwJviU9faSa7lV1VSFPixxY4p6BqZWK3I69LL0noWTAcg+9m6hKHUNahFb/36utj7Qi7sb/rfulD8nIRPqzt7F2APuty89/HO0uz70M6fWwwwcy3ak9J+fW86GuVY3RloTrPyn5qiVba0EmKGK7Sf/7wtc7/AxmTN4Di0l1zpxqZ5jBsz+zzKZANZNKUGGoVYaB1p3bV2ddfpxzERU8dTUNfw1FM98cGi3Hkzk/V5KO2q9fCjCNcbDzIWkUNHYPFInH2re2W1I8rvgT8WpqDlFZTfFsG1VWoGstVFayDqv+KTPetMnnfd00N2KwbJdF3bqek0EQcei3478fQj8KqP63lxm2F1ClxS7bpNW+XaCejsKfsVMrV2rR0gPCeEqk="
+        },
+        "round_trip_recovers_brief": true,
+        "round_trip_recovers_enclosure": true,
+        "seal_signature_verifies": true,
+        "session_mac_verifies": true,
+        "sender_signature_verifies": true
+      }
+    },
+    {
+      "id": "envelope-roundtrip-pq-single-recipient",
+      "description": "End-to-end compose for a single-recipient envelope under the post-quantum suite (pq-kyber768-x25519): seal wraps use the hybrid Kyber768+X25519 KEM per ENVELOPE.md §4.4.1 PQ branch; brief and enclosure AEAD are still ChaCha20-Poly1305 per §7.3. Recipient public keys are the 1216-byte hybrid concatenation; recipient private keys are the 2432-byte concatenation. All X25519 ephemerals and Kyber encaps randomness (m) are pinned so the wrapped seal entries are byte-deterministic.",
+      "spec_reference": "VECTORS.md §17.4; ENVELOPE.md §4.4.1, §7.1, §7.1.1, §7.2",
+      "inputs": {
+        "sender_identity_seed_hex": "a3a3a3a3a3a3a3a3a3a3a3a3a3a3a3a3a3a3a3a3a3a3a3a3a3a3a3a3a3a3a3a3",
+        "sender_identity_pub_hex": "acf12b4acc1c660a8326aed34039efb728a5e496488240f50a932ab7aba51751",
+        "sender_identity_key_id": "1a6637539bfe7d38af34872efcfdb6ddef0649f2e0a06c36c5c419e0796dfdf4",
+        "sender_domain_signing_seed_hex": "a4a4a4a4a4a4a4a4a4a4a4a4a4a4a4a4a4a4a4a4a4a4a4a4a4a4a4a4a4a4a4a4",
+        "sender_domain_signing_pub_hex": "a0a0c227d8a1254393590789c18060efeaa0937196a6b7bdb7061841907975a7",
+        "sender_domain_signing_key_id": "959a80191f7640f9ca5a36cffefcfcd7a90c07291d3c940a862a2a990907b503",
+        "recipient_client_pub_hex": "5eac2c22b892e4fa533dcb1d8809980d2454f0727726289722f205b0a8793041652b1c459a038fa9f6713c03932961a9e5ab92872002e819c5884729f44c5d12b55cd89869273a99ec8899e1d212e396adfa97018f749727874a2de13a2105c172b251030794a31095d90051823b44bafb226d48b6c4e02718d9c6af03463a11a7239bc500236d65b150007141a5fc13daf8354d792dfd305590e88fd5b37bf7270c53d62598386330d5435896770808533e519eb4f79fd7b4716f4031e038c80465cbb5d5331aa7931dc25802808ac27b4dca662cd17448492348088533c151406d432ae6a59210b90ac828adcfbc5275d72072db88e4c5c3ce595dac805d2ea5676ca686bf508303abbccf30c28d0b9d34475de3e42a6dc9821285729c7662295a496d58c69f89719b856480149910514dabc186d1659c282b23d3a53b44c999c7a21a2f993525239d27f76583c197cc772e32947cf8817b21c9777b9b07ae2689ff05c4631a05318c0f7e2a27c96506b079309e393274c97294c91ce22a29df536c8b1b7b22878d808649b5680fef579b5aca59f24402eef444adfb1e7c54691c1892bdc24229fc17c8a35f16c6912048914dcc45cf4bb51122aedd4b1cce332d060c5136a1403ceb81e5180dbd310a1ac01d2a625a2bdc3ef155140804326fe08e1606bcf72836a25230f82a783e021685291b3993190fb348bc0092d4b42875db5c04c2aa9d770ce99a8241c72de318bd88d312e4715ec3f094edb57910113aef1b7ef7335073a84d0ab0406fc9596e654b2925b6a265815295330bcc3b994b305161a3619460097423e98a8f9902d0708155f6436fcb9c30d46cbce4e55401d60526232c965c6c758969ba9429d6f1b86c014fa5d96b14dcadee0181a9f11fc5708d75a94bf9650d2c501dbeb3bfabab9659931997405fe5429038dc73736a5afa14a87513cf50ec3b432938c90cbb5af4a72adb28265a4dc7e6af83b8416f1943a444c875e59f0a0607213844ae10ca22973217f5443ffc6a5c7aa8e246bb1518b39b7c9d4ee3679719588b9441f6f68e4ea13b17a92da421cab7033863f131424c00e987799b4758c6344befa5ca9a2a670596602c7379f3e959feeb625a834f4e6ba29da7b55739787b947e9f136b461c1bf1e0436115b573ebb7c8f96631db5d935c98dc08abed323bad62919021a0a0354d11228475179672689c8bab34f0563477476024938c712a52156074ddb92848ea3991020c47082908500398110c49a54fc08645cc66c3425945e4d60ab6f3948bac9c2ea0956545b93bf6195fb4ca71073bdb29b23e9312ddf60a56c90114c9aa535a8f55a3c70c266c114c56467aa58ad04fff20137492b0a79c24dd23612ff06564375078ac3fb6f8542bebc357950fbdc95051d30d592900e3912a0bdc5cadea8005514c03437640d5688894a575591a86600a2b3796b2133cdd70764541bcc36347b21a8d23c24c51757a2b070c7c79124b23b1cac83ba4d363adfb117fda29d56bc91f37c5735a2ad654cb60286e462c75ea38b3618a0ca433b2f06583da1a24e7993a7a720c8a91144fc3c426a3a9da2ab8657045c590a22ea5cce4443bbb6a8b6de3ae97e85bcbb049d3d28e23402873d70b8d1053b9ab4c681b1e15358030811379bd8aff866715863a068136bdfe05ec1252cca633e3ca07c888f0b6372f88aa4b6b923901",
+        "recipient_client_key_id": "96f8b5f4711fbcee9300f36bfc3fe3842d80805f6345fa3757530d919b1a976e",
+        "recipient_server_domain_pub_hex": "97cab2abc8abab733bdcc342ee24192c24714e53ccf0424f2ceb9e398b8517d28f99ab37e3665d3bc37fa69001291146059908cfc81ddc7647f14a79f4255656a845ca403ddefa7136a7ad3968039c585397f9981e27a60754953cc6081e53cdf09b31214c6806c7aa2c04841f6c76652831e2679cfdd361def410b0f61eca622613176319c655e5a292dcb6207bb2bbc702686bda944a917aa067a3304993641b6e837c8f63845eac60ca7b4ac8247a6695385a78334ca833950ec536ccba22099a53327038c75024f14c933df6833dd2017465b3b4776bf3547da127a261b89a25ca734e502e6069973d1241ada13a9f887210a45c8d4407f93c9b70da0bbdd38aad690777a57dbba3cc83b3c252c70864c865b01c7242456e66844507a9586ca92602664f5c585c67d6ca127c5298b7ab58569ea0b06fbfe4a833f48aacea71ba28433e3c60a8c23e25653e16017d7b6a1a1bfb7709239127ab12c9811c7648a15792768100892e4a316d745756235eb1a95884a020ea763732739444d06abd97247ec24fde4a7a8edc854e095db12734a66c2d62f263efb01971903098d358521831c73745c7accaa2f8350ef1b2778a7549d54452a3bfed102dd635727cd79f52bb7147067454681f0fd43c811c3f49f1469109b2652c4420f01e9714c1a18222294ccbdecaad6dc0213e366cea3a9478e3cea07a0021878733dba4c9848cb68baccb10023dd4bbf58734d3520bd1754d34320ef37963a046b039c5c4933998a7a2a9c590b3da217bf50b7683b6bc6c62abe72b7df624a3e3401fe951938e421bb41918f4a2970d5071975a489dbbb148dbc09d77bc79c1098882cce271c8ffb4524870bf4e24c21ae0ad8861459f71bcf541c4446b16e611749172c3c6e4804ff5b9a1750c62bb5afb1b561f0508adcc1a2997556afc936dfb3184306b63938c5a712759d68004ab1e7bf7194ab6301ae509adf9a46332a1fe31982a65afcc11bd5f91c772d2954dc1c0b86346fa084ef61a3c3c0c25d0c623fd302a116755d4aab79f123bee6424d91aaf9e065f53106679008c27781b04201fa4d59965e80da6eb851d0726b3285338e387a7e22531f58c5ee02fdceaaa4b2c711905250772b2b20717ffe63d2bf201fa436b56520d65e539e7f3b5eadc013324c059db0cc20c4156a44897ea7091b632cfc89dfb247711d6546ca2332c5199960b5bd1460e37b13812187ddae0bc65d3971d11749e8aa109348f0adbbba7d7404bf24b7c9a2aee668493fa1047385bfd7bb871610c10869daebc20469516450411e0bac213143ce9a894a2d512faa14bc47a663506563521a92f9a12b021cde3ea0f12d31f4a0a6afef65c837b174f5ccc436cbb9928550b28843029125ae6a70d754dc74566a0ca6702699624f7aba918c110f3202eb04a55207a31d53b3e3788927b5aadf25e0b3ac177950a7058494bfb89108661d2b86ee208175bd44039ba168d556a9568c9d51384c874347bd5aa710b574fc5a021625d41e27a3cba5ff7772d84695a1ee0a37f3532d7e65cecf40e61086fdf622d9ba1a80ee4870552cebb331aa49678f3934238349bc4823a8bccb7670347cc773879999425722a31cb614fe51db6bb4cbc08f697f41f43a3bca1d405f39a65b2268d6f5ede5b5f933f3c0c72f81c6889393c84d560f14ffc5478dc74cc4067fb11c72624323217c05873",
+        "recipient_server_domain_key_id": "2410e5bf456bcbc11cff4fe2380f515d5fc3a0770b092580eebf771a5927e095",
+        "K_brief_hex": "d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3",
+        "K_enclosure_hex": "d4d4d4d4d4d4d4d4d4d4d4d4d4d4d4d4d4d4d4d4d4d4d4d4d4d4d4d4d4d4d4d4",
+        "brief_aead_nonce_hex": "e3e3e3e3e3e3e3e3e3e3e3e3",
+        "enclosure_aead_nonce_hex": "e4e4e4e4e4e4e4e4e4e4e4e4",
+        "K_env_mac_hex": "f2f2f2f2f2f2f2f2f2f2f2f2f2f2f2f2f2f2f2f2f2f2f2f2f2f2f2f2f2f2f2f2",
+        "brief_pre_encrypt_json": {
+          "message_id": "msg-2026-05-08-0001",
+          "from": "alice@a.example",
+          "to": [
+            "bob@b.example"
+          ],
+          "sent_at": "2026-05-08T09:00:00Z"
+        },
+        "enclosure_pre_sign_json": {
+          "subject": "Round-trip vector check",
+          "content_type": "text/plain",
+          "body": {
+            "text/plain": "SGVsbG8gQm9iLCB0aGlzIGlzIGEgcm91bmQtdHJpcCB2ZWN0b3IuIC0tIEFsaWNl"
+          },
+          "attachments": [],
+          "forwarded_from": null,
+          "extensions": {},
+          "sender_signature": {
+            "algorithm": "ed25519",
+            "key_id": "1a6637539bfe7d38af34872efcfdb6ddef0649f2e0a06c36c5c419e0796dfdf4",
+            "value": ""
+          }
+        },
+        "enclosure_post_sign_json": {
+          "subject": "Round-trip vector check",
+          "content_type": "text/plain",
+          "body": {
+            "text/plain": "SGVsbG8gQm9iLCB0aGlzIGlzIGEgcm91bmQtdHJpcCB2ZWN0b3IuIC0tIEFsaWNl"
+          },
+          "attachments": [],
+          "forwarded_from": null,
+          "extensions": {},
+          "sender_signature": {
+            "algorithm": "ed25519",
+            "key_id": "1a6637539bfe7d38af34872efcfdb6ddef0649f2e0a06c36c5c419e0796dfdf4",
+            "value": "ZA44MSyt9y3byPIPHcT3j4ZcqvP1SrTMRLBWTzcO3/0aZ9PYijVRo5VPDYEe8YUe+xVetGhxFq18dzY6fDM8Cw=="
+          }
+        },
+        "postmark_id": "01J7PQPOSTMARKIDXXXXXXXXXXXX",
+        "recipient_client_kyber_keygen_d_hex": "b3b3b3b3b3b3b3b3b3b3b3b3b3b3b3b3b3b3b3b3b3b3b3b3b3b3b3b3b3b3b3b3",
+        "recipient_client_kyber_keygen_z_hex": "b4b4b4b4b4b4b4b4b4b4b4b4b4b4b4b4b4b4b4b4b4b4b4b4b4b4b4b4b4b4b4b4",
+        "recipient_client_x25519_priv_hex": "b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5",
+        "recipient_server_domain_kyber_keygen_d_hex": "b6b6b6b6b6b6b6b6b6b6b6b6b6b6b6b6b6b6b6b6b6b6b6b6b6b6b6b6b6b6b6b6",
+        "recipient_server_domain_kyber_keygen_z_hex": "b7b7b7b7b7b7b7b7b7b7b7b7b7b7b7b7b7b7b7b7b7b7b7b7b7b7b7b7b7b7b7b7",
+        "recipient_server_domain_x25519_priv_hex": "b8b8b8b8b8b8b8b8b8b8b8b8b8b8b8b8b8b8b8b8b8b8b8b8b8b8b8b8b8b8b8b8",
+        "ephemeral_x25519_priv_brief_for_client_hex": "c4c4c4c4c4c4c4c4c4c4c4c4c4c4c4c4c4c4c4c4c4c4c4c4c4c4c4c4c4c4c4c4",
+        "ephemeral_x25519_priv_brief_for_domain_hex": "c5c5c5c5c5c5c5c5c5c5c5c5c5c5c5c5c5c5c5c5c5c5c5c5c5c5c5c5c5c5c5c5",
+        "ephemeral_x25519_priv_enclosure_for_client_hex": "c6c6c6c6c6c6c6c6c6c6c6c6c6c6c6c6c6c6c6c6c6c6c6c6c6c6c6c6c6c6c6c6",
+        "kyber_encaps_m_brief_for_client_hex": "c7c7c7c7c7c7c7c7c7c7c7c7c7c7c7c7c7c7c7c7c7c7c7c7c7c7c7c7c7c7c7c7",
+        "kyber_encaps_m_brief_for_domain_hex": "c8c8c8c8c8c8c8c8c8c8c8c8c8c8c8c8c8c8c8c8c8c8c8c8c8c8c8c8c8c8c8c8",
+        "kyber_encaps_m_enclosure_for_client_hex": "c9c9c9c9c9c9c9c9c9c9c9c9c9c9c9c9c9c9c9c9c9c9c9c9c9c9c9c9c9c9c9c9"
+      },
+      "intermediates": {
+        "brief_canonical_utf8": "{\"from\":\"alice@a.example\",\"message_id\":\"msg-2026-05-08-0001\",\"sent_at\":\"2026-05-08T09:00:00Z\",\"to\":[\"bob@b.example\"]}",
+        "enclosure_canonical_utf8": "{\"attachments\":[],\"body\":{\"text/plain\":\"SGVsbG8gQm9iLCB0aGlzIGlzIGEgcm91bmQtdHJpcCB2ZWN0b3IuIC0tIEFsaWNl\"},\"content_type\":\"text/plain\",\"extensions\":{},\"forwarded_from\":null,\"sender_signature\":{\"algorithm\":\"ed25519\",\"key_id\":\"1a6637539bfe7d38af34872efcfdb6ddef0649f2e0a06c36c5c419e0796dfdf4\",\"value\":\"ZA44MSyt9y3byPIPHcT3j4ZcqvP1SrTMRLBWTzcO3/0aZ9PYijVRo5VPDYEe8YUe+xVetGhxFq18dzY6fDM8Cw==\"},\"subject\":\"Round-trip vector check\"}",
+        "envelope_canonical_for_signature_utf8": "{\"brief\":\"4+Pj4+Pj4+Pj4+PjjgfGcEyq6r5Wz+xZnofqgsTsW2w7VSsKOGVAtcQg1pj1NpsPD+8jR8JJnuejflRtM8e1tKqDpW1IV+5oJQb4tjDsuNi1dKI/tWmmoOJt7i8T7oNudxx24+E47sa4EmGdpzKecFK8gvvK6IbWoUdBizh42Pre+xz9f2BcaDQYTMM5bDG2Jw==\",\"enclosure\":\"5OTk5OTk5OTk5OTkLBOnjXSU0J/fWbO9fZMIF+AHKNrqYGO9PN8Y8fhbQFTFpmyw8mgLNSt57dT4D3dkIEM2GPg7ZZP5rEmo42bDo2EkLkWE5i+eui2hdIaJJiodQB8IbES9mN0qSUPrSI65mQt/VJot3sC/fF7ImcWLvyrdhCD1fdMrkETWHP2eNhKM3sd8tMu81SiYvT/jYRDBCDWTn2zsfpSRbVsRJGxOSMvlrbRr7ty6nH7g3NI+l52/jspDV3R68kwRuriZ6Poe879IfkUE0+bSsEroPlIxuduwv93s3fxBrlUKKUrYdBYes3fWYN41w83962kmoWxFQGXefJHi5z7YWIqrSpIc20j4+LWEsC9dBFDgBZyyOe2oGc9DqXXiU0jus5Sx6kmYcO+KXY+yc2WXX/AWsaBcDKArKEaiKHyBzQnywWVCQXGNPk3Blj5RtsYHGUXIOvqMK8g3brlCNmN8PJXMWuT1tPjyQ05TwC2RRjNLGH9s6/VNM6EA5siMQ4KidynLGpq1xBBsGs0B3RF4wYfEOq/TruxtV+3JzAwAoJb3o2fYvFvCjOTt4IWifE/BIMw5LEtuVXVzHmmVSX3+7OM=\",\"postmark\":{\"expires\":\"2026-05-15T09:00:00Z\",\"extensions\":{},\"from_domain\":\"a.example\",\"id\":\"01J7PQPOSTMARKIDXXXXXXXXXXXX\",\"session_id\":\"01J7PQSESSIONIDXXXXXXXXXXXXX\",\"to_domain\":\"b.example\"},\"seal\":{\"algorithm\":\"pq-kyber768-x25519\",\"brief_recipients\":{\"2410e5bf456bcbc11cff4fe2380f515d5fc3a0770b092580eebf771a5927e095\":\"xijshCyQlKixFQMIOxYZzur1SR3rRTEgl5SN0XSLIT5dVGJKYlH7lDnUCQvqYZIT76K5UNlTwEcoxiB1meiLswUg2go4YKgNURKsvkI3xT+ttjIQ7SYlBgqKg3s+tIb02d8rHKYx3Y/teSZidTAa3NXM1YiZIno3TMl4tAkLz58LC8XsHHj6DwC1mr+/gjv6b3BfnasmISzR6LLfM0QjLNRgdrshzSmqgcv7vlBmtqJ9GiGmZs221k3rSAqgpWjYlXtU8XbbESEWXdPd+aTKZ3eDqIOENWByFkrDuvITiC3hMPnmZPPXxP4vTusiE06JMBLbEJhRcMOrIfa1X0kzt+Yqb1tHogXl+u2SSuWUVkzblaZ4c0RWco+R9+7szD4yj8915gC5hOR/I0tKEnV08CSbqgM+e7QAMXYQja/thtzSXB/xoiXkYn9CrXCOpn7rD1A16PBSFfvWKNHrPHpuWhMPHx4JYOQfv+ZyexflG9Lo9GfEtmH1DZ1q62hTFRc0P3K4DqcgNVC4xNbUJicEZoAmJf5ofP4NwNul8jBpWKyO/at6xGzvMB31nKDhz50ogwqHP+M3W5I5y/R3lGaJGZOQCE+3qRI3D5rKJ6bBN7L1YGTu531+7Fda1IGsHdBgnlzuXvu/nCfBMYRdMmscSAsE3YkCszE0kBFg14ACQD/5s7YVvHAAD9URxtLeLU90+vaeJ0FYP7gHOEOzqdIsqGhX3ml4zOmQh8OvRRcK47YUn3ZE1Mh7Ake5F193TSWf2r5W0NjmVgo0sRWTPj69Z9blnWCNyxoQHq0OGn1qxMDPc8Oi8Qa2nJMT9ovUuljxpGfxZJqirVRKx3wCc8EP9Bajz2InTMEDHxx1Ap8WnNmtfcI2mIyG1SXz8K6R5n7WRY4Jk6atRx70UWXjxBk+o5QzWXywSDl4V2J5FbUrMZNbyRLDrdsepVKmFJHH0xVh24wzmU9/xmxoGyD6Zzy2DhvD3d9fqGESW7ptXkFdlodCTv/QIUfgR3zBq/nekRbyGUdp88ILBWJCCJ2kD8iC4fCrek86kX3gfnkOK+T1+mjnBG71xnPDjJ79ytWEElX5uZ8qzIJOurafdgIAL8TGiTUB5YoVgV8rSxgkATYENJMBKhlSbXuBNTsQV+ZeF4cJwXqvMLUACLZA61p8rlNYJBf6+yG7mpQycy1wVZciJIxWtO5tfxz3J5qZFm7LLIBjjz1uMI87IuD2BPOxNqKZWvkaVmtS8aS1go/6eXZkRxdpjWTlR8J0y/q50OzxWu824UxVvGlNnXOIx61WuTAugwS2sHGf6wKxb0a7WG99g9bQ5TMg6AKYI4X9srFDUMXhVWKOlVPFdNPwElS1tLvu8PfK1n4abU+anNZr1aWFPnRzqJ0wCUbu0VuHiLrUMhSijpxialZaTxn4d8N/yLav/oDu+QbEzx4SXy2vyUqY1sxFxqvYCACgUcWg8xg5EfnAWSQqzo0dNDBN9j3S/M3ZZcEQnOcc2wJeL+FPvNT5dPe6lkl9DnKCKyzX0ZTyo97JV4cbKg+/+vC1531KGsV+ag==\",\"96f8b5f4711fbcee9300f36bfc3fe3842d80805f6345fa3757530d919b1a976e\":\"dZHIulWjF9GZ6mtu04pvo4YLOkOQhtE+//l6DpHafrQZHPUjHbhgCDD/OQk5WMpNXsuBM8OWG2IWAWRMrO63tn2R3wk/KoCRMy7Ur+5lN/LiZHBQWKLbfbOq6ZjJluz8z3rNUPBNEHdbU44rf9/EHA36zNjQQ9FoVe8LgwA05tRMK10OWOmyf7cdVMms16kvW3RgXhJtegyXRT0wBznHA4tn+FZLuGsQ7WY7lpWzIJXUq3dEBFzUppyC48KPp4rrt3pvzpcdAR9kHvDTRpxWYZFockg2flgLLsvejp1QEuZ7rHlgT/u9hLW24fxiTd+YLZbTwkyvryLgYPjd2yiTNvek6aj9Kc5b91lmu2CzAlTZ98fOC5EVBh05ILD1aObCQNqp6HL2XZontlmViZzFFN4ZkYbgyBSQtR+2AUyB/B/9GC4xPpm0YfJ0JDS6tofKNde1IGEFTMnVXmEvAyyuKk7fCHIPXIrVTe6RLHLngr/K9dxLUG3nRnu67+JLbNzccRkkw/k+mCBVhoAm5bSjUK2Sb4xnle79xL4YLrVf6pneE85oeEFpYZmvK89BPIOaQ6gSP2PjkKOC8cWKc9d7KQ+1nNzU5qJEARuyllvtaPfALaK4t6+WIfwpSveLCgvc9/adKKK/hcXR0FJLdktJfe+V+zUkT8w72UDqjQhjA5L2rCHhmZ5ZQHSQRpxDAb3Snqw+ubxoNXO8KtzQBZmhfaq6CYWn7hzl6GW1LLL5rQDHJY2b6idvOnUkQvNwfZLfaIjV3p0cDxN1tvl2juNfVMbJw/3X2U80r0QpqJ6mAuqBGSjLYlQqqnvcIO1aeDbarZJXOs3p7Si19ZqEwe9ANCUOdVqqtW9Vlxm9Z/d4TWwV5tDOgtECgT21w4jFH8ZPHPqpOI/2yf5vj4WYMjX/CRr9jMfAxDO6scGd4R9Jk5KXdYK4tOAFs/iwFZBckPddfYcjgIpinrHO8+JPOal5E6Lk4t+4QTANuXI6hW5X8FH4XApgAlw+t2G1DwDD+0kT3584rW6nAGunJubk2ZXvO7ud2o5Dj7xMCQhqHv8oQ5/SMmXHzwqonnqscPiR/+P1Ducg1QFJ3G/eZ7tRwM2Fy/cHraZVORa4U1OWZCflZo8MgMUL8PeunvZMxk2kkvt1T0H8WFuvZwdxDXtHncaCTDooH2ZMQtnXAmIq5JdUe75m0P6GDmDSi7TsB4Nwa+LegiyQd/SAxmsJhEoabtCRxuYMT9Wd7cjjHH4m99kMMxTiJRpQRXeOWx4ODq6Vk1hGFValsO18ZETk8fubB+TZ03rtd+Y0WCVQaLlDnMjTAZ1L9hmySuP0zMdRSvOpWPmhqn76+RmK6+Fjxf/Fsi+5GA+cWS3KEzCtP67zJygQBZ5UVp8jmJX2l7bu0dFYgWeP1G2OIhyer30jfA7/FcFuHlANz+DbyRokh9O55yi4haQDsQkBzdGZDVTBGnw5ik93J7sg0+6+sf5l+d29v7j6bfzOuILSakGAFTjvhfAoXb13SeXitM9ruH3q3f/1AJoPH7pbVqpWWufeFGa6D+Lo4w==\"},\"enclosure_recipients\":{\"96f8b5f4711fbcee9300f36bfc3fe3842d80805f6345fa3757530d919b1a976e\":\"qLIwtOKX2NdavMuXd9sBX3J1mI5BWsg3DytBHZbZF1MKBpae+fjTq1Fk8DalMRk34L1nyHB5Qg1QcyQZeXh2XVjVoY0Ey0Kx3rSC7qDej/OFss3G3JRt8+y3f/KfX2fQWezNUyCKwoXPpN6qFQhATy2ya4+n+2jXgaaE3Qw7s1MmksSdbTll8/+pPH1KuhGJBO0jvdzaFQLgCmNLF8WbHbtmQ26tPWYxPjJFyYgzDhYPaqcAASf3D25jO/+W1XmQZtm/1vnbS+yXX5aJKBmFcEybPFZx7Z2q9l1VSJ5VcqVJBxxMWdGVcwCwsfxJaixpNzj0PpkwrA1J/vArYX3da7LnTgMr32uxyheL5nieWpSCcyjDwrsZYvC6dTBAg260M7EcpUNOFQDMqguUFxlrOLy/OeTKBcmroMuw6jU/8yRIqGCZzsL7ujNVVn5QlMBpxLPzJoBWkndHr5dbQezFBCZHxPqhJR2gYOEbF2e0/fs6i+Vy+L1USTZwEZAvcSWsJkraSX0vnK8UxK5Cjyun88RKul+GVUUa+6k58fqxCro7tiusnP1kffEqUHC2SyYrUXMjgigCn+KKmCJ26Gxy1wm8ZNHUXTGg5WOl7yCOLAuRwrJ227xo11LHClrVYJSvpM5GgV6dU82rtJonEVGEvqg0hAbXMo0/pt1E1V7hZCbseJMLTAKYsiT2zmhn5djJDbZJAAJiI4tCaMKve0s8HFYhB5lR6lQ1vfWdPnhD2l8+lK5mMDQ+MsDARHCLHoaVZS1jqFOe6UEFQvMLUiCoQ2zwLJb2p+EurPX2+Weru9Oqtx8vbXpYQekUPhoDtXVUWDA/Zu2T90EcfGPevJccvAiSr6rpzH05zDj1uof3oCJIlip2BgYk5Sukk3TvR0jlyWFI+Keqz4N1vUKDnxCWFuoNHX/aXQRS17PHnZVQLuZNGEQyXFmH/iwC+ZzFkrKmyUDk6LPaLxXea0PCdmK5ndPwcUzJFgxkhx/sMRd+++cU3Kcp9iaIcLgeoMyQKEAkYQVYGutdjd1tu7sO72EabjoA67h3SWCly3BBq5PMmhiatJmLCI58nY6Zt0d/8gO/aAxk44ul4j6DaOmPtk7vUUrrTYBiJDaGqG06M2TLBvwpXu0cpnrBLEPQt8GaDmzlMWNAzXXX4XCjuCQMibmNN2ni7gL9O1lvjbW4kRkH+NRBdjZNLakSq/hX4YRcaGtx9/0laaElhPudafzxKzuL7bVrXNrD86BPShTyEKMeRAwOyAUHNYEYC4tbgR15uJnMr4YV1pvFd93OPWizbMV5HQMiZSP1dU4O1lDDxremTWwgiCE+vMZOmivQbJ6CZ4L/gnqXHsHvlOtdKXA2zR0ZeFrwEuv8CD4gKZZ1G0n2cfD6lEzHB1d9SVK3QNHVXwNHGSyNoQrYC4DlRFOuH6JZlI+mjtnwpwoJmK+okqNHbtujXVtHpB2uzasFa3s8x/xAM91jGRragTOsZlA++pn4Ti39cVtnY1T51kGS5tVOIRw3sbAQGQf3JDkb1lScw5a6XGhTn3Bsn0EoWI31KWSR9g==\"},\"extensions\":{},\"key_id\":\"959a80191f7640f9ca5a36cffefcfcd7a90c07291d3c940a862a2a990907b503\",\"session_mac\":\"\",\"signature\":\"\"},\"type\":\"SEMP_ENVELOPE\",\"version\":\"1.0.0\"}",
+        "seal_signature_input_prefix_utf8": "SEMP-ENVELOPE:",
+        "seal_signature_hex": "412dcd74ef4367fe1ec56733d76e4edc3edad26a0248afd8104a13c6c6a51cd075efaead287cb63c42e0d4b9ed5963d7de9e8c8d487214a9f9503b568d43120a",
+        "session_mac_hex": "7883ccc9cb0fb00ac80e7205ed61332cb8f3439524538d2c6f51eb248c309bfc"
+      },
+      "expected": {
+        "envelope_json": {
+          "type": "SEMP_ENVELOPE",
+          "version": "1.0.0",
+          "postmark": {
+            "id": "01J7PQPOSTMARKIDXXXXXXXXXXXX",
+            "session_id": "01J7PQSESSIONIDXXXXXXXXXXXXX",
+            "from_domain": "a.example",
+            "to_domain": "b.example",
+            "expires": "2026-05-15T09:00:00Z",
+            "extensions": {}
+          },
+          "seal": {
+            "algorithm": "pq-kyber768-x25519",
+            "key_id": "959a80191f7640f9ca5a36cffefcfcd7a90c07291d3c940a862a2a990907b503",
+            "signature": "QS3NdO9DZ/4exWcz125O3D7a0moCSK/YEEoTxsalHNB1766tKHy2PELg1LntWWPX3p6MjUhyFKn5UDtWjUMSCg==",
+            "session_mac": "eIPMycsPsArIDnIF7WEzLLjzQ5UkU40sb1HrJIwwm/w=",
+            "brief_recipients": {
+              "96f8b5f4711fbcee9300f36bfc3fe3842d80805f6345fa3757530d919b1a976e": "dZHIulWjF9GZ6mtu04pvo4YLOkOQhtE+//l6DpHafrQZHPUjHbhgCDD/OQk5WMpNXsuBM8OWG2IWAWRMrO63tn2R3wk/KoCRMy7Ur+5lN/LiZHBQWKLbfbOq6ZjJluz8z3rNUPBNEHdbU44rf9/EHA36zNjQQ9FoVe8LgwA05tRMK10OWOmyf7cdVMms16kvW3RgXhJtegyXRT0wBznHA4tn+FZLuGsQ7WY7lpWzIJXUq3dEBFzUppyC48KPp4rrt3pvzpcdAR9kHvDTRpxWYZFockg2flgLLsvejp1QEuZ7rHlgT/u9hLW24fxiTd+YLZbTwkyvryLgYPjd2yiTNvek6aj9Kc5b91lmu2CzAlTZ98fOC5EVBh05ILD1aObCQNqp6HL2XZontlmViZzFFN4ZkYbgyBSQtR+2AUyB/B/9GC4xPpm0YfJ0JDS6tofKNde1IGEFTMnVXmEvAyyuKk7fCHIPXIrVTe6RLHLngr/K9dxLUG3nRnu67+JLbNzccRkkw/k+mCBVhoAm5bSjUK2Sb4xnle79xL4YLrVf6pneE85oeEFpYZmvK89BPIOaQ6gSP2PjkKOC8cWKc9d7KQ+1nNzU5qJEARuyllvtaPfALaK4t6+WIfwpSveLCgvc9/adKKK/hcXR0FJLdktJfe+V+zUkT8w72UDqjQhjA5L2rCHhmZ5ZQHSQRpxDAb3Snqw+ubxoNXO8KtzQBZmhfaq6CYWn7hzl6GW1LLL5rQDHJY2b6idvOnUkQvNwfZLfaIjV3p0cDxN1tvl2juNfVMbJw/3X2U80r0QpqJ6mAuqBGSjLYlQqqnvcIO1aeDbarZJXOs3p7Si19ZqEwe9ANCUOdVqqtW9Vlxm9Z/d4TWwV5tDOgtECgT21w4jFH8ZPHPqpOI/2yf5vj4WYMjX/CRr9jMfAxDO6scGd4R9Jk5KXdYK4tOAFs/iwFZBckPddfYcjgIpinrHO8+JPOal5E6Lk4t+4QTANuXI6hW5X8FH4XApgAlw+t2G1DwDD+0kT3584rW6nAGunJubk2ZXvO7ud2o5Dj7xMCQhqHv8oQ5/SMmXHzwqonnqscPiR/+P1Ducg1QFJ3G/eZ7tRwM2Fy/cHraZVORa4U1OWZCflZo8MgMUL8PeunvZMxk2kkvt1T0H8WFuvZwdxDXtHncaCTDooH2ZMQtnXAmIq5JdUe75m0P6GDmDSi7TsB4Nwa+LegiyQd/SAxmsJhEoabtCRxuYMT9Wd7cjjHH4m99kMMxTiJRpQRXeOWx4ODq6Vk1hGFValsO18ZETk8fubB+TZ03rtd+Y0WCVQaLlDnMjTAZ1L9hmySuP0zMdRSvOpWPmhqn76+RmK6+Fjxf/Fsi+5GA+cWS3KEzCtP67zJygQBZ5UVp8jmJX2l7bu0dFYgWeP1G2OIhyer30jfA7/FcFuHlANz+DbyRokh9O55yi4haQDsQkBzdGZDVTBGnw5ik93J7sg0+6+sf5l+d29v7j6bfzOuILSakGAFTjvhfAoXb13SeXitM9ruH3q3f/1AJoPH7pbVqpWWufeFGa6D+Lo4w==",
+              "2410e5bf456bcbc11cff4fe2380f515d5fc3a0770b092580eebf771a5927e095": "xijshCyQlKixFQMIOxYZzur1SR3rRTEgl5SN0XSLIT5dVGJKYlH7lDnUCQvqYZIT76K5UNlTwEcoxiB1meiLswUg2go4YKgNURKsvkI3xT+ttjIQ7SYlBgqKg3s+tIb02d8rHKYx3Y/teSZidTAa3NXM1YiZIno3TMl4tAkLz58LC8XsHHj6DwC1mr+/gjv6b3BfnasmISzR6LLfM0QjLNRgdrshzSmqgcv7vlBmtqJ9GiGmZs221k3rSAqgpWjYlXtU8XbbESEWXdPd+aTKZ3eDqIOENWByFkrDuvITiC3hMPnmZPPXxP4vTusiE06JMBLbEJhRcMOrIfa1X0kzt+Yqb1tHogXl+u2SSuWUVkzblaZ4c0RWco+R9+7szD4yj8915gC5hOR/I0tKEnV08CSbqgM+e7QAMXYQja/thtzSXB/xoiXkYn9CrXCOpn7rD1A16PBSFfvWKNHrPHpuWhMPHx4JYOQfv+ZyexflG9Lo9GfEtmH1DZ1q62hTFRc0P3K4DqcgNVC4xNbUJicEZoAmJf5ofP4NwNul8jBpWKyO/at6xGzvMB31nKDhz50ogwqHP+M3W5I5y/R3lGaJGZOQCE+3qRI3D5rKJ6bBN7L1YGTu531+7Fda1IGsHdBgnlzuXvu/nCfBMYRdMmscSAsE3YkCszE0kBFg14ACQD/5s7YVvHAAD9URxtLeLU90+vaeJ0FYP7gHOEOzqdIsqGhX3ml4zOmQh8OvRRcK47YUn3ZE1Mh7Ake5F193TSWf2r5W0NjmVgo0sRWTPj69Z9blnWCNyxoQHq0OGn1qxMDPc8Oi8Qa2nJMT9ovUuljxpGfxZJqirVRKx3wCc8EP9Bajz2InTMEDHxx1Ap8WnNmtfcI2mIyG1SXz8K6R5n7WRY4Jk6atRx70UWXjxBk+o5QzWXywSDl4V2J5FbUrMZNbyRLDrdsepVKmFJHH0xVh24wzmU9/xmxoGyD6Zzy2DhvD3d9fqGESW7ptXkFdlodCTv/QIUfgR3zBq/nekRbyGUdp88ILBWJCCJ2kD8iC4fCrek86kX3gfnkOK+T1+mjnBG71xnPDjJ79ytWEElX5uZ8qzIJOurafdgIAL8TGiTUB5YoVgV8rSxgkATYENJMBKhlSbXuBNTsQV+ZeF4cJwXqvMLUACLZA61p8rlNYJBf6+yG7mpQycy1wVZciJIxWtO5tfxz3J5qZFm7LLIBjjz1uMI87IuD2BPOxNqKZWvkaVmtS8aS1go/6eXZkRxdpjWTlR8J0y/q50OzxWu824UxVvGlNnXOIx61WuTAugwS2sHGf6wKxb0a7WG99g9bQ5TMg6AKYI4X9srFDUMXhVWKOlVPFdNPwElS1tLvu8PfK1n4abU+anNZr1aWFPnRzqJ0wCUbu0VuHiLrUMhSijpxialZaTxn4d8N/yLav/oDu+QbEzx4SXy2vyUqY1sxFxqvYCACgUcWg8xg5EfnAWSQqzo0dNDBN9j3S/M3ZZcEQnOcc2wJeL+FPvNT5dPe6lkl9DnKCKyzX0ZTyo97JV4cbKg+/+vC1531KGsV+ag=="
+            },
+            "enclosure_recipients": {
+              "96f8b5f4711fbcee9300f36bfc3fe3842d80805f6345fa3757530d919b1a976e": "qLIwtOKX2NdavMuXd9sBX3J1mI5BWsg3DytBHZbZF1MKBpae+fjTq1Fk8DalMRk34L1nyHB5Qg1QcyQZeXh2XVjVoY0Ey0Kx3rSC7qDej/OFss3G3JRt8+y3f/KfX2fQWezNUyCKwoXPpN6qFQhATy2ya4+n+2jXgaaE3Qw7s1MmksSdbTll8/+pPH1KuhGJBO0jvdzaFQLgCmNLF8WbHbtmQ26tPWYxPjJFyYgzDhYPaqcAASf3D25jO/+W1XmQZtm/1vnbS+yXX5aJKBmFcEybPFZx7Z2q9l1VSJ5VcqVJBxxMWdGVcwCwsfxJaixpNzj0PpkwrA1J/vArYX3da7LnTgMr32uxyheL5nieWpSCcyjDwrsZYvC6dTBAg260M7EcpUNOFQDMqguUFxlrOLy/OeTKBcmroMuw6jU/8yRIqGCZzsL7ujNVVn5QlMBpxLPzJoBWkndHr5dbQezFBCZHxPqhJR2gYOEbF2e0/fs6i+Vy+L1USTZwEZAvcSWsJkraSX0vnK8UxK5Cjyun88RKul+GVUUa+6k58fqxCro7tiusnP1kffEqUHC2SyYrUXMjgigCn+KKmCJ26Gxy1wm8ZNHUXTGg5WOl7yCOLAuRwrJ227xo11LHClrVYJSvpM5GgV6dU82rtJonEVGEvqg0hAbXMo0/pt1E1V7hZCbseJMLTAKYsiT2zmhn5djJDbZJAAJiI4tCaMKve0s8HFYhB5lR6lQ1vfWdPnhD2l8+lK5mMDQ+MsDARHCLHoaVZS1jqFOe6UEFQvMLUiCoQ2zwLJb2p+EurPX2+Weru9Oqtx8vbXpYQekUPhoDtXVUWDA/Zu2T90EcfGPevJccvAiSr6rpzH05zDj1uof3oCJIlip2BgYk5Sukk3TvR0jlyWFI+Keqz4N1vUKDnxCWFuoNHX/aXQRS17PHnZVQLuZNGEQyXFmH/iwC+ZzFkrKmyUDk6LPaLxXea0PCdmK5ndPwcUzJFgxkhx/sMRd+++cU3Kcp9iaIcLgeoMyQKEAkYQVYGutdjd1tu7sO72EabjoA67h3SWCly3BBq5PMmhiatJmLCI58nY6Zt0d/8gO/aAxk44ul4j6DaOmPtk7vUUrrTYBiJDaGqG06M2TLBvwpXu0cpnrBLEPQt8GaDmzlMWNAzXXX4XCjuCQMibmNN2ni7gL9O1lvjbW4kRkH+NRBdjZNLakSq/hX4YRcaGtx9/0laaElhPudafzxKzuL7bVrXNrD86BPShTyEKMeRAwOyAUHNYEYC4tbgR15uJnMr4YV1pvFd93OPWizbMV5HQMiZSP1dU4O1lDDxremTWwgiCE+vMZOmivQbJ6CZ4L/gnqXHsHvlOtdKXA2zR0ZeFrwEuv8CD4gKZZ1G0n2cfD6lEzHB1d9SVK3QNHVXwNHGSyNoQrYC4DlRFOuH6JZlI+mjtnwpwoJmK+okqNHbtujXVtHpB2uzasFa3s8x/xAM91jGRragTOsZlA++pn4Ti39cVtnY1T51kGS5tVOIRw3sbAQGQf3JDkb1lScw5a6XGhTn3Bsn0EoWI31KWSR9g=="
+            },
+            "extensions": {}
+          },
+          "brief": "4+Pj4+Pj4+Pj4+PjjgfGcEyq6r5Wz+xZnofqgsTsW2w7VSsKOGVAtcQg1pj1NpsPD+8jR8JJnuejflRtM8e1tKqDpW1IV+5oJQb4tjDsuNi1dKI/tWmmoOJt7i8T7oNudxx24+E47sa4EmGdpzKecFK8gvvK6IbWoUdBizh42Pre+xz9f2BcaDQYTMM5bDG2Jw==",
+          "enclosure": "5OTk5OTk5OTk5OTkLBOnjXSU0J/fWbO9fZMIF+AHKNrqYGO9PN8Y8fhbQFTFpmyw8mgLNSt57dT4D3dkIEM2GPg7ZZP5rEmo42bDo2EkLkWE5i+eui2hdIaJJiodQB8IbES9mN0qSUPrSI65mQt/VJot3sC/fF7ImcWLvyrdhCD1fdMrkETWHP2eNhKM3sd8tMu81SiYvT/jYRDBCDWTn2zsfpSRbVsRJGxOSMvlrbRr7ty6nH7g3NI+l52/jspDV3R68kwRuriZ6Poe879IfkUE0+bSsEroPlIxuduwv93s3fxBrlUKKUrYdBYes3fWYN41w83962kmoWxFQGXefJHi5z7YWIqrSpIc20j4+LWEsC9dBFDgBZyyOe2oGc9DqXXiU0jus5Sx6kmYcO+KXY+yc2WXX/AWsaBcDKArKEaiKHyBzQnywWVCQXGNPk3Blj5RtsYHGUXIOvqMK8g3brlCNmN8PJXMWuT1tPjyQ05TwC2RRjNLGH9s6/VNM6EA5siMQ4KidynLGpq1xBBsGs0B3RF4wYfEOq/TruxtV+3JzAwAoJb3o2fYvFvCjOTt4IWifE/BIMw5LEtuVXVzHmmVSX3+7OM="
         },
         "round_trip_recovers_brief": true,
         "round_trip_recovers_enclosure": true,

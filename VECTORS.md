@@ -950,14 +950,27 @@ omitted from this vector to keep the byte trace minimal; both layers are
 covered by their own §3.3 / §3.4 vectors and compose with this vector
 deterministically when applied.
 
+**Two vectors, one per suite:**
+
+- `envelope-roundtrip-baseline-single-recipient`: the baseline
+  (`x25519-chacha20-poly1305`) flow described above. Seal wraps use
+  X25519 ephemeral key agreement; brief/enclosure AEAD is ChaCha20-Poly1305
+  with `postmark.id` as AAD.
+- `envelope-roundtrip-pq-single-recipient`: identical compose flow under
+  the post-quantum suite (`pq-kyber768-x25519`). Seal wraps use the
+  Kyber768+X25519 hybrid KEM per §4.4.1's PQ branch; brief/enclosure AEAD
+  is still ChaCha20-Poly1305 (per the §7.3 suite table). Recipient public
+  keys are the 1216-byte concatenation `kyber_ek (1184) || x25519_pub (32)`,
+  recipient private keys are the 2432-byte concatenation
+  `kyber_dk (2400) || x25519_priv (32)`. The Kyber encaps randomness `m` is
+  pinned alongside the X25519 ephemeral private keys so each of the three
+  wrapped seal entries is byte-deterministic.
+
 **Bytes:** see [`vectors/v1.0.0/envelope-roundtrip.json`](vectors/v1.0.0/envelope-roundtrip.json).
-The `intermediates` block records the canonical brief, canonical
+Each vector's `intermediates` block records the canonical brief, canonical
 enclosure, canonical envelope-for-signature bytes, the seal-signature
 hex, and the session-MAC hex so an implementer who fails byte equality
 can drill into the specific construction step that diverged.
-
-The post-quantum suite (`pq-kyber768-x25519`) envelope round-trip lands
-in a follow-up once Kyber768 is wired into the generator.
 
 ### 17.5 Signed Delivery Receipt
 
