@@ -47,6 +47,30 @@ Every vectors file has this top-level shape:
 * `spec_reference` — pointer to the normative spec section.
 * `vectors[]` — one entry per test case. Each carries its own `spec_reference` so a failing test points the implementer at the relevant text.
 
+Some vectors describe a single operation (one `inputs`, one `expected`); others enumerate a table of related cases. The two supported shapes:
+
+```json
+// Single-case shape:
+{
+  "id": "...",
+  "inputs":   { "x_hex": "..." },
+  "expected": { "y_hex": "..." }
+}
+
+// Table shape (used when the same algorithm has many small input/output pairs,
+// e.g. envelope size buckets):
+{
+  "id": "...",
+  "rule": "human-readable summary of the algorithm",
+  "samples": [
+    { "input_field_a": ..., "expected_field_b": ... },
+    { "input_field_a": ..., "expected_field_b": ... }
+  ]
+}
+```
+
+A runner SHOULD detect which shape a vector uses by checking for `samples` first, then falling back to `inputs`/`expected`.
+
 Inputs and expected outputs are **encoded as strings** with explicit encoding suffixes:
 
 | Suffix       | Encoding                                                |
@@ -77,8 +101,9 @@ A reference runner ships with [`semp.dev/semp-go`](https://github.com/semp-dev/s
 | 1     | HKDF-SHA-512 key derivation     | `hkdf.json`                | seeded        |
 | 1     | HMAC-SHA-256 envelope MAC       | `session-mac.json`         | seeded        |
 | 1     | Confirmation hash               | `confirmation-hash.json`   | seeded        |
-| 1     | Proof of work                   | `pow.json`                 | TODO          |
+| 1     | Proof of work                   | `pow.json`                 | seeded        |
 | 2     | Canonical JSON serialization    | `envelope-canonical.json`  | seeded        |
+| 2     | Envelope size + recipient buckets | `envelope-buckets.json`  | seeded        |
 | 3     | Seal wrap / unwrap (round-trip) | `seal-roundtrip.json`      | TODO          |
 | 3     | Envelope compose / open         | `envelope-roundtrip.json`  | TODO          |
 | 4     | Handshake message bytes         | `handshake-*.json`         | TODO          |

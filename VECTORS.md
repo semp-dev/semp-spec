@@ -175,58 +175,32 @@ entry `id: envelope-canonical-with-extensions`.
 
 Reference: `ENVELOPE.md` §2.4.1.
 
-These vectors verify that an implementation selects the correct
-power-of-two bucket for a given unpadded envelope size.
+**Rule:** `bucket = max(1024, smallest power of two >= unpadded_size)`. The
+final value is then clamped to the operator-configured `max_envelope_size`
+(typically 25 MiB / 26 214 400 bytes).
 
-| Unpadded envelope size (bytes) | Selected bucket (bytes) |
-|--------------------------------|-------------------------|
-| 1                              | 1024                    |
-| 1023                           | 1024                    |
-| 1024                           | 1024                    |
-| 1025                           | 2048                    |
-| 2048                           | 2048                    |
-| 2049                           | 4096                    |
-| 4096                           | 4096                    |
-| 4097                           | 8192                    |
-| 16383                          | 16384                   |
-| 16384                          | 16384                   |
-| 16385                          | 32768                   |
-| 1000000                        | 1048576                 |
-| 1048576                        | 1048576                 |
-| 1048577                        | 2097152                 |
-| 16777217                       | `max_envelope_size`     |
+The padding-byte count is `selected_bucket - unpadded_size`. The padding
+bytes, base64-encoded in `padding`, will enlarge the envelope by a factor
+slightly larger than 1 (4 base64 output bytes per 3 input bytes plus JSON
+string overhead); implementations MUST iterate to convergence or compute the
+padding budget with the base64 overhead accounted for, so that the final
+serialized envelope matches the selected bucket exactly.
 
-The padding-byte count is `selected_bucket - unpadded_size`. The
-padding bytes, base64-encoded in `padding`, will enlarge the envelope
-by a factor slightly larger than 1 (4 base64 output bytes per 3 input
-bytes plus JSON string overhead); implementations MUST iterate to
-convergence or compute the padding budget with the base64 overhead
-accounted for, so that the final serialized envelope matches the
-selected bucket exactly.
+**Bytes:** see [`vectors/v1.0.0/envelope-buckets.json`](vectors/v1.0.0/envelope-buckets.json),
+entry `id: envelope-size-buckets` (`samples` array of unpadded-size →
+bucket-size mappings).
 
 ### 3.4 Vector: Recipient-Count Bucket Computation
 
 Reference: `ENVELOPE.md` §4.4.1.
 
-These vectors verify that an implementation selects the correct
-power-of-two recipient bucket for a given count of real recipient
-client keys.
+**Rule:** `bucket = 1` if (`real_recipients == 1` and the single recipient is
+single-domain and not part of a group send); otherwise the next power of two
+with floor 2 and ceiling 1024. Real counts above 1024 force recomposition into
+multiple envelopes.
 
-| Real recipients | `enclosure_recipients` entries after padding |
-|-----------------|----------------------------------------------|
-| 1 (single-domain, not group)         | 1   (padding exception applies) |
-| 1 (group or multi-domain)            | 2                               |
-| 2                                    | 2                               |
-| 3                                    | 4                               |
-| 4                                    | 4                               |
-| 5                                    | 8                               |
-| 9                                    | 16                              |
-| 16                                   | 16                              |
-| 17                                   | 32                              |
-| 65                                   | 128                             |
-| 129                                  | 256                             |
-| 1024                                 | 1024                            |
-| 1025                                 | (exceeds bucket ceiling; recomposition required) |
+**Bytes:** see [`vectors/v1.0.0/envelope-buckets.json`](vectors/v1.0.0/envelope-buckets.json),
+entry `id: recipient-count-buckets`.
 
 ---
 
@@ -239,80 +213,27 @@ challenge solutions.
 
 ### 4.1 Vector: Valid Proof of Work Solution (Difficulty 16)
 
-**Inputs:**
-
-```
-prefix (raw bytes, hex): 4a8f2c1d3b5e7a9f0d6c8b4e2a1f3d5c
-challenge_id:            01JTEST22222222222222222222
-nonce (raw bytes, hex):  000000000000adb7
-```
-
-**Preimage construction:**
-
-The preimage is the UTF-8 encoding of:
-```
-<base64(prefix)> || ":" || <challenge_id> || ":" || <base64(nonce)>
-```
-
-Where:
-```
-base64(prefix):       So8sHTteep8NbItOKh89XA==
-challenge_id:         01JTEST22222222222222222222
-base64(nonce):        AAAAAAAArbc=
-```
-
-Full preimage string:
-```
-So8sHTteep8NbItOKh89XA==:01JTEST22222222222222222222:AAAAAAAArbc=
-```
-
-**Expected hash:**
-
-```
-SHA-256(preimage) (hex): 0000cfa08ac13df837194fecda38add1
-                         267f3682fc7981cfab886d7c7c00caf4
-```
-
-First two bytes are `0x00 0x00` (16 leading zero bits).
-
-**Verification steps:**
+**Verification procedure:**
 
 1. Confirm `challenge_id` matches an issued, unexpired challenge.
-2. Reconstruct the preimage string from the components.
+2. Reconstruct the preimage string from the components per §4.3.
 3. Compute SHA-256 over the UTF-8 bytes of the preimage string.
-4. Confirm the hash has at least 16 leading zero bits (first two bytes are
-   `0x00`).
+4. Confirm the hash has at least N leading zero bits, where N is the
+   advertised difficulty.
 5. Confirm the submitted hash matches the computed hash.
 
-**Result:** PASS. The hash has exactly 16 leading zero bits, satisfying
-difficulty 16.
+**Bytes:** see [`vectors/v1.0.0/pow.json`](vectors/v1.0.0/pow.json), entry
+`id: pow-difficulty-16-valid`. The JSON carries the prefix (hex and base64),
+challenge_id, nonce, full preimage string, expected hash, and computed
+`leading_zero_bits` (16 for this vector → satisfies difficulty 16).
 
 ### 4.2 Vector: Failed Proof of Work Solution (Insufficient Difficulty)
 
-**Inputs:**
+Same prefix and challenge_id as §4.1, with a nonce that produces only 7
+leading zero bits — short of the required 16. Implementations MUST reject.
 
-Same prefix and challenge_id as section 4.1.
-
-```
-nonce (raw bytes, hex): 0000000000000001
-```
-
-**Preimage:**
-```
-So8sHTteep8NbItOKh89XA==:01JTEST22222222222222222222:AAAAAAAAAAE=
-```
-
-**Expected hash:**
-
-```
-SHA-256(preimage) (hex): 011599577d9ecb9005422686c7635d32
-                         eb2b2f7f1c8b3972ff102b497f9ae7c6
-```
-
-First byte is `0x01` (only 7 leading zero bits).
-
-**Result:** FAIL. The hash has only 7 leading zero bits, which is fewer
-than the required 16. The solution MUST be rejected.
+**Bytes:** see [`vectors/v1.0.0/pow.json`](vectors/v1.0.0/pow.json), entry
+`id: pow-difficulty-16-insufficient`.
 
 ### 4.3 Proof of Work Preimage Construction Reference
 

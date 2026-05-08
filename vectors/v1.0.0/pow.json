@@ -1,0 +1,48 @@
+{
+  "version": "1.0.0",
+  "category": "pow",
+  "description": "Proof-of-work challenge solution verification. Source of truth: VECTORS.md §4.",
+  "spec_reference": "VECTORS.md §4; HANDSHAKE.md §2.2b; REPUTATION.md §8.3",
+  "preimage_construction": "base64(prefix) || ':' || challenge_id || ':' || base64(nonce), encoded as UTF-8",
+  "hash": "SHA-256",
+  "vectors": [
+    {
+      "id": "pow-difficulty-16-valid",
+      "description": "Valid solution at difficulty 16: the SHA-256 of the preimage has at least 16 leading zero bits.",
+      "spec_reference": "VECTORS.md §4.1",
+      "inputs": {
+        "prefix_hex": "4a8f2c1d3b5e7a9f0d6c8b4e2a1f3d5c",
+        "prefix_b64": "So8sHTteep8NbItOKh89XA==",
+        "challenge_id": "01JTEST22222222222222222222",
+        "nonce_hex": "000000000000adb7",
+        "nonce_b64": "AAAAAAAArbc=",
+        "preimage_utf8": "So8sHTteep8NbItOKh89XA==:01JTEST22222222222222222222:AAAAAAAArbc=",
+        "required_difficulty_bits": 16
+      },
+      "expected": {
+        "hash_hex": "0000cfa08ac13df837194fecda38add1267f3682fc7981cfab886d7c7c00caf4",
+        "leading_zero_bits": 16,
+        "valid": true
+      }
+    },
+    {
+      "id": "pow-difficulty-16-insufficient",
+      "description": "Insufficient solution: same prefix and challenge_id as the valid case, but with a nonce that produces only a few leading zero bits — the implementation MUST reject.",
+      "spec_reference": "VECTORS.md §4.2",
+      "inputs": {
+        "prefix_hex": "4a8f2c1d3b5e7a9f0d6c8b4e2a1f3d5c",
+        "prefix_b64": "So8sHTteep8NbItOKh89XA==",
+        "challenge_id": "01JTEST22222222222222222222",
+        "nonce_hex": "0000000000000001",
+        "nonce_b64": "AAAAAAAAAAE=",
+        "preimage_utf8": "So8sHTteep8NbItOKh89XA==:01JTEST22222222222222222222:AAAAAAAAAAE=",
+        "required_difficulty_bits": 16
+      },
+      "expected": {
+        "hash_hex": "011599577d9ecb9005422686c7635d32eb2b2f7f1c8b3972ff102b497f9ae7c6",
+        "leading_zero_bits": 7,
+        "valid": false
+      }
+    }
+  ]
+}

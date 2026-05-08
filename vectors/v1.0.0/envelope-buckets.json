@@ -1,0 +1,152 @@
+{
+  "version": "1.0.0",
+  "category": "envelope-buckets",
+  "description": "Envelope size and recipient-count bucket selection. Source of truth: VECTORS.md §3.3 and §3.4.",
+  "spec_reference": "VECTORS.md §3.3, §3.4; ENVELOPE.md §2.4.1, §4.4.1",
+  "vectors": [
+    {
+      "id": "envelope-size-buckets",
+      "description": "Maps unpadded envelope size in bytes to the selected power-of-two padding bucket. Rule: next power of two with minimum 1024.",
+      "spec_reference": "VECTORS.md §3.3; ENVELOPE.md §2.4.1",
+      "rule": "bucket = max(1024, smallest power of two >= unpadded_size)",
+      "samples": [
+        {
+          "unpadded_size_bytes": 1,
+          "bucket_size_bytes": 1024
+        },
+        {
+          "unpadded_size_bytes": 1023,
+          "bucket_size_bytes": 1024
+        },
+        {
+          "unpadded_size_bytes": 1024,
+          "bucket_size_bytes": 1024
+        },
+        {
+          "unpadded_size_bytes": 1025,
+          "bucket_size_bytes": 2048
+        },
+        {
+          "unpadded_size_bytes": 2048,
+          "bucket_size_bytes": 2048
+        },
+        {
+          "unpadded_size_bytes": 2049,
+          "bucket_size_bytes": 4096
+        },
+        {
+          "unpadded_size_bytes": 4096,
+          "bucket_size_bytes": 4096
+        },
+        {
+          "unpadded_size_bytes": 4097,
+          "bucket_size_bytes": 8192
+        },
+        {
+          "unpadded_size_bytes": 16383,
+          "bucket_size_bytes": 16384
+        },
+        {
+          "unpadded_size_bytes": 16384,
+          "bucket_size_bytes": 16384
+        },
+        {
+          "unpadded_size_bytes": 16385,
+          "bucket_size_bytes": 32768
+        },
+        {
+          "unpadded_size_bytes": 1000000,
+          "bucket_size_bytes": 1048576
+        },
+        {
+          "unpadded_size_bytes": 1048576,
+          "bucket_size_bytes": 1048576
+        },
+        {
+          "unpadded_size_bytes": 1048577,
+          "bucket_size_bytes": 2097152
+        },
+        {
+          "unpadded_size_bytes": 16777217,
+          "bucket_size_bytes": 33554432,
+          "note": "Computed bucket exceeds typical max_envelope_size; implementations clamp to the operator-configured maximum."
+        }
+      ]
+    },
+    {
+      "id": "recipient-count-buckets",
+      "description": "Maps the real recipient client-key count to the padded enclosure_recipients entry count. Rule: next power of two with floor 2; floor relaxes to 1 only when there is exactly one recipient and that recipient is single-domain (not a group send and not multi-domain). Real counts above 1024 force recomposition into multiple envelopes.",
+      "spec_reference": "VECTORS.md §3.4; ENVELOPE.md §4.4.1",
+      "rule": "bucket = 1 if (real == 1 and single_domain_not_group) else min(1024, smallest power of two >= max(2, real)); real > 1024 -> recomposition required",
+      "samples": [
+        {
+          "real_recipients": 1,
+          "single_domain_not_group": true,
+          "bucket_count": 1,
+          "note": "single-domain non-group: padding exception applies"
+        },
+        {
+          "real_recipients": 1,
+          "single_domain_not_group": false,
+          "bucket_count": 2
+        },
+        {
+          "real_recipients": 2,
+          "single_domain_not_group": false,
+          "bucket_count": 2
+        },
+        {
+          "real_recipients": 3,
+          "single_domain_not_group": false,
+          "bucket_count": 4
+        },
+        {
+          "real_recipients": 4,
+          "single_domain_not_group": false,
+          "bucket_count": 4
+        },
+        {
+          "real_recipients": 5,
+          "single_domain_not_group": false,
+          "bucket_count": 8
+        },
+        {
+          "real_recipients": 9,
+          "single_domain_not_group": false,
+          "bucket_count": 16
+        },
+        {
+          "real_recipients": 16,
+          "single_domain_not_group": false,
+          "bucket_count": 16
+        },
+        {
+          "real_recipients": 17,
+          "single_domain_not_group": false,
+          "bucket_count": 32
+        },
+        {
+          "real_recipients": 65,
+          "single_domain_not_group": false,
+          "bucket_count": 128
+        },
+        {
+          "real_recipients": 129,
+          "single_domain_not_group": false,
+          "bucket_count": 256
+        },
+        {
+          "real_recipients": 1024,
+          "single_domain_not_group": false,
+          "bucket_count": 1024
+        },
+        {
+          "real_recipients": 1025,
+          "single_domain_not_group": false,
+          "bucket_count": "exceeds bucket ceiling; recomposition required",
+          "note": "recomposition into multiple envelopes required"
+        }
+      ]
+    }
+  ]
+}

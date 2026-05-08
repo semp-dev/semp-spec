@@ -23,6 +23,7 @@ construction logic and is intentionally not generated here yet.
 from __future__ import annotations
 
 import argparse
+import base64
 import copy
 import difflib
 import hashlib
@@ -398,6 +399,227 @@ def build_confirmation_hash_json() -> dict:
     }
 
 
+# ---- Envelope bucket vectors ------------------------------------------------
+
+
+def envelope_size_bucket(size: int) -> int:
+    """ENVELOPE.md §2.4.1: next power of 2, minimum 1024.
+
+    Implementations clamp the final value to the operator-configured
+    `max_envelope_size` (typically 25 MiB / 26214400 bytes). The clamp
+    happens at the deployment boundary, not in this function — the
+    raw next-power-of-2 value is the canonical mathematical answer.
+    """
+    bucket = 1024
+    while bucket < size:
+        bucket *= 2
+    return bucket
+
+
+def recipient_count_bucket(real_recipients: int, single_domain_not_group: bool) -> int | str:
+    """ENVELOPE.md §4.4.1: next power of 2 with floor 2 (or 1 for the
+    single-domain non-group case), ceiling 1024."""
+    if real_recipients == 1 and single_domain_not_group:
+        return 1
+    if real_recipients > 1024:
+        return "exceeds bucket ceiling; recomposition required"
+    bucket = 2
+    while bucket < real_recipients:
+        bucket *= 2
+    return bucket
+
+
+def build_envelope_buckets_json() -> dict:
+    size_inputs = [
+        1, 1023, 1024, 1025, 2048, 2049, 4096, 4097,
+        16383, 16384, 16385, 1000000, 1048576, 1048577, 16777217,
+    ]
+    size_samples = []
+    for size in size_inputs:
+        bucket = envelope_size_bucket(size)
+        sample = {"unpadded_size_bytes": size, "bucket_size_bytes": bucket}
+        if size > 16777216:
+            sample["note"] = (
+                "Computed bucket exceeds typical max_envelope_size; "
+                "implementations clamp to the operator-configured maximum."
+            )
+        size_samples.append(sample)
+
+    recipient_cases = [
+        (1, True),
+        (1, False),
+        (2, False),
+        (3, False),
+        (4, False),
+        (5, False),
+        (9, False),
+        (16, False),
+        (17, False),
+        (65, False),
+        (129, False),
+        (1024, False),
+        (1025, False),
+    ]
+    recipient_samples = []
+    for real, single in recipient_cases:
+        bucket = recipient_count_bucket(real, single)
+        sample = {
+            "real_recipients": real,
+            "single_domain_not_group": single,
+            "bucket_count": bucket,
+        }
+        if real == 1 and single:
+            sample["note"] = "single-domain non-group: padding exception applies"
+        elif isinstance(bucket, str):
+            sample["note"] = "recomposition into multiple envelopes required"
+        recipient_samples.append(sample)
+
+    return {
+        "version": "1.0.0",
+        "category": "envelope-buckets",
+        "description": (
+            "Envelope size and recipient-count bucket selection. Source of "
+            "truth: VECTORS.md §3.3 and §3.4."
+        ),
+        "spec_reference": "VECTORS.md §3.3, §3.4; ENVELOPE.md §2.4.1, §4.4.1",
+        "vectors": [
+            {
+                "id": "envelope-size-buckets",
+                "description": (
+                    "Maps unpadded envelope size in bytes to the selected "
+                    "power-of-two padding bucket. Rule: next power of two with "
+                    "minimum 1024."
+                ),
+                "spec_reference": "VECTORS.md §3.3; ENVELOPE.md §2.4.1",
+                "rule": "bucket = max(1024, smallest power of two >= unpadded_size)",
+                "samples": size_samples,
+            },
+            {
+                "id": "recipient-count-buckets",
+                "description": (
+                    "Maps the real recipient client-key count to the padded "
+                    "enclosure_recipients entry count. Rule: next power of two "
+                    "with floor 2; floor relaxes to 1 only when there is exactly "
+                    "one recipient and that recipient is single-domain (not a "
+                    "group send and not multi-domain). Real counts above 1024 "
+                    "force recomposition into multiple envelopes."
+                ),
+                "spec_reference": "VECTORS.md §3.4; ENVELOPE.md §4.4.1",
+                "rule": (
+                    "bucket = 1 if (real == 1 and single_domain_not_group) "
+                    "else min(1024, smallest power of two >= max(2, real)); "
+                    "real > 1024 -> recomposition required"
+                ),
+                "samples": recipient_samples,
+            },
+        ],
+    }
+
+
+# ---- Proof-of-work vectors --------------------------------------------------
+
+
+def pow_preimage(prefix: bytes, challenge_id: str, nonce: bytes) -> bytes:
+    """HANDSHAKE.md §2.2b preimage construction:
+    base64(prefix) || ":" || challenge_id || ":" || base64(nonce), UTF-8."""
+    s = (
+        base64.b64encode(prefix).decode("ascii")
+        + ":" + challenge_id + ":"
+        + base64.b64encode(nonce).decode("ascii")
+    )
+    return s.encode("utf-8")
+
+
+def leading_zero_bits(h: bytes) -> int:
+    bits = 0
+    for byte in h:
+        if byte == 0:
+            bits += 8
+            continue
+        for i in range(8):
+            if (byte >> (7 - i)) & 1:
+                return bits + i
+        return bits + 8  # unreachable
+    return bits
+
+
+def build_pow_json() -> dict:
+    prefix = bytes.fromhex("4a8f2c1d3b5e7a9f0d6c8b4e2a1f3d5c")
+    challenge_id = "01JTEST22222222222222222222"
+
+    valid_nonce = bytes.fromhex("000000000000adb7")
+    valid_preimage = pow_preimage(prefix, challenge_id, valid_nonce)
+    valid_hash = sha256(valid_preimage)
+    valid_zb = leading_zero_bits(valid_hash)
+
+    failed_nonce = bytes.fromhex("0000000000000001")
+    failed_preimage = pow_preimage(prefix, challenge_id, failed_nonce)
+    failed_hash = sha256(failed_preimage)
+    failed_zb = leading_zero_bits(failed_hash)
+
+    return {
+        "version": "1.0.0",
+        "category": "pow",
+        "description": (
+            "Proof-of-work challenge solution verification. Source of truth: "
+            "VECTORS.md §4."
+        ),
+        "spec_reference": "VECTORS.md §4; HANDSHAKE.md §2.2b; REPUTATION.md §8.3",
+        "preimage_construction": (
+            "base64(prefix) || ':' || challenge_id || ':' || base64(nonce), "
+            "encoded as UTF-8"
+        ),
+        "hash": "SHA-256",
+        "vectors": [
+            {
+                "id": "pow-difficulty-16-valid",
+                "description": (
+                    "Valid solution at difficulty 16: the SHA-256 of the "
+                    "preimage has at least 16 leading zero bits."
+                ),
+                "spec_reference": "VECTORS.md §4.1",
+                "inputs": {
+                    "prefix_hex": prefix.hex(),
+                    "prefix_b64": base64.b64encode(prefix).decode("ascii"),
+                    "challenge_id": challenge_id,
+                    "nonce_hex": valid_nonce.hex(),
+                    "nonce_b64": base64.b64encode(valid_nonce).decode("ascii"),
+                    "preimage_utf8": valid_preimage.decode("utf-8"),
+                    "required_difficulty_bits": 16,
+                },
+                "expected": {
+                    "hash_hex": valid_hash.hex(),
+                    "leading_zero_bits": valid_zb,
+                    "valid": valid_zb >= 16,
+                },
+            },
+            {
+                "id": "pow-difficulty-16-insufficient",
+                "description": (
+                    "Insufficient solution: same prefix and challenge_id as the "
+                    "valid case, but with a nonce that produces only a few "
+                    "leading zero bits — the implementation MUST reject."
+                ),
+                "spec_reference": "VECTORS.md §4.2",
+                "inputs": {
+                    "prefix_hex": prefix.hex(),
+                    "prefix_b64": base64.b64encode(prefix).decode("ascii"),
+                    "challenge_id": challenge_id,
+                    "nonce_hex": failed_nonce.hex(),
+                    "nonce_b64": base64.b64encode(failed_nonce).decode("ascii"),
+                    "preimage_utf8": failed_preimage.decode("utf-8"),
+                    "required_difficulty_bits": 16,
+                },
+                "expected": {
+                    "hash_hex": failed_hash.hex(),
+                    "leading_zero_bits": failed_zb,
+                    "valid": failed_zb >= 16,
+                },
+            },
+        ],
+    }
+
+
 # ---------------------------------------------------------------------------
 # Drive
 
@@ -462,8 +684,10 @@ def main() -> int:
     files = [
         (OUTDIR / "hkdf.json", hkdf),
         (OUTDIR / "envelope-canonical.json", env_canonical),
+        (OUTDIR / "envelope-buckets.json", build_envelope_buckets_json()),
         (OUTDIR / "session-mac.json", session_mac),
         (OUTDIR / "confirmation-hash.json", confirmation),
+        (OUTDIR / "pow.json", build_pow_json()),
     ]
 
     ok = True
