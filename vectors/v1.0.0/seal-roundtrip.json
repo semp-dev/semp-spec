@@ -1,0 +1,114 @@
+{
+  "version": "1.0.0",
+  "category": "seal-roundtrip",
+  "description": "Layer 3 round-trip vectors for the seal wrap construction pinned in ENVELOPE.md §4.4.1. Every random input (the ephemeral private key) is supplied as part of the vector so the wrapped output is byte-deterministic. Implementations MUST expose a deterministic-compose code path that accepts ephemeral material instead of generating it; that path is test-only and MUST NOT be reachable from production senders.",
+  "spec_reference": "VECTORS.md §17.1; ENVELOPE.md §4.4.1",
+  "construction": {
+    "shared_secret": "X25519 ECDH(ephemeral_priv, recipient_pub)",
+    "kem_ct": "ephemeral_pub (32 bytes)",
+    "hkdf_salt": "kem_ct || recipient_pub (64 bytes)",
+    "hkdf_info_utf8": "SEMP-v1-wrap",
+    "hkdf_hash": "SHA-512",
+    "wrap_key_length_bytes": 32,
+    "aead": "ChaCha20-Poly1305",
+    "aead_nonce": "12 bytes of 0x00",
+    "aead_aad": "recipient_pub (32 bytes)",
+    "wire_format": "base64( kem_ct || aead_ct )"
+  },
+  "suites_covered": [
+    "x25519-chacha20-poly1305"
+  ],
+  "suites_pending": [
+    "pq-kyber768-x25519 (requires pqcrypto dependency)"
+  ],
+  "vectors": [
+    {
+      "id": "seal-wrap-baseline-32B-key",
+      "description": "Baseline x25519-chacha20-poly1305 wrap of a 32-byte symmetric key, all inputs pinned for byte reproducibility.",
+      "spec_reference": "ENVELOPE.md §4.4.1; VECTORS.md §17.1",
+      "inputs": {
+        "suite": "x25519-chacha20-poly1305",
+        "symmetric_key_hex": "4242424242424242424242424242424242424242424242424242424242424242",
+        "recipient_private_key_hex": "1010101010101010101010101010101010101010101010101010101010101010",
+        "recipient_public_key_hex": "781faab908430150daccdd6f9d6c5086e34f73a93ebbaa271765e5036edfc519",
+        "ephemeral_private_key_hex": "2020202020202020202020202020202020202020202020202020202020202020"
+      },
+      "intermediates": {
+        "ephemeral_pub_hex": "06453fcd9cef5a1f53acc4f942104c0c8e9e27d5c7b37f5507cdcd1628105963",
+        "shared_secret_hex": "81e580d5ab370635e8b4e97be43563fa304853cd78f4978e60fce85aa4019c07",
+        "kem_ct_hex": "06453fcd9cef5a1f53acc4f942104c0c8e9e27d5c7b37f5507cdcd1628105963",
+        "hkdf_salt_hex": "06453fcd9cef5a1f53acc4f942104c0c8e9e27d5c7b37f5507cdcd1628105963781faab908430150daccdd6f9d6c5086e34f73a93ebbaa271765e5036edfc519",
+        "prk_hex": "62504792936d8235b59e4f95d13bf12c109d6cb741545cb99d6762016fa315e12ce3ec55b0fa2849b1c700c6a950b3f0aa0bb2be2fb0fd01d558b905f4e2929b",
+        "wrap_key_hex": "4ce3617b462d6f63ee5bc768ccce55ff80d98ef4da6f5605bb3f9559602386ae",
+        "aead_nonce_hex": "000000000000000000000000",
+        "aead_aad_hex": "781faab908430150daccdd6f9d6c5086e34f73a93ebbaa271765e5036edfc519",
+        "aead_ct_hex": "1091898d91c9aa19e5b1fdfc23a432a94a2a52024ef20980302c5b874527f349e821703064d9c43cd7e52519f708cd6f",
+        "wrapped_bytes_hex": "06453fcd9cef5a1f53acc4f942104c0c8e9e27d5c7b37f5507cdcd16281059631091898d91c9aa19e5b1fdfc23a432a94a2a52024ef20980302c5b874527f349e821703064d9c43cd7e52519f708cd6f"
+      },
+      "expected": {
+        "wrapped_b64": "BkU/zZzvWh9TrMT5QhBMDI6eJ9XHs39VB83NFigQWWMQkYmNkcmqGeWx/fwjpDKpSipSAk7yCYAwLFuHRSfzSeghcDBk2cQ81+UlGfcIzW8=",
+        "wrapped_byte_length": 80,
+        "round_trip_recovers_K": true
+      }
+    },
+    {
+      "id": "seal-wrap-baseline-distinct-recipient",
+      "description": "Same suite, different recipient and ephemeral key. Confirms the construction is deterministic with respect to inputs and produces independent ciphertexts for independent recipients.",
+      "spec_reference": "ENVELOPE.md §4.4.1; VECTORS.md §17.1",
+      "inputs": {
+        "suite": "x25519-chacha20-poly1305",
+        "symmetric_key_hex": "0102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f20",
+        "recipient_private_key_hex": "3030303030303030303030303030303030303030303030303030303030303030",
+        "recipient_public_key_hex": "e50c239bc204f1341664c9d9c50c6a0d0fff6fc79d9301f1e713aab2e0344b3f",
+        "ephemeral_private_key_hex": "4040404040404040404040404040404040404040404040404040404040404040"
+      },
+      "intermediates": {
+        "ephemeral_pub_hex": "d7b5e81d336e578b13b8d706e82d061e3038c96bce66cdcf50d566b96ddbba10",
+        "shared_secret_hex": "2ffc24cce9eed2a0d0357986878c0691154eb70589bef1afeb4fbf513170fa33",
+        "kem_ct_hex": "d7b5e81d336e578b13b8d706e82d061e3038c96bce66cdcf50d566b96ddbba10",
+        "hkdf_salt_hex": "d7b5e81d336e578b13b8d706e82d061e3038c96bce66cdcf50d566b96ddbba10e50c239bc204f1341664c9d9c50c6a0d0fff6fc79d9301f1e713aab2e0344b3f",
+        "prk_hex": "1597404266719b18c918afd2de7041413583f9909391d1cc357398e39ed1c0b26fdb941d2d6ff88a405654181be29b3496ed54b17aa619491a3de37ce6672be3",
+        "wrap_key_hex": "4b404b4284778cca1949bdf0a20d7aa5ee76d9e701a91d76a249007f5977ffb8",
+        "aead_nonce_hex": "000000000000000000000000",
+        "aead_aad_hex": "e50c239bc204f1341664c9d9c50c6a0d0fff6fc79d9301f1e713aab2e0344b3f",
+        "aead_ct_hex": "d067bf4a59b0084f89d782d0eab06655637cbd932632885d085bcfe905bed3eca7fe95db985f773b17c5b204eeb62d01",
+        "wrapped_bytes_hex": "d7b5e81d336e578b13b8d706e82d061e3038c96bce66cdcf50d566b96ddbba10d067bf4a59b0084f89d782d0eab06655637cbd932632885d085bcfe905bed3eca7fe95db985f773b17c5b204eeb62d01"
+      },
+      "expected": {
+        "wrapped_b64": "17XoHTNuV4sTuNcG6C0GHjA4yWvOZs3PUNVmuW3buhDQZ79KWbAIT4nXgtDqsGZVY3y9kyYyiF0IW8/pBb7T7Kf+lduYX3c7F8WyBO62LQE=",
+        "wrapped_byte_length": 80,
+        "round_trip_recovers_K": true
+      }
+    },
+    {
+      "id": "seal-wrap-baseline-ephemeral-changes-output",
+      "description": "Same K and recipient as the first case, different ephemeral_private_key. The wrapped ciphertext MUST differ from the first case's, confirming that the ephemeral is bound into the construction (no nonce reuse possible across calls).",
+      "spec_reference": "ENVELOPE.md §4.4.1; VECTORS.md §17.1",
+      "inputs": {
+        "suite": "x25519-chacha20-poly1305",
+        "symmetric_key_hex": "4242424242424242424242424242424242424242424242424242424242424242",
+        "recipient_private_key_hex": "1010101010101010101010101010101010101010101010101010101010101010",
+        "recipient_public_key_hex": "781faab908430150daccdd6f9d6c5086e34f73a93ebbaa271765e5036edfc519",
+        "ephemeral_private_key_hex": "5050505050505050505050505050505050505050505050505050505050505050"
+      },
+      "intermediates": {
+        "ephemeral_pub_hex": "ef38b4abd14b0a919cbe6839f6185b97d32607bee359c6c53c12cc7597867d59",
+        "shared_secret_hex": "b118dd1aabda933661c5599a1b1a9d93121de4e0701283cd0db6f624b9f42730",
+        "kem_ct_hex": "ef38b4abd14b0a919cbe6839f6185b97d32607bee359c6c53c12cc7597867d59",
+        "hkdf_salt_hex": "ef38b4abd14b0a919cbe6839f6185b97d32607bee359c6c53c12cc7597867d59781faab908430150daccdd6f9d6c5086e34f73a93ebbaa271765e5036edfc519",
+        "prk_hex": "e712f3af136bd955e7f1bfcc35f9e99ab22ee4ed797ae9a4cf6c95fa8fb2c1dba4cf8dd98ebf4c47d1968f66fde9305ff6a2d775f8adc7de1b3087c56b03b5cc",
+        "wrap_key_hex": "c3f449c33c6c021a99f4d2866afd68b8202126e8a3afed160c308e98627c299b",
+        "aead_nonce_hex": "000000000000000000000000",
+        "aead_aad_hex": "781faab908430150daccdd6f9d6c5086e34f73a93ebbaa271765e5036edfc519",
+        "aead_ct_hex": "7efa477f8b2e9f6ca8082313c38797cfd1f9a00b9418802dc66b42003633fae38d00956b6deb932bee315c1fcefa6e7f",
+        "wrapped_bytes_hex": "ef38b4abd14b0a919cbe6839f6185b97d32607bee359c6c53c12cc7597867d597efa477f8b2e9f6ca8082313c38797cfd1f9a00b9418802dc66b42003633fae38d00956b6deb932bee315c1fcefa6e7f"
+      },
+      "expected": {
+        "wrapped_b64": "7zi0q9FLCpGcvmg59hhbl9MmB77jWcbFPBLMdZeGfVl++kd/iy6fbKgIIxPDh5fP0fmgC5QYgC3Ga0IANjP6440AlWtt65Mr7jFcH876bn8=",
+        "wrapped_byte_length": 80,
+        "round_trip_recovers_K": true,
+        "differs_from_case_1": true
+      }
+    }
+  ]
+}

@@ -192,7 +192,7 @@ bucket-size mappings).
 
 ### 3.4 Vector: Recipient-Count Bucket Computation
 
-Reference: `ENVELOPE.md` §4.4.1.
+Reference: `ENVELOPE.md` §4.4.2.
 
 **Rule:** `bucket = 1` if (`real_recipients == 1` and the single recipient is
 single-domain and not part of a group send); otherwise the next power of two
@@ -783,7 +783,52 @@ producing identical intermediate values.
 
 ---
 
-## 17. Relationship to Other Specifications
+## 17. Round-Trip Vectors
+
+Sections 2 through 15 cover deterministic operations: given fixed inputs, an
+implementation produces a single fixed output, and conformance is byte
+equality. Sections 17 and onward cover **round-trip** operations: encryption
+and signing flows whose outputs in production depend on random inputs
+(ephemeral keys, nonces, fresh symmetric keys). To make these flows
+testable as vectors, the random inputs are pinned as part of the vector
+itself, and the implementation MUST expose a "deterministic" code path
+that accepts those inputs instead of generating them.
+
+The deterministic code path is test-only. Production senders MUST NOT
+accept caller-controlled key material; doing so trivially breaks
+confidentiality. Conformant implementations conventionally gate the
+deterministic path behind a build tag, feature flag, internal API, or
+similar mechanism that is unreachable from production code paths.
+
+### 17.1 Seal Wrap (Baseline Suite)
+
+Reference: `ENVELOPE.md` §4.4.1.
+
+The seal wrap operation encrypts a per-envelope symmetric key (`K_brief` or
+`K_enclosure`) under each recipient's public encryption key, producing one
+entry in `seal.brief_recipients` or `seal.enclosure_recipients`. The
+construction is HPKE-Base shaped: ephemeral key agreement, HKDF-SHA-512 key
+derivation with a recipient-binding salt, and ChaCha20-Poly1305 sealing
+with the recipient public key as AEAD AAD.
+
+Vectors pin the recipient key pair, the ephemeral private key, and the
+symmetric key. Implementations match by reproducing the wrapped output
+byte-for-byte, then by recovering the symmetric key on unwrap.
+
+**Bytes:** see [`vectors/v1.0.0/seal-roundtrip.json`](vectors/v1.0.0/seal-roundtrip.json),
+entries `id: seal-wrap-baseline-32B-key`,
+`id: seal-wrap-baseline-distinct-recipient`, and
+`id: seal-wrap-baseline-ephemeral-changes-output`. Each vector also lists
+its `intermediates` (shared secret, salt, PRK, wrap key, AEAD inputs) so
+implementers can localise mismatches to a specific step of the
+construction.
+
+The post-quantum suite (`pq-kyber768-x25519`) hybrid wrap will land in a
+follow-up vector once the Python generator wires up Kyber768 support.
+
+---
+
+## 18. Relationship to Other Specifications
 
 | Specification    | Relationship                                                      |
 |------------------|-------------------------------------------------------------------|

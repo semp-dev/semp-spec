@@ -993,11 +993,11 @@ A conformant client MUST:
   1024 bytes and `max_envelope_size` per `ENVELOPE.md` §2.4. Populate the
   top-level `padding` field with fresh random bytes.
 - Pad `seal.enclosure_recipients` to the smallest power-of-two entry count
-  via dummy entries per `ENVELOPE.md` §4.4.1, and pad
+  via dummy entries per `ENVELOPE.md` §4.4.2, and pad
   `seal.brief_recipients` consistently. Dummy entry fingerprints and
   ciphertext bytes MUST be drawn from a cryptographically secure random
   source and MUST be indistinguishable from real entries. The single-domain,
-  non-group one-recipient exception MAY be applied per §4.4.1.
+  non-group one-recipient exception MAY be applied per §4.4.2.
 
 A conformant client MAY apply send-time obfuscation per `CLIENT.md`
 §3.8, delaying initial envelope submission by a random interval

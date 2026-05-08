@@ -396,7 +396,7 @@ sections.
   inference is bounded to the bucket, not the exact size.
 - **Recipient-count and group-size disclosure via seal structure.**
   Recipient maps are padded to power-of-two entry counts with
-  indistinguishable dummy entries (`ENVELOPE.md` section 4.4.1). Group
+  indistinguishable dummy entries (`ENVELOPE.md` section 4.4.2). Group
   size is revealed only at bucket resolution.
 - **Correspondent-graph inference via reputation gossip counts.**
   Observation metrics are published as power-of-two buckets, not exact
@@ -508,7 +508,7 @@ honored for that deployment.
 
 A sender delivering an envelope to a large recipient set exposes the
 size of that set only at the bucket resolution defined in
-`ENVELOPE.md` section 4.4.1. Recipient maps are padded to power-of-two
+`ENVELOPE.md` section 4.4.2. Recipient maps are padded to power-of-two
 entry counts with dummy entries indistinguishable from real wrapped
 keys. A group message to 50 real recipients appears identical in
 structure to a group message to 64 real recipients. Residual leakage
@@ -526,7 +526,7 @@ that this specification addresses them:
 - Envelope size (section 6.3) is padded to power-of-two buckets per
   `ENVELOPE.md` section 2.4.
 - Recipient-count leakage (section 6.8) is padded to power-of-two
-  entry counts per `ENVELOPE.md` section 4.4.1.
+  entry counts per `ENVELOPE.md` section 4.4.2.
 - Reputation-count leakage (section 6.4) is bucketed per
   `REPUTATION.md` section 4.5.1.
 - Timing correlation (section 6.3) is mitigated at the client layer

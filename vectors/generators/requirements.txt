@@ -10,5 +10,8 @@
 # No other packages are permitted. The reference implementation semp.dev/semp-go
 # is NEVER a dependency of the generator.
 #
-# Layer 1 + Layer 2 use stdlib only, so this file is empty today. Layer 3 work
-# will add the lines above as it lands.
+# Layer 1 + Layer 2 use stdlib only. Layer 3 (round-trip vectors) requires
+# X25519, ChaCha20-Poly1305, and Ed25519, all from pyca/cryptography. Kyber768
+# (pq-kyber768-x25519 suite) will be added when post-quantum vectors land.
+
+cryptography>=42,<46

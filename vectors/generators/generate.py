@@ -417,7 +417,7 @@ def envelope_size_bucket(size: int) -> int:
 
 
 def recipient_count_bucket(real_recipients: int, single_domain_not_group: bool) -> int | str:
-    """ENVELOPE.md §4.4.1: next power of 2 with floor 2 (or 1 for the
+    """ENVELOPE.md §4.4.2: next power of 2 with floor 2 (or 1 for the
     single-domain non-group case), ceiling 1024."""
     if real_recipients == 1 and single_domain_not_group:
         return 1
@@ -481,7 +481,7 @@ def build_envelope_buckets_json() -> dict:
             "Envelope size and recipient-count bucket selection. Source of "
             "truth: VECTORS.md §3.3 and §3.4."
         ),
-        "spec_reference": "VECTORS.md §3.3, §3.4; ENVELOPE.md §2.4.1, §4.4.1",
+        "spec_reference": "VECTORS.md §3.3, §3.4; ENVELOPE.md §2.4.1, §4.4.2",
         "vectors": [
             {
                 "id": "envelope-size-buckets",
@@ -504,7 +504,7 @@ def build_envelope_buckets_json() -> dict:
                     "group send and not multi-domain). Real counts above 1024 "
                     "force recomposition into multiple envelopes."
                 ),
-                "spec_reference": "VECTORS.md §3.4; ENVELOPE.md §4.4.1",
+                "spec_reference": "VECTORS.md §3.4; ENVELOPE.md §4.4.2",
                 "rule": (
                     "bucket = 1 if (real == 1 and single_domain_not_group) "
                     "else min(1024, smallest power of two >= max(2, real)); "
@@ -1731,6 +1731,259 @@ def build_device_certificates_json() -> dict:
     }
 
 
+# ---- Seal round-trip vectors (Layer 3, baseline suite) ----------------------
+#
+# Implements the wire format pinned in ENVELOPE.md §4.4.1 for the
+# x25519-chacha20-poly1305 suite. The post-quantum suite lands in a
+# follow-up once pqcrypto is added to requirements.txt.
+
+
+def x25519_pubkey_from_priv(priv_bytes: bytes) -> bytes:
+    """Derive the 32-byte X25519 public key from a 32-byte private key."""
+    from cryptography.hazmat.primitives.asymmetric.x25519 import X25519PrivateKey
+
+    priv = X25519PrivateKey.from_private_bytes(priv_bytes)
+    from cryptography.hazmat.primitives import serialization
+
+    return priv.public_key().public_bytes(
+        encoding=serialization.Encoding.Raw,
+        format=serialization.PublicFormat.Raw,
+    )
+
+
+def x25519_ecdh(priv_bytes: bytes, peer_pub_bytes: bytes) -> bytes:
+    from cryptography.hazmat.primitives.asymmetric.x25519 import (
+        X25519PrivateKey,
+        X25519PublicKey,
+    )
+
+    priv = X25519PrivateKey.from_private_bytes(priv_bytes)
+    peer = X25519PublicKey.from_public_bytes(peer_pub_bytes)
+    return priv.exchange(peer)
+
+
+def chacha20_poly1305_seal(key: bytes, nonce: bytes, plaintext: bytes, aad: bytes) -> bytes:
+    from cryptography.hazmat.primitives.ciphers.aead import ChaCha20Poly1305
+
+    return ChaCha20Poly1305(key).encrypt(nonce, plaintext, aad)
+
+
+def chacha20_poly1305_open(key: bytes, nonce: bytes, ciphertext: bytes, aad: bytes) -> bytes:
+    from cryptography.hazmat.primitives.ciphers.aead import ChaCha20Poly1305
+
+    return ChaCha20Poly1305(key).decrypt(nonce, ciphertext, aad)
+
+
+WRAP_INFO = b"SEMP-v1-wrap"
+
+
+def seal_wrap_baseline(
+    K: bytes, recipient_pub: bytes, ephemeral_priv: bytes
+) -> tuple[bytes, dict]:
+    """Wrap K under recipient_pub using x25519-chacha20-poly1305 per
+    ENVELOPE.md §4.4.1.
+
+    ephemeral_priv is the pinned X25519 private key (32 bytes). In production
+    this is freshly generated per Wrap call; vectors pin it so the output
+    bytes are reproducible.
+
+    Returns (wrapped_b64, intermediates_for_inspection).
+    """
+    if len(recipient_pub) != 32:
+        raise ValueError("baseline suite expects 32-byte X25519 recipient pub")
+    if len(ephemeral_priv) != 32:
+        raise ValueError("baseline suite expects 32-byte X25519 ephemeral priv")
+
+    ephemeral_pub = x25519_pubkey_from_priv(ephemeral_priv)
+    shared_secret = x25519_ecdh(ephemeral_priv, recipient_pub)
+    kem_ct = ephemeral_pub  # baseline: kem_ct == ephemeral_pub
+
+    salt = kem_ct + recipient_pub
+    prk = hkdf_extract(salt, shared_secret)
+    wrap_key = hkdf_expand(prk, WRAP_INFO, 32)
+
+    nonce = b"\x00" * 12
+    aead_ct = chacha20_poly1305_seal(wrap_key, nonce, K, recipient_pub)
+
+    wrapped = kem_ct + aead_ct
+    import base64
+
+    inter = {
+        "ephemeral_pub_hex": ephemeral_pub.hex(),
+        "shared_secret_hex": shared_secret.hex(),
+        "kem_ct_hex": kem_ct.hex(),
+        "hkdf_salt_hex": salt.hex(),
+        "prk_hex": prk.hex(),
+        "wrap_key_hex": wrap_key.hex(),
+        "aead_nonce_hex": nonce.hex(),
+        "aead_aad_hex": recipient_pub.hex(),
+        "aead_ct_hex": aead_ct.hex(),
+        "wrapped_bytes_hex": wrapped.hex(),
+    }
+    return base64.b64encode(wrapped).decode("ascii"), inter
+
+
+def seal_unwrap_baseline(
+    wrapped_b64: str, recipient_priv: bytes, recipient_pub: bytes
+) -> bytes:
+    """Reverse seal_wrap_baseline."""
+    import base64
+
+    raw = base64.b64decode(wrapped_b64)
+    if len(raw) < 32 + 16:
+        raise ValueError("wrapped payload too short for baseline suite")
+    kem_ct = raw[:32]
+    aead_ct = raw[32:]
+
+    shared_secret = x25519_ecdh(recipient_priv, kem_ct)
+    salt = kem_ct + recipient_pub
+    prk = hkdf_extract(salt, shared_secret)
+    wrap_key = hkdf_expand(prk, WRAP_INFO, 32)
+
+    nonce = b"\x00" * 12
+    return chacha20_poly1305_open(wrap_key, nonce, aead_ct, recipient_pub)
+
+
+def build_seal_roundtrip_json() -> dict:
+    """Three pinned-input wrap cases for the baseline suite. Every byte is
+    deterministic given the inputs; an implementation that produces the same
+    `wrapped_b64` for the same `K`, `recipient_pub`, and `ephemeral_priv`
+    is interoperable at the seal-wrap layer."""
+
+    cases = []
+
+    # Case 1: 32-byte K (typical K_brief / K_enclosure size).
+    K1 = bytes.fromhex("4242424242424242424242424242424242424242424242424242424242424242")
+    rcp_priv_1 = bytes.fromhex(
+        "1010101010101010101010101010101010101010101010101010101010101010"
+    )
+    rcp_pub_1 = x25519_pubkey_from_priv(rcp_priv_1)
+    eph_priv_1 = bytes.fromhex(
+        "2020202020202020202020202020202020202020202020202020202020202020"
+    )
+    wrapped_1, inter_1 = seal_wrap_baseline(K1, rcp_pub_1, eph_priv_1)
+    # Round-trip sanity: unwrap MUST recover K.
+    assert seal_unwrap_baseline(wrapped_1, rcp_priv_1, rcp_pub_1) == K1
+    cases.append({
+        "id": "seal-wrap-baseline-32B-key",
+        "description": (
+            "Baseline x25519-chacha20-poly1305 wrap of a 32-byte symmetric "
+            "key, all inputs pinned for byte reproducibility."
+        ),
+        "spec_reference": "ENVELOPE.md §4.4.1; VECTORS.md §17.1",
+        "inputs": {
+            "suite": "x25519-chacha20-poly1305",
+            "symmetric_key_hex": K1.hex(),
+            "recipient_private_key_hex": rcp_priv_1.hex(),
+            "recipient_public_key_hex": rcp_pub_1.hex(),
+            "ephemeral_private_key_hex": eph_priv_1.hex(),
+        },
+        "intermediates": inter_1,
+        "expected": {
+            "wrapped_b64": wrapped_1,
+            "wrapped_byte_length": (len(eph_priv_1) + len(K1) + 16),
+            "round_trip_recovers_K": True,
+        },
+    })
+
+    # Case 2: a different 32-byte K with different ephemeral material.
+    K2 = bytes.fromhex("0102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f20")
+    rcp_priv_2 = bytes.fromhex(
+        "3030303030303030303030303030303030303030303030303030303030303030"
+    )
+    rcp_pub_2 = x25519_pubkey_from_priv(rcp_priv_2)
+    eph_priv_2 = bytes.fromhex(
+        "4040404040404040404040404040404040404040404040404040404040404040"
+    )
+    wrapped_2, inter_2 = seal_wrap_baseline(K2, rcp_pub_2, eph_priv_2)
+    assert seal_unwrap_baseline(wrapped_2, rcp_priv_2, rcp_pub_2) == K2
+    cases.append({
+        "id": "seal-wrap-baseline-distinct-recipient",
+        "description": (
+            "Same suite, different recipient and ephemeral key. Confirms "
+            "the construction is deterministic with respect to inputs and "
+            "produces independent ciphertexts for independent recipients."
+        ),
+        "spec_reference": "ENVELOPE.md §4.4.1; VECTORS.md §17.1",
+        "inputs": {
+            "suite": "x25519-chacha20-poly1305",
+            "symmetric_key_hex": K2.hex(),
+            "recipient_private_key_hex": rcp_priv_2.hex(),
+            "recipient_public_key_hex": rcp_pub_2.hex(),
+            "ephemeral_private_key_hex": eph_priv_2.hex(),
+        },
+        "intermediates": inter_2,
+        "expected": {
+            "wrapped_b64": wrapped_2,
+            "wrapped_byte_length": (len(eph_priv_2) + len(K2) + 16),
+            "round_trip_recovers_K": True,
+        },
+    })
+
+    # Case 3: same K and recipient as case 1, different ephemeral. Proves
+    # that the wrapped ciphertext changes when only the ephemeral changes.
+    eph_priv_3 = bytes.fromhex(
+        "5050505050505050505050505050505050505050505050505050505050505050"
+    )
+    wrapped_3, inter_3 = seal_wrap_baseline(K1, rcp_pub_1, eph_priv_3)
+    assert seal_unwrap_baseline(wrapped_3, rcp_priv_1, rcp_pub_1) == K1
+    assert wrapped_3 != wrapped_1, "ephemeral change MUST change wrapped output"
+    cases.append({
+        "id": "seal-wrap-baseline-ephemeral-changes-output",
+        "description": (
+            "Same K and recipient as the first case, different "
+            "ephemeral_private_key. The wrapped ciphertext MUST differ from "
+            "the first case's, confirming that the ephemeral is bound into "
+            "the construction (no nonce reuse possible across calls)."
+        ),
+        "spec_reference": "ENVELOPE.md §4.4.1; VECTORS.md §17.1",
+        "inputs": {
+            "suite": "x25519-chacha20-poly1305",
+            "symmetric_key_hex": K1.hex(),
+            "recipient_private_key_hex": rcp_priv_1.hex(),
+            "recipient_public_key_hex": rcp_pub_1.hex(),
+            "ephemeral_private_key_hex": eph_priv_3.hex(),
+        },
+        "intermediates": inter_3,
+        "expected": {
+            "wrapped_b64": wrapped_3,
+            "wrapped_byte_length": (len(eph_priv_3) + len(K1) + 16),
+            "round_trip_recovers_K": True,
+            "differs_from_case_1": True,
+        },
+    })
+
+    return {
+        "version": "1.0.0",
+        "category": "seal-roundtrip",
+        "description": (
+            "Layer 3 round-trip vectors for the seal wrap construction "
+            "pinned in ENVELOPE.md §4.4.1. Every random input (the "
+            "ephemeral private key) is supplied as part of the vector so "
+            "the wrapped output is byte-deterministic. Implementations "
+            "MUST expose a deterministic-compose code path that accepts "
+            "ephemeral material instead of generating it; that path is "
+            "test-only and MUST NOT be reachable from production senders."
+        ),
+        "spec_reference": "VECTORS.md §17.1; ENVELOPE.md §4.4.1",
+        "construction": {
+            "shared_secret": "X25519 ECDH(ephemeral_priv, recipient_pub)",
+            "kem_ct": "ephemeral_pub (32 bytes)",
+            "hkdf_salt": "kem_ct || recipient_pub (64 bytes)",
+            "hkdf_info_utf8": "SEMP-v1-wrap",
+            "hkdf_hash": "SHA-512",
+            "wrap_key_length_bytes": 32,
+            "aead": "ChaCha20-Poly1305",
+            "aead_nonce": "12 bytes of 0x00",
+            "aead_aad": "recipient_pub (32 bytes)",
+            "wire_format": "base64( kem_ct || aead_ct )",
+        },
+        "suites_covered": ["x25519-chacha20-poly1305"],
+        "suites_pending": ["pq-kyber768-x25519 (requires pqcrypto dependency)"],
+        "vectors": cases,
+    }
+
+
 # ---- Recipient status vectors (§15) -----------------------------------------
 
 
@@ -1880,6 +2133,7 @@ def main() -> int:
         (OUTDIR / "key-revocation.json", build_key_revocation_json()),
         (OUTDIR / "device-certificates.json", build_device_certificates_json()),
         (OUTDIR / "recipient-status.json", build_recipient_status_json()),
+        (OUTDIR / "seal-roundtrip.json", build_seal_roundtrip_json()),
     ]
 
     ok = True

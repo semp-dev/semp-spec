@@ -524,7 +524,126 @@ The `brief` and `enclosure` AEAD encryption MUST pass `postmark.id` as additiona
 authenticated data. This binds the ciphertext to the specific envelope and
 prevents transplanting encrypted payloads between envelopes.
 
-#### 4.4.1 Recipient-Count Obfuscation
+#### 4.4.1 Wrap Construction
+
+Each entry in `seal.brief_recipients` and `seal.enclosure_recipients` is the
+base64 (RFC 4648 §4) encoding of a wrap output computed as follows.
+
+**Inputs:**
+
+- `recipient_pub`: the recipient's public encryption key. For the baseline
+  suite this is a 32-byte X25519 public key. For the post-quantum suite
+  this is the concatenation of a Kyber768 public key (1184 bytes,
+  FIPS 203 ML-KEM-768 encapsulation key) and a 32-byte X25519 public key,
+  in that order.
+- `K`: the symmetric key being wrapped (`K_brief` or `K_enclosure`).
+
+**Step 1: KEM encapsulation.**
+
+For the baseline suite (`x25519-chacha20-poly1305`):
+
+```
+ephemeral_priv  ← X25519 keygen
+ephemeral_pub   ← X25519 derive(ephemeral_priv)
+shared_secret   ← X25519 ECDH(ephemeral_priv, recipient_pub)   // 32 bytes
+kem_ct          ← ephemeral_pub                                // 32 bytes
+```
+
+For the post-quantum suite (`pq-kyber768-x25519`):
+
+```
+(kyber_ct,
+ kyber_ss)      ← Kyber768.Encapsulate(recipient_pub.kyber)    // 1088 + 32
+ephemeral_priv  ← X25519 keygen
+ephemeral_pub   ← X25519 derive(ephemeral_priv)
+x25519_ss       ← X25519 ECDH(ephemeral_priv, recipient_pub.x25519)
+shared_secret   ← kyber_ss || x25519_ss                        // 64 bytes
+kem_ct          ← kyber_ct || ephemeral_pub                    // 1120 bytes
+```
+
+`shared_secret` MUST be zeroed from memory after step 2.
+
+**Step 2: Wrap-key derivation.**
+
+```
+PRK       ← HKDF-Extract(salt = kem_ct || recipient_pub,
+                          IKM  = shared_secret,
+                          hash = SHA-512)
+wrap_key  ← HKDF-Expand(PRK,
+                         info = "SEMP-v1-wrap" (UTF-8, no terminator),
+                         L    = 32,
+                         hash = SHA-512)
+```
+
+`PRK` and `wrap_key` MUST be zeroed from memory after step 3.
+
+**Step 3: AEAD seal.**
+
+```
+nonce    ← 12 bytes of 0x00
+aead_ct  ← ChaCha20-Poly1305.Seal(key       = wrap_key,
+                                   nonce     = nonce,
+                                   plaintext = K,
+                                   aad       = recipient_pub)
+```
+
+`aead_ct` is the ChaCha20-Poly1305 ciphertext concatenated with its 16-byte
+authentication tag. For a 32-byte symmetric key `K`, `aead_ct` is 48 bytes.
+
+The zero nonce is unconditionally safe because `wrap_key` is derived fresh
+from a unique ephemeral key on every Wrap call: a (key, nonce) pair is never
+reused across calls. The recipient public key is bound as AAD so that an
+attacker cannot transplant a wrap entry to a different recipient even if the
+recipient's domain or client somehow accepted the same `wrap_key`.
+
+**Step 4: Output assembly.**
+
+```
+wrapped_bytes = kem_ct || aead_ct
+wrapped       = base64(wrapped_bytes)
+```
+
+For the baseline suite with a 32-byte K:
+`|kem_ct| + |aead_ct| = 32 + 48 = 80 bytes`,
+base64-encoded as 108 characters with two `=` padding characters.
+
+For the post-quantum suite with a 32-byte K:
+`|kem_ct| + |aead_ct| = 1120 + 48 = 1168 bytes`,
+base64-encoded as 1560 characters with no padding.
+
+**Unwrap.**
+
+A recipient with `(recipient_priv, recipient_pub)` reverses the construction:
+
+```
+1. wrapped_bytes ← base64-decode(wrapped)
+2. Parse kem_ct | aead_ct using the suite-specific kem_ct length
+   (32 bytes for baseline, 1120 bytes for pq-kyber).
+3. Recover shared_secret:
+   - baseline: shared_secret ← X25519 ECDH(recipient_priv, kem_ct)
+   - pq-kyber: shared_secret ← Kyber768.Decapsulate(recipient_priv.kyber,
+                                                     kem_ct[0..1088])
+                              || X25519 ECDH(recipient_priv.x25519,
+                                              kem_ct[1088..1120])
+4. Re-derive wrap_key with the same HKDF-Extract/Expand parameters.
+5. K ← ChaCha20-Poly1305.Open(wrap_key, nonce=[0x00 × 12],
+                              ciphertext=aead_ct, aad=recipient_pub).
+   Failure (auth tag mismatch) MUST surface as an unwrap error.
+```
+
+**Conformance requirements.**
+
+A SEMP implementation MUST produce wrap entries identical to those produced
+by the reference Python generator under [`vectors/generators/generate.py`](vectors/generators/generate.py)
+when given the same `K`, `recipient_pub`, and `ephemeral_priv` (or
+`(ephemeral_priv, kyber_encapsulation_randomness)` for the post-quantum
+suite). Test vectors with pinned ephemeral material live under
+[`vectors/v1.0.0/seal-roundtrip.json`](vectors/v1.0.0/seal-roundtrip.json).
+
+References: RFC 9180 (HPKE) for the construction shape; RFC 7748 (X25519);
+RFC 7539 (ChaCha20-Poly1305); RFC 5869 (HKDF); FIPS 203 (ML-KEM, Kyber768).
+
+#### 4.4.2 Recipient-Count Obfuscation
 
 The size of `seal.brief_recipients` and `seal.enclosure_recipients` reveals
 the number of recipients on an envelope to any party that can inspect the

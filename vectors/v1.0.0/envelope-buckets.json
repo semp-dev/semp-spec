@@ -2,7 +2,7 @@
   "version": "1.0.0",
   "category": "envelope-buckets",
   "description": "Envelope size and recipient-count bucket selection. Source of truth: VECTORS.md §3.3 and §3.4.",
-  "spec_reference": "VECTORS.md §3.3, §3.4; ENVELOPE.md §2.4.1, §4.4.1",
+  "spec_reference": "VECTORS.md §3.3, §3.4; ENVELOPE.md §2.4.1, §4.4.2",
   "vectors": [
     {
       "id": "envelope-size-buckets",
@@ -76,7 +76,7 @@
     {
       "id": "recipient-count-buckets",
       "description": "Maps the real recipient client-key count to the padded enclosure_recipients entry count. Rule: next power of two with floor 2; floor relaxes to 1 only when there is exactly one recipient and that recipient is single-domain (not a group send and not multi-domain). Real counts above 1024 force recomposition into multiple envelopes.",
-      "spec_reference": "VECTORS.md §3.4; ENVELOPE.md §4.4.1",
+      "spec_reference": "VECTORS.md §3.4; ENVELOPE.md §4.4.2",
       "rule": "bucket = 1 if (real == 1 and single_domain_not_group) else min(1024, smallest power of two >= max(2, real)); real > 1024 -> recomposition required",
       "samples": [
         {
