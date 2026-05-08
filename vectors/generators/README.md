@@ -32,16 +32,26 @@ python3 generate.py --diff     # show diffs without writing
 
 CI should run `--verify`; any drift between the script and the committed JSON fails the build.
 
-## Dependencies
+## Dependency policy
 
-`generate.py` deliberately uses only the Python standard library:
+The generator depends on the Python standard library plus a small, explicit allowlist of widely-audited cryptography packages declared in [`requirements.txt`](requirements.txt). The allowlist is policy, not convenience:
+
+* **Stdlib only** for any primitive Python ships out of the box. That covers HKDF/HMAC/SHA (Layer 1), canonical JSON / base64 (Layer 2), and the SEMP-specific composition rules (canonicalization, bucket selection, PoW preimage).
+* **`cryptography`** (pyca/cryptography) when Layer 3+ needs Ed25519, X25519, AES-256-GCM, or ChaCha20-Poly1305. This package implements the IETF/NIST primitives, is actively maintained by the Python Cryptographic Authority, and is the de-facto baseline used by Django, Requests, AWS CLI, and similar mainstream projects.
+* **`pqcrypto`** when Layer 3+ needs Kyber768. PQ primitives are not yet in stdlib in any language; this package wraps the NIST reference implementations.
+
+Other dependencies are NOT permitted. The point is that anyone — auditing the spec, building a SEMP implementation in any language, or porting the vectors — can `pip install -r requirements.txt && python3 generate.py` and reproduce every byte from primitives that already have public RFC/NIST test vectors.
+
+The reference implementation `semp.dev/semp-go` is NEVER a dependency of the generator. Implementations consume the JSON; the generator does not consume them.
+
+Layer 1 + Layer 2 currently use only stdlib. The current `requirements.txt` is empty. Layer 3 work will add the lines above as it lands.
+
+### Stdlib usage
 
 * `hmac`, `hashlib` — HKDF, HMAC, SHA primitives
 * `json` — canonical JSON encoding (`sort_keys=True`, `separators=(",", ":")`)
 * `base64` — base64 encoding for `_b64` fields
 * `copy`, `difflib`, `pathlib`, `argparse` — utilities
-
-If a future layer needs Ed25519, X25519, AES-GCM, ChaCha20-Poly1305, or Kyber768, the generator will declare those in a sibling `requirements.txt`. The current set has none.
 
 ## Reproducing values manually
 

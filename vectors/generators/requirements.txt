@@ -1,0 +1,14 @@
+# SEMP test-vector generator dependencies.
+#
+# Policy (see generators/README.md "Dependency policy"): the generator uses
+# the Python standard library plus a small, explicit allowlist of widely
+# audited cryptography packages. The allowlist is:
+#
+#   cryptography  - Ed25519, X25519, AES-256-GCM, ChaCha20-Poly1305 (Layer 3+)
+#   pqcrypto      - Kyber768 (Layer 3+)
+#
+# No other packages are permitted. The reference implementation semp.dev/semp-go
+# is NEVER a dependency of the generator.
+#
+# Layer 1 + Layer 2 use stdlib only, so this file is empty today. Layer 3 work
+# will add the lines above as it lands.

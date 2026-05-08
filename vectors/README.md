@@ -1,6 +1,8 @@
 # SEMP Test Vectors (machine-readable)
 
-This directory holds machine-readable test vectors that any SEMP implementation can load and assert against. The pose is to make cross-language conformance testable without re-reading prose: an implementation that produces every expected output in every applicable file is interoperable at that layer; an implementation that does not has a bug.
+This directory holds machine-readable test vectors that any SEMP implementation, in any language, can load and assert against. The purpose is to make cross-language conformance testable without re-reading prose: an implementation that produces every expected output in every applicable file is interoperable at that layer; an implementation that does not has a bug.
+
+These vectors are language-neutral by design. They exist for the spec, not for any one implementation. Go, TypeScript, Dart, Rust, Swift, Kotlin, or anything else — every consumer hits the same JSON contract. No SEMP implementation has any privileged status as the "ground truth"; the JSON is the contract, and the JSON is produced by the standalone Python generator under [`generators/`](generators/).
 
 The companion document [`VECTORS.md`](../VECTORS.md) at the repository root is the human-readable normative source. JSON files here MIRROR the inputs and expected outputs from `VECTORS.md` and reference the section that defines them. When the two disagree, `VECTORS.md` wins.
 
@@ -92,7 +94,7 @@ Every implementation SHOULD ship a vectors-runner that:
 3. Asserts every field in `expected` matches byte-for-byte.
 4. Reports `id` plus `spec_reference` on any mismatch.
 
-A reference runner ships with [`semp.dev/semp-go`](https://github.com/semp-dev/semp-go) under `cmd/semp-vectors-runner` (forthcoming).
+A runner is a small, language-idiomatic test harness — typically a few hundred lines. The exact shape varies (Go: a `_test.go` driver; TypeScript: a Vitest/Jest suite; Dart: `package:test`; Rust: a `#[test]` module pointing at `vectors/v1.0.0/`). What matters is that running it against a fresh checkout of any SEMP implementation produces the same pass/fail result.
 
 ## Coverage
 
@@ -137,10 +139,10 @@ The rich human-readable vectors in `VECTORS.md` (PoW solutions, extension entrie
 Layers 3+ test operations that include encryption with random keys. They cannot be tested by static input → static output comparison. The convention is:
 
 * Pin every random input (ephemeral keys, nonces, fresh symmetric keys) as part of `inputs`.
-* The implementation MUST expose a "deterministic" compose / handshake path that takes those pinned inputs instead of generating them.
+* The implementation MUST expose a "deterministic" compose / handshake path that takes those pinned inputs instead of generating them. Conventionally this is gated behind a test-only build tag, feature flag, or internal API so production code paths can never accidentally accept caller-controlled key material.
 * The `expected` block carries the resulting byte sequence — both directions (compose AND open) MUST round-trip cleanly.
 
-`semp-go` currently exposes deterministic test paths through internal test helpers; making these public (or providing a `vectorgen` build tag) is a prerequisite for shipping Layer 3+ vectors.
+The Python generator under [`generators/`](generators/) is the source of byte values for every layer, including Layer 3+. It does NOT call into any specific SEMP implementation; it implements the SEMP construction independently from public-standard primitives so the vectors stay decoupled from any single language's reference code.
 
 ## Versioning
 
@@ -155,5 +157,6 @@ Open a PR against `semp-spec`. New vectors MUST:
 
 1. Cite the normative section they exercise (`spec_reference`).
 2. Be deterministic — fixed inputs, no implementation-dependent fields.
-3. Round-trip (where applicable) through at least the `semp-go` reference implementation before being merged.
-4. Include a one-sentence `description` explaining what the vector confirms.
+3. Be produced by the Python generator under [`generators/`](generators/), not hand-authored. Run `python3 generators/generate.py --verify` in CI; the build fails on any drift between generator and JSON.
+4. Round-trip (where applicable) through at least one independent SEMP implementation before being merged, as a sanity check on the generator.
+5. Include a one-sentence `description` explaining what the vector confirms.
