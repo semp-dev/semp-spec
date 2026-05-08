@@ -2218,6 +2218,324 @@ def build_sender_signature_json() -> dict:
     }
 
 
+# ---- Forwarding vectors (Layer 3, ENVELOPE.md §6.6) -------------------------
+
+
+FORWARDER_ATTESTATION_PREFIX = b"SEMP-FORWARDER-ATTESTATION:"
+
+
+def forwarder_attestation_canonical(forwarded_from: dict) -> bytes:
+    """Per ENVELOPE.md §6.6.3: canonical JSON of the forwarded_from object
+    with forwarder_attestation.value set to "".
+    """
+    f = copy.deepcopy(forwarded_from)
+    if "forwarder_attestation" not in f:
+        raise ValueError("forwarded_from missing forwarder_attestation block")
+    f["forwarder_attestation"]["value"] = ""
+    return canonical_json(f)
+
+
+def forwarder_attestation_compute(
+    forwarded_from: dict, forwarder_priv: bytes
+) -> tuple[dict, dict]:
+    canonical = forwarder_attestation_canonical(forwarded_from)
+    prefixed = FORWARDER_ATTESTATION_PREFIX + canonical
+    sig = ed25519_sign(forwarder_priv, prefixed)
+
+    import base64
+
+    signed = copy.deepcopy(forwarded_from)
+    signed["forwarder_attestation"]["value"] = base64.b64encode(sig).decode("ascii")
+
+    inter = {
+        "canonical_forwarded_from_with_blanked_attestation_utf8": canonical.decode("utf-8"),
+        "signing_input_prefix_utf8": FORWARDER_ATTESTATION_PREFIX.decode("utf-8"),
+        "signing_input_hex": prefixed.hex(),
+        "signature_hex": sig.hex(),
+    }
+    return signed, inter
+
+
+def forwarder_attestation_verify(
+    forwarded_from: dict, forwarder_pub: bytes
+) -> bool:
+    import base64
+
+    sig_b64 = forwarded_from["forwarder_attestation"]["value"]
+    sig = base64.b64decode(sig_b64)
+    canonical = forwarder_attestation_canonical(forwarded_from)
+    prefixed = FORWARDER_ATTESTATION_PREFIX + canonical
+    return ed25519_verify(forwarder_pub, sig, prefixed)
+
+
+def build_forwarding_json() -> dict:
+    """Forwarded envelope vectors per ENVELOPE.md §6.6.
+
+    A forward composes a fresh outer envelope addressed to the new
+    recipient. The outer enclosure carries:
+      - The forwarder's own subject/body (their commentary).
+      - A `forwarded_from` block containing the original sender's
+        decrypted enclosure (with the original sender_signature
+        preserved verbatim) plus the forwarder's attestation.
+      - The forwarder's outer sender_signature.
+
+    Verification by the new recipient is a three-step chain
+    (§6.6.4):
+      1. outer enclosure.sender_signature  -> authenticates forwarder
+      2. forwarded_from.forwarder_attestation -> authenticates forwarding act
+      3. forwarded_from.original_enclosure_plaintext.sender_signature
+         -> authenticates original sender
+    """
+    # Identity A: original sender (alice@a.example).
+    seed_a = bytes([0x11] * 32)
+    pub_a = ed25519_pubkey_from_priv(seed_a)
+    fp_a = fingerprint_hex(pub_a)
+
+    # Identity B: forwarder (bob@b.example).
+    seed_b = bytes([0x22] * 32)
+    pub_b = ed25519_pubkey_from_priv(seed_b)
+    fp_b = fingerprint_hex(pub_b)
+
+    # Build the original enclosure A composed and signed (this is what A
+    # originally sent to B).
+    original_enclosure_pre_sign = {
+        "subject": "Lunch on Friday?",
+        "content_type": "text/plain",
+        "body": {
+            "text/plain": "SGV5IEJvYiwgYXJlIHlvdSBhcm91bmQgRnJpZGF5PyAtLSBBbGljZQ==",
+        },
+        "attachments": [],
+        "forwarded_from": None,
+        "extensions": {},
+        "sender_signature": {
+            "algorithm": "ed25519",
+            "key_id": fp_a,
+            "value": "",
+        },
+    }
+    original_signed, _ = sender_signature_compute(original_enclosure_pre_sign, seed_a)
+    assert sender_signature_verify(original_signed, pub_a)
+
+    # Build the forwarded_from block. B is forwarding A's message to C.
+    forwarded_from_pre_sign = {
+        "original_enclosure_plaintext": original_signed,
+        "original_seal": {
+            "algorithm": "x25519-chacha20-poly1305",
+            "key_id": "alice-domain-key-fp",
+        },
+        "original_postmark": {
+            "id": "01J5ALICE0000000000000000000",
+            "from_domain": "a.example",
+            "to_domain": "b.example",
+            "expires": "2025-06-15T00:00:00Z",
+            "session_id": "01J5ALICESESSIONXXXXXXXXXXXX",
+        },
+        "original_sender_address": "alice@a.example",
+        "received_at": "2026-04-15T14:30:00Z",
+        "forwarder_attestation": {
+            "algorithm": "ed25519",
+            "key_id": fp_b,
+            "value": "",
+        },
+    }
+    forwarded_signed, inter_attest = forwarder_attestation_compute(
+        forwarded_from_pre_sign, seed_b
+    )
+    assert forwarder_attestation_verify(forwarded_signed, pub_b)
+
+    # Build the outer (new) enclosure that B sends to C, carrying the
+    # signed forwarded_from block.
+    outer_enclosure_pre_sign = {
+        "subject": "Fwd: Lunch on Friday?",
+        "content_type": "text/plain",
+        "body": {
+            "text/plain": "Q2hhcmxpZSwgcGxlYXNlIHNlZSBhdHRhY2hlZCBmcm9tIEFsaWNlLiAtLSBCb2I=",
+        },
+        "attachments": [],
+        "forwarded_from": forwarded_signed,
+        "extensions": {},
+        "sender_signature": {
+            "algorithm": "ed25519",
+            "key_id": fp_b,
+            "value": "",
+        },
+    }
+    outer_signed, inter_outer = sender_signature_compute(
+        outer_enclosure_pre_sign, seed_b
+    )
+    # Verify the full three-step chain.
+    assert sender_signature_verify(outer_signed, pub_b)
+    assert forwarder_attestation_verify(outer_signed["forwarded_from"], pub_b)
+    assert sender_signature_verify(
+        outer_signed["forwarded_from"]["original_enclosure_plaintext"], pub_a
+    )
+
+    # Vector 1: full valid chain.
+    valid_vector = {
+        "id": "forward-valid-three-step-chain",
+        "description": (
+            "B forwards A's signed enclosure to C. The outer enclosure's "
+            "sender_signature authenticates B, the forwarded_from's "
+            "forwarder_attestation authenticates the forwarding act, and "
+            "the inner original_enclosure_plaintext.sender_signature "
+            "authenticates A as the original author. All three checks "
+            "MUST pass."
+        ),
+        "spec_reference": "VECTORS.md §17.3; ENVELOPE.md §6.6.3, §6.6.4",
+        "inputs": {
+            "original_sender_identity_seed_hex": seed_a.hex(),
+            "original_sender_identity_pub_hex": pub_a.hex(),
+            "original_sender_key_id": fp_a,
+            "original_sender_address": "alice@a.example",
+            "forwarder_identity_seed_hex": seed_b.hex(),
+            "forwarder_identity_pub_hex": pub_b.hex(),
+            "forwarder_key_id": fp_b,
+            "forwarder_address": "bob@b.example",
+            "received_at": "2026-04-15T14:30:00Z",
+        },
+        "intermediates": {
+            "forwarder_attestation": inter_attest,
+            "outer_sender_signature": inter_outer,
+        },
+        "expected": {
+            "outer_enclosure_json": outer_signed,
+            "step_1_outer_sender_signature_verifies": True,
+            "step_2_forwarder_attestation_verifies": True,
+            "step_3_original_sender_signature_verifies": True,
+            "key_id_consistency": (
+                "forwarded_from.forwarder_attestation.key_id == "
+                "outer_enclosure.sender_signature.key_id"
+            ),
+        },
+    }
+
+    # Vector 2: tampered original_enclosure_plaintext.
+    # Take the valid outer envelope, modify the original body. The original
+    # sender_signature MUST fail; the forwarder_attestation MUST also fail
+    # (because it covers the original_enclosure_plaintext as part of the
+    # forwarded_from canonicalization).
+    tampered_outer = copy.deepcopy(outer_signed)
+    tampered_outer["forwarded_from"]["original_enclosure_plaintext"]["body"][
+        "text/plain"
+    ] = (
+        "VEFNUEVSRUQgQk9EWSBJTk5FUkxZIQ=="  # different bytes
+    )
+    step1_tampered = sender_signature_verify(tampered_outer, pub_b)
+    step2_tampered = forwarder_attestation_verify(
+        tampered_outer["forwarded_from"], pub_b
+    )
+    step3_tampered = sender_signature_verify(
+        tampered_outer["forwarded_from"]["original_enclosure_plaintext"], pub_a
+    )
+    # Step 1 still verifies (we only mutated the inner body, not the outer
+    # canonical bytes? Actually no — the outer canonicalization includes the
+    # forwarded_from contents, so step 1 also fails). Let's assert what we
+    # observe rather than what we predict, since the canonical outer bytes
+    # cover the inner block too.
+    tampered_vector = {
+        "id": "forward-tampered-original-content",
+        "description": (
+            "Take the §17.3/forward-valid-three-step-chain output and alter "
+            "one byte of forwarded_from.original_enclosure_plaintext.body. "
+            "Multiple checks MUST reject because the outer canonical bytes "
+            "and the forwarded_from canonical bytes both cover this region. "
+            "The recorded results below show which steps in the §6.6.4 "
+            "verification chain fail."
+        ),
+        "spec_reference": "VECTORS.md §17.3; ENVELOPE.md §6.6.4",
+        "inputs": {
+            "tampered_outer_enclosure_json": tampered_outer,
+            "outer_sender_pub_hex": pub_b.hex(),
+            "forwarder_pub_hex": pub_b.hex(),
+            "original_sender_pub_hex": pub_a.hex(),
+        },
+        "expected": {
+            "step_1_outer_sender_signature_verifies": step1_tampered,
+            "step_2_forwarder_attestation_verifies": step2_tampered,
+            "step_3_original_sender_signature_verifies": step3_tampered,
+            "any_failure_means_reject": True,
+        },
+    }
+
+    # Vector 3: forwarder identity mismatch.
+    # forwarder_attestation.key_id claims B but the outer sender_signature
+    # was actually produced by A (i.e., the outer envelope was signed by
+    # someone other than the claimed forwarder). §6.6.3 requires
+    # forwarder_attestation.key_id == outer enclosure sender_signature.key_id.
+    # We construct: B does the attestation correctly, but A signs the outer.
+    outer_signed_by_a_pre = copy.deepcopy(outer_enclosure_pre_sign)
+    # Swap the outer sender_signature key_id to claim B (matching attestation)
+    # while having A actually sign — this is the spoof we detect.
+    outer_signed_by_a_pre["sender_signature"]["key_id"] = fp_b
+    outer_signed_by_a, _ = sender_signature_compute(outer_signed_by_a_pre, seed_a)
+    # Now sender_signature was produced by A but key_id claims B.
+    # Verification against pub_b (the claimed key) MUST fail.
+    spoofed_step1 = sender_signature_verify(outer_signed_by_a, pub_b)
+    # And the §6.6.3 cross-check (forwarder_attestation.key_id must equal
+    # outer sender_signature.key_id) is satisfied syntactically (both claim
+    # B), but step 1 still fails because the signature isn't B's.
+    mismatch_vector = {
+        "id": "forward-spoofed-outer-signer",
+        "description": (
+            "The outer envelope's sender_signature.key_id claims forwarder "
+            "B, and forwarder_attestation.key_id matches B, satisfying the "
+            "syntactic cross-check in §6.6.3. But the outer signature was "
+            "actually produced by A's private key. Verification of step 1 "
+            "(outer sender_signature) against B's public key MUST fail, and "
+            "the recipient MUST NOT display the original content as "
+            "authored by the claimed sender."
+        ),
+        "spec_reference": "VECTORS.md §17.3; ENVELOPE.md §6.6.3, §6.6.4",
+        "inputs": {
+            "spoofed_outer_enclosure_json": outer_signed_by_a,
+            "claimed_forwarder_key_id": fp_b,
+            "claimed_forwarder_pub_hex": pub_b.hex(),
+            "actual_outer_signer_pub_hex": pub_a.hex(),
+        },
+        "expected": {
+            "step_1_outer_sender_signature_verifies_against_claimed_key": spoofed_step1,
+            "key_id_syntactic_match": (
+                outer_signed_by_a["sender_signature"]["key_id"]
+                == outer_signed_by_a["forwarded_from"]["forwarder_attestation"]["key_id"]
+            ),
+            "rejection_reason": (
+                "ed25519 verify of outer sender_signature against the "
+                "public key indicated by sender_signature.key_id fails; "
+                "the spoofer cannot forge B's signature without B's "
+                "private key"
+            ),
+        },
+    }
+
+    return {
+        "version": "1.0.0",
+        "category": "forwarding",
+        "description": (
+            "Layer 3 vectors for forwarded envelopes per ENVELOPE.md §6.6: "
+            "the three-signature chain (outer sender_signature, "
+            "forwarder_attestation, original sender_signature) and the "
+            "tamper-detection properties that follow from it."
+        ),
+        "spec_reference": "VECTORS.md §17.3; ENVELOPE.md §6.6",
+        "construction": {
+            "forwarder_attestation_prefix_utf8": "SEMP-FORWARDER-ATTESTATION:",
+            "outer_sender_signature_prefix_utf8": "SEMP-ENCLOSURE-SENDER:",
+            "original_sender_signature_prefix_utf8": "SEMP-ENCLOSURE-SENDER:",
+            "canonical_form": (
+                "Per ENVELOPE.md §4.3: sorted keys at every nesting level, "
+                "no insignificant whitespace, UTF-8 encoding. Apply with "
+                "the relevant signature .value field set to \"\"."
+            ),
+            "verification_order": [
+                "1. outer enclosure.sender_signature (§6.5.3) -> forwarder identity",
+                "2. forwarded_from.forwarder_attestation (§6.6.3) -> forwarding act",
+                "3. forwarded_from.original_enclosure_plaintext.sender_signature (§6.5.3) -> original author",
+            ],
+        },
+        "vectors": [valid_vector, tampered_vector, mismatch_vector],
+    }
+
+
 # ---- Recipient status vectors (§15) -----------------------------------------
 
 
@@ -2369,6 +2687,7 @@ def main() -> int:
         (OUTDIR / "recipient-status.json", build_recipient_status_json()),
         (OUTDIR / "seal-roundtrip.json", build_seal_roundtrip_json()),
         (OUTDIR / "sender-signature.json", build_sender_signature_json()),
+        (OUTDIR / "forwarding.json", build_forwarding_json()),
     ]
 
     ok = True

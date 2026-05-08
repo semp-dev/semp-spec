@@ -867,6 +867,43 @@ the signature blanked, the prefixed signing input, and the raw signature
 bytes) so an implementer who fails byte equality can localise the
 divergence to a specific construction step.
 
+### 17.3 Forwarded Envelope (Three-Signature Chain)
+
+Reference: `ENVELOPE.md` §6.6.
+
+A forwarded envelope carries three Ed25519 signatures: the outer enclosure
+sender_signature (forwarder), the forwarder_attestation inside the
+forwarded_from block (forwarder, with prefix `SEMP-FORWARDER-ATTESTATION:`),
+and the preserved original_enclosure_plaintext.sender_signature (original
+author). A new recipient performs the §6.6.4 three-step verification chain:
+forwarder identity, forwarding act, original author. Any step failing
+prevents the recipient from rendering the original content as attributed
+to the claimed original sender.
+
+The forwarder_attestation construction is structurally identical to the
+sender_signature in §6.5: blank the relevant `.value`, canonicalize the
+enclosing object per §4.3, prefix with the context-specific domain
+separator, sign Ed25519, base64-encode, and replace the value.
+
+Three vectors:
+
+- `forward-valid-three-step-chain`: B forwards A's signed enclosure to C.
+  All three steps verify. The vector pins both identity seeds, all
+  intermediate canonical bytes, and the final signed outer enclosure.
+- `forward-tampered-original-content`: take the valid output and alter one
+  byte of `forwarded_from.original_enclosure_plaintext.body`. The recorded
+  step results show that this tampering invalidates multiple signatures
+  (the outer canonicalization covers the forwarded_from contents, so the
+  outer sender_signature also fails alongside the original author's).
+- `forward-spoofed-outer-signer`: outer enclosure has
+  `sender_signature.key_id == forwarder_attestation.key_id == fp_B`,
+  satisfying the syntactic cross-check from §6.6.3, but the outer
+  signature was actually produced by identity A. Verification against B's
+  public key fails. Demonstrates that the cross-check on key_ids does not
+  substitute for the cryptographic verification.
+
+**Bytes:** see [`vectors/v1.0.0/forwarding.json`](vectors/v1.0.0/forwarding.json).
+
 ---
 
 ## 18. Relationship to Other Specifications

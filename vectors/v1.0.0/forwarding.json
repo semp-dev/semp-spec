@@ -1,0 +1,233 @@
+{
+  "version": "1.0.0",
+  "category": "forwarding",
+  "description": "Layer 3 vectors for forwarded envelopes per ENVELOPE.md §6.6: the three-signature chain (outer sender_signature, forwarder_attestation, original sender_signature) and the tamper-detection properties that follow from it.",
+  "spec_reference": "VECTORS.md §17.3; ENVELOPE.md §6.6",
+  "construction": {
+    "forwarder_attestation_prefix_utf8": "SEMP-FORWARDER-ATTESTATION:",
+    "outer_sender_signature_prefix_utf8": "SEMP-ENCLOSURE-SENDER:",
+    "original_sender_signature_prefix_utf8": "SEMP-ENCLOSURE-SENDER:",
+    "canonical_form": "Per ENVELOPE.md §4.3: sorted keys at every nesting level, no insignificant whitespace, UTF-8 encoding. Apply with the relevant signature .value field set to \"\".",
+    "verification_order": [
+      "1. outer enclosure.sender_signature (§6.5.3) -> forwarder identity",
+      "2. forwarded_from.forwarder_attestation (§6.6.3) -> forwarding act",
+      "3. forwarded_from.original_enclosure_plaintext.sender_signature (§6.5.3) -> original author"
+    ]
+  },
+  "vectors": [
+    {
+      "id": "forward-valid-three-step-chain",
+      "description": "B forwards A's signed enclosure to C. The outer enclosure's sender_signature authenticates B, the forwarded_from's forwarder_attestation authenticates the forwarding act, and the inner original_enclosure_plaintext.sender_signature authenticates A as the original author. All three checks MUST pass.",
+      "spec_reference": "VECTORS.md §17.3; ENVELOPE.md §6.6.3, §6.6.4",
+      "inputs": {
+        "original_sender_identity_seed_hex": "1111111111111111111111111111111111111111111111111111111111111111",
+        "original_sender_identity_pub_hex": "d04ab232742bb4ab3a1368bd4615e4e6d0224ab71a016baf8520a332c9778737",
+        "original_sender_key_id": "10ba682c8ad13513971e8b56881aab8bd702bb807796eca81932c735a94d6e6d",
+        "original_sender_address": "alice@a.example",
+        "forwarder_identity_seed_hex": "2222222222222222222222222222222222222222222222222222222222222222",
+        "forwarder_identity_pub_hex": "a09aa5f47a6759802ff955f8dc2d2a14a5c99d23be97f864127ff9383455a4f0",
+        "forwarder_key_id": "1325b850c2871916eae203f0efc3c8987f64e5e3cdb27679e6d1fa97808357e6",
+        "forwarder_address": "bob@b.example",
+        "received_at": "2026-04-15T14:30:00Z"
+      },
+      "intermediates": {
+        "forwarder_attestation": {
+          "canonical_forwarded_from_with_blanked_attestation_utf8": "{\"forwarder_attestation\":{\"algorithm\":\"ed25519\",\"key_id\":\"1325b850c2871916eae203f0efc3c8987f64e5e3cdb27679e6d1fa97808357e6\",\"value\":\"\"},\"original_enclosure_plaintext\":{\"attachments\":[],\"body\":{\"text/plain\":\"SGV5IEJvYiwgYXJlIHlvdSBhcm91bmQgRnJpZGF5PyAtLSBBbGljZQ==\"},\"content_type\":\"text/plain\",\"extensions\":{},\"forwarded_from\":null,\"sender_signature\":{\"algorithm\":\"ed25519\",\"key_id\":\"10ba682c8ad13513971e8b56881aab8bd702bb807796eca81932c735a94d6e6d\",\"value\":\"/0xukJniE7uEZwhomlWdn8hjOVzpsT1GlVF7/sQmT79WEOLyHid6t0kr0IO+l9mMVMCsZCn/LJbFCxNy6ZTTCg==\"},\"subject\":\"Lunch on Friday?\"},\"original_postmark\":{\"expires\":\"2025-06-15T00:00:00Z\",\"from_domain\":\"a.example\",\"id\":\"01J5ALICE0000000000000000000\",\"session_id\":\"01J5ALICESESSIONXXXXXXXXXXXX\",\"to_domain\":\"b.example\"},\"original_seal\":{\"algorithm\":\"x25519-chacha20-poly1305\",\"key_id\":\"alice-domain-key-fp\"},\"original_sender_address\":\"alice@a.example\",\"received_at\":\"2026-04-15T14:30:00Z\"}",
+          "signing_input_prefix_utf8": "SEMP-FORWARDER-ATTESTATION:",
+          "signing_input_hex": "53454d502d464f525741524445522d4154544553544154494f4e3a7b22666f727761726465725f6174746573746174696f6e223a7b22616c676f726974686d223a2265643235353139222c226b65795f6964223a2231333235623835306332383731393136656165323033663065666333633839383766363465356533636462323736373965366431666139373830383335376536222c2276616c7565223a22227d2c226f726967696e616c5f656e636c6f737572655f706c61696e74657874223a7b226174746163686d656e7473223a5b5d2c22626f6479223a7b22746578742f706c61696e223a225347563549454a765969776759584a6c49486c7664534268636d3931626d5167526e4a705a474635507941744c53424262476c6a5a513d3d227d2c22636f6e74656e745f74797065223a22746578742f706c61696e222c22657874656e73696f6e73223a7b7d2c22666f727761726465645f66726f6d223a6e756c6c2c2273656e6465725f7369676e6174757265223a7b22616c676f726974686d223a2265643235353139222c226b65795f6964223a2231306261363832633861643133353133393731653862353638383161616238626437303262623830373739366563613831393332633733356139346436653664222c2276616c7565223a222f3078756b4a6e69453775455a77686f6d6c57646e38686a4f567a70735431476c5646372f73516d54373957454f4c794869643674306b7230494f2b6c396d4d564d43735a436e2f4c4a624643784e79365a545443673d3d227d2c227375626a656374223a224c756e6368206f6e204672696461793f227d2c226f726967696e616c5f706f73746d61726b223a7b2265787069726573223a22323032352d30362d31355430303a30303a30305a222c2266726f6d5f646f6d61696e223a22612e6578616d706c65222c226964223a2230314a35414c49434530303030303030303030303030303030303030222c2273657373696f6e5f6964223a2230314a35414c49434553455353494f4e585858585858585858585858222c22746f5f646f6d61696e223a22622e6578616d706c65227d2c226f726967696e616c5f7365616c223a7b22616c676f726974686d223a227832353531392d63686163686132302d706f6c7931333035222c226b65795f6964223a22616c6963652d646f6d61696e2d6b65792d6670227d2c226f726967696e616c5f73656e6465725f61646472657373223a22616c69636540612e6578616d706c65222c2272656365697665645f6174223a22323032362d30342d31355431343a33303a30305a227d",
+          "signature_hex": "33da1f83c0ef4681d66879ea21dbce4bb1c6e4994afd365e2986c456c43e72af9c2c9ace0ee220499b18802d58b8055a62861e673d9ab82b59fa330498cfbf0a"
+        },
+        "outer_sender_signature": {
+          "canonical_enclosure_with_blanked_signature_utf8": "{\"attachments\":[],\"body\":{\"text/plain\":\"Q2hhcmxpZSwgcGxlYXNlIHNlZSBhdHRhY2hlZCBmcm9tIEFsaWNlLiAtLSBCb2I=\"},\"content_type\":\"text/plain\",\"extensions\":{},\"forwarded_from\":{\"forwarder_attestation\":{\"algorithm\":\"ed25519\",\"key_id\":\"1325b850c2871916eae203f0efc3c8987f64e5e3cdb27679e6d1fa97808357e6\",\"value\":\"M9ofg8DvRoHWaHnqIdvOS7HG5JlK/TZeKYbEVsQ+cq+cLJrODuIgSZsYgC1YuAVaYoYeZz2auCtZ+jMEmM+/Cg==\"},\"original_enclosure_plaintext\":{\"attachments\":[],\"body\":{\"text/plain\":\"SGV5IEJvYiwgYXJlIHlvdSBhcm91bmQgRnJpZGF5PyAtLSBBbGljZQ==\"},\"content_type\":\"text/plain\",\"extensions\":{},\"forwarded_from\":null,\"sender_signature\":{\"algorithm\":\"ed25519\",\"key_id\":\"10ba682c8ad13513971e8b56881aab8bd702bb807796eca81932c735a94d6e6d\",\"value\":\"/0xukJniE7uEZwhomlWdn8hjOVzpsT1GlVF7/sQmT79WEOLyHid6t0kr0IO+l9mMVMCsZCn/LJbFCxNy6ZTTCg==\"},\"subject\":\"Lunch on Friday?\"},\"original_postmark\":{\"expires\":\"2025-06-15T00:00:00Z\",\"from_domain\":\"a.example\",\"id\":\"01J5ALICE0000000000000000000\",\"session_id\":\"01J5ALICESESSIONXXXXXXXXXXXX\",\"to_domain\":\"b.example\"},\"original_seal\":{\"algorithm\":\"x25519-chacha20-poly1305\",\"key_id\":\"alice-domain-key-fp\"},\"original_sender_address\":\"alice@a.example\",\"received_at\":\"2026-04-15T14:30:00Z\"},\"sender_signature\":{\"algorithm\":\"ed25519\",\"key_id\":\"1325b850c2871916eae203f0efc3c8987f64e5e3cdb27679e6d1fa97808357e6\",\"value\":\"\"},\"subject\":\"Fwd: Lunch on Friday?\"}",
+          "signing_input_prefix_utf8": "SEMP-ENCLOSURE-SENDER:",
+          "signing_input_hex": "53454d502d454e434c4f535552452d53454e4445523a7b226174746163686d656e7473223a5b5d2c22626f6479223a7b22746578742f706c61696e223a2251326868636d78705a5377676347786c59584e6c49484e6c5a534268644852685932686c5a43426d636d39744945467361574e6c4c6941744c5342436232493d227d2c22636f6e74656e745f74797065223a22746578742f706c61696e222c22657874656e73696f6e73223a7b7d2c22666f727761726465645f66726f6d223a7b22666f727761726465725f6174746573746174696f6e223a7b22616c676f726974686d223a2265643235353139222c226b65795f6964223a2231333235623835306332383731393136656165323033663065666333633839383766363465356533636462323736373965366431666139373830383335376536222c2276616c7565223a224d396f6667384476526f485761486e714964764f53374847354a6c4b2f545a654b5962455673512b63712b634c4a724f44754967535a73596743315975415661596f59655a7a32617543745a2b6a4d456d4d2b2f43673d3d227d2c226f726967696e616c5f656e636c6f737572655f706c61696e74657874223a7b226174746163686d656e7473223a5b5d2c22626f6479223a7b22746578742f706c61696e223a225347563549454a765969776759584a6c49486c7664534268636d3931626d5167526e4a705a474635507941744c53424262476c6a5a513d3d227d2c22636f6e74656e745f74797065223a22746578742f706c61696e222c22657874656e73696f6e73223a7b7d2c22666f727761726465645f66726f6d223a6e756c6c2c2273656e6465725f7369676e6174757265223a7b22616c676f726974686d223a2265643235353139222c226b65795f6964223a2231306261363832633861643133353133393731653862353638383161616238626437303262623830373739366563613831393332633733356139346436653664222c2276616c7565223a222f3078756b4a6e69453775455a77686f6d6c57646e38686a4f567a70735431476c5646372f73516d54373957454f4c794869643674306b7230494f2b6c396d4d564d43735a436e2f4c4a624643784e79365a545443673d3d227d2c227375626a656374223a224c756e6368206f6e204672696461793f227d2c226f726967696e616c5f706f73746d61726b223a7b2265787069726573223a22323032352d30362d31355430303a30303a30305a222c2266726f6d5f646f6d61696e223a22612e6578616d706c65222c226964223a2230314a35414c49434530303030303030303030303030303030303030222c2273657373696f6e5f6964223a2230314a35414c49434553455353494f4e585858585858585858585858222c22746f5f646f6d61696e223a22622e6578616d706c65227d2c226f726967696e616c5f7365616c223a7b22616c676f726974686d223a227832353531392d63686163686132302d706f6c7931333035222c226b65795f6964223a22616c6963652d646f6d61696e2d6b65792d6670227d2c226f726967696e616c5f73656e6465725f61646472657373223a22616c69636540612e6578616d706c65222c2272656365697665645f6174223a22323032362d30342d31355431343a33303a30305a227d2c2273656e6465725f7369676e6174757265223a7b22616c676f726974686d223a2265643235353139222c226b65795f6964223a2231333235623835306332383731393136656165323033663065666333633839383766363465356533636462323736373965366431666139373830383335376536222c2276616c7565223a22227d2c227375626a656374223a224677643a204c756e6368206f6e204672696461793f227d",
+          "signature_hex": "359d339cc0e536f5511f78cde4cb2d1e803fb1648694e7cd00a85256f982815661dfdec43d6de238cb7aca2092251e53cf988b31a10c5fb4ae52e18f41924808"
+        }
+      },
+      "expected": {
+        "outer_enclosure_json": {
+          "subject": "Fwd: Lunch on Friday?",
+          "content_type": "text/plain",
+          "body": {
+            "text/plain": "Q2hhcmxpZSwgcGxlYXNlIHNlZSBhdHRhY2hlZCBmcm9tIEFsaWNlLiAtLSBCb2I="
+          },
+          "attachments": [],
+          "forwarded_from": {
+            "original_enclosure_plaintext": {
+              "subject": "Lunch on Friday?",
+              "content_type": "text/plain",
+              "body": {
+                "text/plain": "SGV5IEJvYiwgYXJlIHlvdSBhcm91bmQgRnJpZGF5PyAtLSBBbGljZQ=="
+              },
+              "attachments": [],
+              "forwarded_from": null,
+              "extensions": {},
+              "sender_signature": {
+                "algorithm": "ed25519",
+                "key_id": "10ba682c8ad13513971e8b56881aab8bd702bb807796eca81932c735a94d6e6d",
+                "value": "/0xukJniE7uEZwhomlWdn8hjOVzpsT1GlVF7/sQmT79WEOLyHid6t0kr0IO+l9mMVMCsZCn/LJbFCxNy6ZTTCg=="
+              }
+            },
+            "original_seal": {
+              "algorithm": "x25519-chacha20-poly1305",
+              "key_id": "alice-domain-key-fp"
+            },
+            "original_postmark": {
+              "id": "01J5ALICE0000000000000000000",
+              "from_domain": "a.example",
+              "to_domain": "b.example",
+              "expires": "2025-06-15T00:00:00Z",
+              "session_id": "01J5ALICESESSIONXXXXXXXXXXXX"
+            },
+            "original_sender_address": "alice@a.example",
+            "received_at": "2026-04-15T14:30:00Z",
+            "forwarder_attestation": {
+              "algorithm": "ed25519",
+              "key_id": "1325b850c2871916eae203f0efc3c8987f64e5e3cdb27679e6d1fa97808357e6",
+              "value": "M9ofg8DvRoHWaHnqIdvOS7HG5JlK/TZeKYbEVsQ+cq+cLJrODuIgSZsYgC1YuAVaYoYeZz2auCtZ+jMEmM+/Cg=="
+            }
+          },
+          "extensions": {},
+          "sender_signature": {
+            "algorithm": "ed25519",
+            "key_id": "1325b850c2871916eae203f0efc3c8987f64e5e3cdb27679e6d1fa97808357e6",
+            "value": "NZ0znMDlNvVRH3jN5MstHoA/sWSGlOfNAKhSVvmCgVZh397EPW3iOMt6yiCSJR5Tz5iLMaEMX7SuUuGPQZJICA=="
+          }
+        },
+        "step_1_outer_sender_signature_verifies": true,
+        "step_2_forwarder_attestation_verifies": true,
+        "step_3_original_sender_signature_verifies": true,
+        "key_id_consistency": "forwarded_from.forwarder_attestation.key_id == outer_enclosure.sender_signature.key_id"
+      }
+    },
+    {
+      "id": "forward-tampered-original-content",
+      "description": "Take the §17.3/forward-valid-three-step-chain output and alter one byte of forwarded_from.original_enclosure_plaintext.body. Multiple checks MUST reject because the outer canonical bytes and the forwarded_from canonical bytes both cover this region. The recorded results below show which steps in the §6.6.4 verification chain fail.",
+      "spec_reference": "VECTORS.md §17.3; ENVELOPE.md §6.6.4",
+      "inputs": {
+        "tampered_outer_enclosure_json": {
+          "subject": "Fwd: Lunch on Friday?",
+          "content_type": "text/plain",
+          "body": {
+            "text/plain": "Q2hhcmxpZSwgcGxlYXNlIHNlZSBhdHRhY2hlZCBmcm9tIEFsaWNlLiAtLSBCb2I="
+          },
+          "attachments": [],
+          "forwarded_from": {
+            "original_enclosure_plaintext": {
+              "subject": "Lunch on Friday?",
+              "content_type": "text/plain",
+              "body": {
+                "text/plain": "VEFNUEVSRUQgQk9EWSBJTk5FUkxZIQ=="
+              },
+              "attachments": [],
+              "forwarded_from": null,
+              "extensions": {},
+              "sender_signature": {
+                "algorithm": "ed25519",
+                "key_id": "10ba682c8ad13513971e8b56881aab8bd702bb807796eca81932c735a94d6e6d",
+                "value": "/0xukJniE7uEZwhomlWdn8hjOVzpsT1GlVF7/sQmT79WEOLyHid6t0kr0IO+l9mMVMCsZCn/LJbFCxNy6ZTTCg=="
+              }
+            },
+            "original_seal": {
+              "algorithm": "x25519-chacha20-poly1305",
+              "key_id": "alice-domain-key-fp"
+            },
+            "original_postmark": {
+              "id": "01J5ALICE0000000000000000000",
+              "from_domain": "a.example",
+              "to_domain": "b.example",
+              "expires": "2025-06-15T00:00:00Z",
+              "session_id": "01J5ALICESESSIONXXXXXXXXXXXX"
+            },
+            "original_sender_address": "alice@a.example",
+            "received_at": "2026-04-15T14:30:00Z",
+            "forwarder_attestation": {
+              "algorithm": "ed25519",
+              "key_id": "1325b850c2871916eae203f0efc3c8987f64e5e3cdb27679e6d1fa97808357e6",
+              "value": "M9ofg8DvRoHWaHnqIdvOS7HG5JlK/TZeKYbEVsQ+cq+cLJrODuIgSZsYgC1YuAVaYoYeZz2auCtZ+jMEmM+/Cg=="
+            }
+          },
+          "extensions": {},
+          "sender_signature": {
+            "algorithm": "ed25519",
+            "key_id": "1325b850c2871916eae203f0efc3c8987f64e5e3cdb27679e6d1fa97808357e6",
+            "value": "NZ0znMDlNvVRH3jN5MstHoA/sWSGlOfNAKhSVvmCgVZh397EPW3iOMt6yiCSJR5Tz5iLMaEMX7SuUuGPQZJICA=="
+          }
+        },
+        "outer_sender_pub_hex": "a09aa5f47a6759802ff955f8dc2d2a14a5c99d23be97f864127ff9383455a4f0",
+        "forwarder_pub_hex": "a09aa5f47a6759802ff955f8dc2d2a14a5c99d23be97f864127ff9383455a4f0",
+        "original_sender_pub_hex": "d04ab232742bb4ab3a1368bd4615e4e6d0224ab71a016baf8520a332c9778737"
+      },
+      "expected": {
+        "step_1_outer_sender_signature_verifies": false,
+        "step_2_forwarder_attestation_verifies": false,
+        "step_3_original_sender_signature_verifies": false,
+        "any_failure_means_reject": true
+      }
+    },
+    {
+      "id": "forward-spoofed-outer-signer",
+      "description": "The outer envelope's sender_signature.key_id claims forwarder B, and forwarder_attestation.key_id matches B, satisfying the syntactic cross-check in §6.6.3. But the outer signature was actually produced by A's private key. Verification of step 1 (outer sender_signature) against B's public key MUST fail, and the recipient MUST NOT display the original content as authored by the claimed sender.",
+      "spec_reference": "VECTORS.md §17.3; ENVELOPE.md §6.6.3, §6.6.4",
+      "inputs": {
+        "spoofed_outer_enclosure_json": {
+          "subject": "Fwd: Lunch on Friday?",
+          "content_type": "text/plain",
+          "body": {
+            "text/plain": "Q2hhcmxpZSwgcGxlYXNlIHNlZSBhdHRhY2hlZCBmcm9tIEFsaWNlLiAtLSBCb2I="
+          },
+          "attachments": [],
+          "forwarded_from": {
+            "original_enclosure_plaintext": {
+              "subject": "Lunch on Friday?",
+              "content_type": "text/plain",
+              "body": {
+                "text/plain": "SGV5IEJvYiwgYXJlIHlvdSBhcm91bmQgRnJpZGF5PyAtLSBBbGljZQ=="
+              },
+              "attachments": [],
+              "forwarded_from": null,
+              "extensions": {},
+              "sender_signature": {
+                "algorithm": "ed25519",
+                "key_id": "10ba682c8ad13513971e8b56881aab8bd702bb807796eca81932c735a94d6e6d",
+                "value": "/0xukJniE7uEZwhomlWdn8hjOVzpsT1GlVF7/sQmT79WEOLyHid6t0kr0IO+l9mMVMCsZCn/LJbFCxNy6ZTTCg=="
+              }
+            },
+            "original_seal": {
+              "algorithm": "x25519-chacha20-poly1305",
+              "key_id": "alice-domain-key-fp"
+            },
+            "original_postmark": {
+              "id": "01J5ALICE0000000000000000000",
+              "from_domain": "a.example",
+              "to_domain": "b.example",
+              "expires": "2025-06-15T00:00:00Z",
+              "session_id": "01J5ALICESESSIONXXXXXXXXXXXX"
+            },
+            "original_sender_address": "alice@a.example",
+            "received_at": "2026-04-15T14:30:00Z",
+            "forwarder_attestation": {
+              "algorithm": "ed25519",
+              "key_id": "1325b850c2871916eae203f0efc3c8987f64e5e3cdb27679e6d1fa97808357e6",
+              "value": "M9ofg8DvRoHWaHnqIdvOS7HG5JlK/TZeKYbEVsQ+cq+cLJrODuIgSZsYgC1YuAVaYoYeZz2auCtZ+jMEmM+/Cg=="
+            }
+          },
+          "extensions": {},
+          "sender_signature": {
+            "algorithm": "ed25519",
+            "key_id": "1325b850c2871916eae203f0efc3c8987f64e5e3cdb27679e6d1fa97808357e6",
+            "value": "v+GQJhbftUTvmo9ZZMktcVfL0X8ZUHaFikqvk+HXVVAU6MTCTMrJFwcWkxPyy3vee7Tq3y5V1i8NyJ4R3xc2Bw=="
+          }
+        },
+        "claimed_forwarder_key_id": "1325b850c2871916eae203f0efc3c8987f64e5e3cdb27679e6d1fa97808357e6",
+        "claimed_forwarder_pub_hex": "a09aa5f47a6759802ff955f8dc2d2a14a5c99d23be97f864127ff9383455a4f0",
+        "actual_outer_signer_pub_hex": "d04ab232742bb4ab3a1368bd4615e4e6d0224ab71a016baf8520a332c9778737"
+      },
+      "expected": {
+        "step_1_outer_sender_signature_verifies_against_claimed_key": false,
+        "key_id_syntactic_match": true,
+        "rejection_reason": "ed25519 verify of outer sender_signature against the public key indicated by sender_signature.key_id fails; the spoofer cannot forge B's signature without B's private key"
+      }
+    }
+  ]
+}
