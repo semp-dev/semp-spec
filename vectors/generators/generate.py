@@ -2768,6 +2768,227 @@ def build_envelope_roundtrip_json() -> dict:
     }
 
 
+# ---- Large-attachment vectors (Layer 3, ATTACHMENTS.md §3) ------------------
+
+
+ATTACHMENT_KDF_INFO_PREFIX = b"semp-attachment:"
+
+
+def derive_K_attachment(K_enclosure: bytes, attachment_id: str, length: int = 32) -> bytes:
+    """ATTACHMENTS.md §3.1: K_attachment = HKDF-Expand(PRK=K_enclosure,
+    info='semp-attachment:' || attachment_id, L=length).
+
+    Note: ATTACHMENTS.md §3.1 uses HKDF-Expand directly with K_enclosure
+    serving as the PRK (already 32 high-entropy bytes from the seal layer);
+    no Extract step is needed for an already-uniform input.
+    """
+    info = ATTACHMENT_KDF_INFO_PREFIX + attachment_id.encode("utf-8")
+    return hkdf_expand(K_enclosure, info, length)
+
+
+def attachment_aad(item: dict) -> bytes:
+    """ATTACHMENTS.md §3.2: AEAD AAD is the canonical JSON of the item with
+    ciphertext_hash, aead_nonce, and extensions blanked."""
+    blanked = copy.deepcopy(item)
+    blanked["ciphertext_hash"] = ""
+    blanked["aead_nonce"] = ""
+    blanked["extensions"] = {}
+    return canonical_json(blanked)
+
+
+def build_large_attachment_json() -> dict:
+    """Three vectors covering: valid round-trip, metadata tamper (AEAD AAD
+    mismatch), and ciphertext tamper (hash + AEAD both fail)."""
+    import base64
+
+    # Pinned K_enclosure (would normally come from the envelope's seal).
+    K_enclosure = bytes([0xE5] * 32)
+    attachment_id = "01J7ATTACHMENTIDXXXXXXXXXXXX"
+    K_attachment = derive_K_attachment(K_enclosure, attachment_id)
+
+    # Pinned plaintext and nonce.
+    plaintext = b"This is a synthetic 64-byte plaintext used as a vector input."
+    plaintext = plaintext + b"\x00" * (64 - len(plaintext))
+    aead_nonce = bytes([0xE6] * 12)
+
+    # Build the item BEFORE encryption to compute the AEAD AAD.
+    item_template = {
+        "id": attachment_id,
+        "filename": "memo.txt",
+        "mime_type": "text/plain",
+        "plaintext_size": len(plaintext),
+        "url": "https://blobs.example.com/a/01J7ATTACHMENTIDXXXXXXXXXXXX",
+        "ciphertext_hash": "",   # set after encryption
+        "aead_algorithm": "chacha20-poly1305",
+        "aead_nonce": "",        # set after encryption
+        "extensions": {},
+    }
+    aad = attachment_aad(item_template)
+    aead_ct = chacha20_poly1305_seal(K_attachment, aead_nonce, plaintext, aad)
+    ct_hash_hex = hashlib.sha256(aead_ct).hexdigest()
+
+    item_final = copy.deepcopy(item_template)
+    item_final["ciphertext_hash"] = "sha256:" + ct_hash_hex
+    item_final["aead_nonce"] = base64.b64encode(aead_nonce).decode("ascii")
+
+    # Round-trip sanity.
+    aad_decrypt = attachment_aad(item_final)  # blanks ct_hash + nonce again
+    recovered = chacha20_poly1305_open(K_attachment, aead_nonce, aead_ct, aad_decrypt)
+    assert recovered == plaintext
+
+    # Vector 1: valid.
+    valid_vector = {
+        "id": "large-attachment-baseline-valid",
+        "description": (
+            "Round-trip encrypt + decrypt of a 64-byte plaintext under "
+            "K_attachment derived from a pinned K_enclosure and the item "
+            "id. Both the SHA-256 ciphertext_hash and the AEAD authentication "
+            "tag MUST verify on decrypt."
+        ),
+        "spec_reference": "VECTORS.md §17.6; ATTACHMENTS.md §3",
+        "inputs": {
+            "K_enclosure_hex": K_enclosure.hex(),
+            "attachment_id": attachment_id,
+            "plaintext_hex": plaintext.hex(),
+            "aead_nonce_hex": aead_nonce.hex(),
+            "item_pre_encrypt_template": item_template,
+        },
+        "intermediates": {
+            "kdf_info_utf8": ATTACHMENT_KDF_INFO_PREFIX.decode("utf-8") + attachment_id,
+            "K_attachment_hex": K_attachment.hex(),
+            "canonical_aad_utf8": aad.decode("utf-8"),
+            "aead_ct_hex": aead_ct.hex(),
+            "ct_sha256_hex": ct_hash_hex,
+        },
+        "expected": {
+            "item_final_json": item_final,
+            "ciphertext_at_url_hex": aead_ct.hex(),
+            "round_trip_recovers_plaintext": True,
+        },
+    }
+
+    # Vector 2: tampered metadata. The verifier holds a modified item
+    # (e.g. a different filename), so the recomputed AAD differs and
+    # AEAD verify rejects.
+    item_tampered_meta = copy.deepcopy(item_final)
+    item_tampered_meta["filename"] = "renamed.txt"  # attacker swap
+    aad_tampered = attachment_aad(item_tampered_meta)
+    try:
+        chacha20_poly1305_open(K_attachment, aead_nonce, aead_ct, aad_tampered)
+        meta_decrypts = True
+    except Exception:
+        meta_decrypts = False
+    assert not meta_decrypts
+
+    tampered_meta_vector = {
+        "id": "large-attachment-tampered-metadata",
+        "description": (
+            "Take the valid output and change item.filename. The recomputed "
+            "AEAD AAD differs from the AAD used at encryption time, so the "
+            "Poly1305 tag fails to verify and decryption rejects. "
+            "Demonstrates the §3.2 metadata binding."
+        ),
+        "spec_reference": "VECTORS.md §17.6; ATTACHMENTS.md §3.2",
+        "inputs": {
+            "tampered_item_json": item_tampered_meta,
+            "ciphertext_at_url_hex": aead_ct.hex(),
+            "K_attachment_hex": K_attachment.hex(),
+            "aead_nonce_hex": aead_nonce.hex(),
+        },
+        "intermediates": {
+            "tampered_canonical_aad_utf8": aad_tampered.decode("utf-8"),
+            "original_canonical_aad_utf8": aad.decode("utf-8"),
+        },
+        "expected": {
+            "decryption_succeeds": meta_decrypts,
+            "rejection_reason": (
+                "AEAD AAD mismatch: filename was bound at encryption time "
+                "and any subsequent change invalidates the tag"
+            ),
+        },
+    }
+
+    # Vector 3: tampered ciphertext. Flipping any byte of aead_ct triggers
+    # both a SHA-256 hash mismatch (item.ciphertext_hash) AND an AEAD tag
+    # failure on decrypt.
+    aead_ct_tampered = bytearray(aead_ct)
+    aead_ct_tampered[10] ^= 0x01  # flip one bit
+    aead_ct_tampered = bytes(aead_ct_tampered)
+    tampered_hash_hex = hashlib.sha256(aead_ct_tampered).hexdigest()
+    hash_matches = ("sha256:" + tampered_hash_hex) == item_final["ciphertext_hash"]
+    try:
+        chacha20_poly1305_open(K_attachment, aead_nonce, aead_ct_tampered, aad)
+        aead_succeeds = True
+    except Exception:
+        aead_succeeds = False
+    assert not aead_succeeds
+    assert not hash_matches
+
+    tampered_ct_vector = {
+        "id": "large-attachment-tampered-ciphertext",
+        "description": (
+            "Flip one bit of the ciphertext stored at item.url. Two "
+            "independent integrity layers reject: (a) SHA-256(ciphertext) "
+            "no longer equals item.ciphertext_hash, surfaced before "
+            "decryption attempts; (b) the Poly1305 tag fails to verify on "
+            "AEAD.Open. A receiver SHOULD short-circuit on (a) to avoid "
+            "feeding adversarial input to the AEAD."
+        ),
+        "spec_reference": "VECTORS.md §17.6; ATTACHMENTS.md §3, §6",
+        "inputs": {
+            "item_json": item_final,
+            "tampered_ciphertext_hex": aead_ct_tampered.hex(),
+            "K_attachment_hex": K_attachment.hex(),
+            "aead_nonce_hex": aead_nonce.hex(),
+        },
+        "intermediates": {
+            "tampered_ciphertext_sha256_hex": tampered_hash_hex,
+            "expected_ciphertext_hash_field": item_final["ciphertext_hash"],
+        },
+        "expected": {
+            "ciphertext_hash_matches": hash_matches,
+            "aead_decryption_succeeds": aead_succeeds,
+            "rejection_reason": "ciphertext integrity check fails before AEAD; AEAD also rejects",
+        },
+    }
+
+    return {
+        "version": "1.0.0",
+        "category": "large-attachment",
+        "description": (
+            "Layer 3 vectors for the large-attachment extension "
+            "(semp.dev/large-attachment) per ATTACHMENTS.md §3: per-item "
+            "key derivation from K_enclosure, AEAD with metadata bound as "
+            "AAD, and SHA-256 integrity check on the ciphertext stored at "
+            "item.url."
+        ),
+        "spec_reference": "VECTORS.md §17.6; ATTACHMENTS.md §3",
+        "construction": {
+            "key_derivation": (
+                "K_attachment = HKDF-Expand(PRK=K_enclosure, "
+                "info='semp-attachment:' || attachment_id, L=32). "
+                "K_enclosure already has full entropy from the seal layer, "
+                "so no Extract step is needed."
+            ),
+            "aead_baseline": "ChaCha20-Poly1305, 12-byte nonce",
+            "aead_aad": (
+                "Canonical JSON of the item with ciphertext_hash, "
+                "aead_nonce, and extensions blanked. Binds filename, "
+                "mime_type, plaintext_size, url, aead_algorithm, and id "
+                "into the tag so an attacker cannot swap them."
+            ),
+            "ciphertext_at_url": "raw aead_ct (ciphertext || tag), no framing",
+            "ciphertext_hash_format": "sha256:<hex of SHA-256(aead_ct)>",
+        },
+        "suites_covered": ["x25519-chacha20-poly1305 (ChaCha20-Poly1305)"],
+        "suites_pending": [
+            "pq-kyber768-x25519 (XChaCha20-Poly1305, 24-byte nonce; "
+            "deferred until pyca/cryptography or pynacl is wired in)"
+        ],
+        "vectors": [valid_vector, tampered_meta_vector, tampered_ct_vector],
+    }
+
+
 # ---- Delivery-receipt vectors (Layer 3, DELIVERY.md §1.1.1) -----------------
 
 
@@ -3472,6 +3693,7 @@ def main() -> int:
         (OUTDIR / "forwarding.json", build_forwarding_json()),
         (OUTDIR / "envelope-roundtrip.json", build_envelope_roundtrip_json()),
         (OUTDIR / "delivery-receipt.json", build_delivery_receipt_json()),
+        (OUTDIR / "large-attachment.json", build_large_attachment_json()),
     ]
 
     ok = True

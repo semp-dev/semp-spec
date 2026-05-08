@@ -1,0 +1,124 @@
+{
+  "version": "1.0.0",
+  "category": "large-attachment",
+  "description": "Layer 3 vectors for the large-attachment extension (semp.dev/large-attachment) per ATTACHMENTS.md §3: per-item key derivation from K_enclosure, AEAD with metadata bound as AAD, and SHA-256 integrity check on the ciphertext stored at item.url.",
+  "spec_reference": "VECTORS.md §17.6; ATTACHMENTS.md §3",
+  "construction": {
+    "key_derivation": "K_attachment = HKDF-Expand(PRK=K_enclosure, info='semp-attachment:' || attachment_id, L=32). K_enclosure already has full entropy from the seal layer, so no Extract step is needed.",
+    "aead_baseline": "ChaCha20-Poly1305, 12-byte nonce",
+    "aead_aad": "Canonical JSON of the item with ciphertext_hash, aead_nonce, and extensions blanked. Binds filename, mime_type, plaintext_size, url, aead_algorithm, and id into the tag so an attacker cannot swap them.",
+    "ciphertext_at_url": "raw aead_ct (ciphertext || tag), no framing",
+    "ciphertext_hash_format": "sha256:<hex of SHA-256(aead_ct)>"
+  },
+  "suites_covered": [
+    "x25519-chacha20-poly1305 (ChaCha20-Poly1305)"
+  ],
+  "suites_pending": [
+    "pq-kyber768-x25519 (XChaCha20-Poly1305, 24-byte nonce; deferred until pyca/cryptography or pynacl is wired in)"
+  ],
+  "vectors": [
+    {
+      "id": "large-attachment-baseline-valid",
+      "description": "Round-trip encrypt + decrypt of a 64-byte plaintext under K_attachment derived from a pinned K_enclosure and the item id. Both the SHA-256 ciphertext_hash and the AEAD authentication tag MUST verify on decrypt.",
+      "spec_reference": "VECTORS.md §17.6; ATTACHMENTS.md §3",
+      "inputs": {
+        "K_enclosure_hex": "e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5",
+        "attachment_id": "01J7ATTACHMENTIDXXXXXXXXXXXX",
+        "plaintext_hex": "5468697320697320612073796e7468657469632036342d6279746520706c61696e746578742075736564206173206120766563746f7220696e7075742e000000",
+        "aead_nonce_hex": "e6e6e6e6e6e6e6e6e6e6e6e6",
+        "item_pre_encrypt_template": {
+          "id": "01J7ATTACHMENTIDXXXXXXXXXXXX",
+          "filename": "memo.txt",
+          "mime_type": "text/plain",
+          "plaintext_size": 64,
+          "url": "https://blobs.example.com/a/01J7ATTACHMENTIDXXXXXXXXXXXX",
+          "ciphertext_hash": "",
+          "aead_algorithm": "chacha20-poly1305",
+          "aead_nonce": "",
+          "extensions": {}
+        }
+      },
+      "intermediates": {
+        "kdf_info_utf8": "semp-attachment:01J7ATTACHMENTIDXXXXXXXXXXXX",
+        "K_attachment_hex": "59b9349dde4487527252dc35dc5f9e65ed3b35a795ca72cca6b29973d9e06179",
+        "canonical_aad_utf8": "{\"aead_algorithm\":\"chacha20-poly1305\",\"aead_nonce\":\"\",\"ciphertext_hash\":\"\",\"extensions\":{},\"filename\":\"memo.txt\",\"id\":\"01J7ATTACHMENTIDXXXXXXXXXXXX\",\"mime_type\":\"text/plain\",\"plaintext_size\":64,\"url\":\"https://blobs.example.com/a/01J7ATTACHMENTIDXXXXXXXXXXXX\"}",
+        "aead_ct_hex": "936880c8caed3ebfc47c775e805fc425ecc42dfbe396dc3186124c1762d2615119fca4b4c15b9d3699ee0347bcc3106451776cfe2327c3f7d9b941e670acd0ed6c2633e1be4fdbb1b107ca89ba98bcd4",
+        "ct_sha256_hex": "b28749b77c6223ffc14d0f9d510b1a35b43d1566c0315c9dc941d79ec9765c89"
+      },
+      "expected": {
+        "item_final_json": {
+          "id": "01J7ATTACHMENTIDXXXXXXXXXXXX",
+          "filename": "memo.txt",
+          "mime_type": "text/plain",
+          "plaintext_size": 64,
+          "url": "https://blobs.example.com/a/01J7ATTACHMENTIDXXXXXXXXXXXX",
+          "ciphertext_hash": "sha256:b28749b77c6223ffc14d0f9d510b1a35b43d1566c0315c9dc941d79ec9765c89",
+          "aead_algorithm": "chacha20-poly1305",
+          "aead_nonce": "5ubm5ubm5ubm5ubm",
+          "extensions": {}
+        },
+        "ciphertext_at_url_hex": "936880c8caed3ebfc47c775e805fc425ecc42dfbe396dc3186124c1762d2615119fca4b4c15b9d3699ee0347bcc3106451776cfe2327c3f7d9b941e670acd0ed6c2633e1be4fdbb1b107ca89ba98bcd4",
+        "round_trip_recovers_plaintext": true
+      }
+    },
+    {
+      "id": "large-attachment-tampered-metadata",
+      "description": "Take the valid output and change item.filename. The recomputed AEAD AAD differs from the AAD used at encryption time, so the Poly1305 tag fails to verify and decryption rejects. Demonstrates the §3.2 metadata binding.",
+      "spec_reference": "VECTORS.md §17.6; ATTACHMENTS.md §3.2",
+      "inputs": {
+        "tampered_item_json": {
+          "id": "01J7ATTACHMENTIDXXXXXXXXXXXX",
+          "filename": "renamed.txt",
+          "mime_type": "text/plain",
+          "plaintext_size": 64,
+          "url": "https://blobs.example.com/a/01J7ATTACHMENTIDXXXXXXXXXXXX",
+          "ciphertext_hash": "sha256:b28749b77c6223ffc14d0f9d510b1a35b43d1566c0315c9dc941d79ec9765c89",
+          "aead_algorithm": "chacha20-poly1305",
+          "aead_nonce": "5ubm5ubm5ubm5ubm",
+          "extensions": {}
+        },
+        "ciphertext_at_url_hex": "936880c8caed3ebfc47c775e805fc425ecc42dfbe396dc3186124c1762d2615119fca4b4c15b9d3699ee0347bcc3106451776cfe2327c3f7d9b941e670acd0ed6c2633e1be4fdbb1b107ca89ba98bcd4",
+        "K_attachment_hex": "59b9349dde4487527252dc35dc5f9e65ed3b35a795ca72cca6b29973d9e06179",
+        "aead_nonce_hex": "e6e6e6e6e6e6e6e6e6e6e6e6"
+      },
+      "intermediates": {
+        "tampered_canonical_aad_utf8": "{\"aead_algorithm\":\"chacha20-poly1305\",\"aead_nonce\":\"\",\"ciphertext_hash\":\"\",\"extensions\":{},\"filename\":\"renamed.txt\",\"id\":\"01J7ATTACHMENTIDXXXXXXXXXXXX\",\"mime_type\":\"text/plain\",\"plaintext_size\":64,\"url\":\"https://blobs.example.com/a/01J7ATTACHMENTIDXXXXXXXXXXXX\"}",
+        "original_canonical_aad_utf8": "{\"aead_algorithm\":\"chacha20-poly1305\",\"aead_nonce\":\"\",\"ciphertext_hash\":\"\",\"extensions\":{},\"filename\":\"memo.txt\",\"id\":\"01J7ATTACHMENTIDXXXXXXXXXXXX\",\"mime_type\":\"text/plain\",\"plaintext_size\":64,\"url\":\"https://blobs.example.com/a/01J7ATTACHMENTIDXXXXXXXXXXXX\"}"
+      },
+      "expected": {
+        "decryption_succeeds": false,
+        "rejection_reason": "AEAD AAD mismatch: filename was bound at encryption time and any subsequent change invalidates the tag"
+      }
+    },
+    {
+      "id": "large-attachment-tampered-ciphertext",
+      "description": "Flip one bit of the ciphertext stored at item.url. Two independent integrity layers reject: (a) SHA-256(ciphertext) no longer equals item.ciphertext_hash, surfaced before decryption attempts; (b) the Poly1305 tag fails to verify on AEAD.Open. A receiver SHOULD short-circuit on (a) to avoid feeding adversarial input to the AEAD.",
+      "spec_reference": "VECTORS.md §17.6; ATTACHMENTS.md §3, §6",
+      "inputs": {
+        "item_json": {
+          "id": "01J7ATTACHMENTIDXXXXXXXXXXXX",
+          "filename": "memo.txt",
+          "mime_type": "text/plain",
+          "plaintext_size": 64,
+          "url": "https://blobs.example.com/a/01J7ATTACHMENTIDXXXXXXXXXXXX",
+          "ciphertext_hash": "sha256:b28749b77c6223ffc14d0f9d510b1a35b43d1566c0315c9dc941d79ec9765c89",
+          "aead_algorithm": "chacha20-poly1305",
+          "aead_nonce": "5ubm5ubm5ubm5ubm",
+          "extensions": {}
+        },
+        "tampered_ciphertext_hex": "936880c8caed3ebfc47c765e805fc425ecc42dfbe396dc3186124c1762d2615119fca4b4c15b9d3699ee0347bcc3106451776cfe2327c3f7d9b941e670acd0ed6c2633e1be4fdbb1b107ca89ba98bcd4",
+        "K_attachment_hex": "59b9349dde4487527252dc35dc5f9e65ed3b35a795ca72cca6b29973d9e06179",
+        "aead_nonce_hex": "e6e6e6e6e6e6e6e6e6e6e6e6"
+      },
+      "intermediates": {
+        "tampered_ciphertext_sha256_hex": "e1b39ca97ce68087081a20cf6c9ce1ac753c3b638684b26e9ba990c587989e0e",
+        "expected_ciphertext_hash_field": "sha256:b28749b77c6223ffc14d0f9d510b1a35b43d1566c0315c9dc941d79ec9765c89"
+      },
+      "expected": {
+        "ciphertext_hash_matches": false,
+        "aead_decryption_succeeds": false,
+        "rejection_reason": "ciphertext integrity check fails before AEAD; AEAD also rejects"
+      }
+    }
+  ]
+}

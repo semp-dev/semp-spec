@@ -996,6 +996,51 @@ Three vectors:
 
 **Bytes:** see [`vectors/v1.0.0/delivery-receipt.json`](vectors/v1.0.0/delivery-receipt.json).
 
+### 17.6 Large Attachment AEAD
+
+Reference: `ATTACHMENTS.md` §3.
+
+Each external attachment is encrypted under a per-item key derived from
+`K_enclosure`:
+
+```
+K_attachment = HKDF-Expand(PRK = K_enclosure,
+                            info = "semp-attachment:" || item.id,
+                            L    = 32)
+```
+
+The AEAD plaintext is the file bytes; the AEAD AAD is the canonical JSON
+of the item with `ciphertext_hash`, `aead_nonce`, and `extensions`
+blanked. This binds the item's metadata (filename, mime_type,
+plaintext_size, url, aead_algorithm, id) into the Poly1305 tag so that
+swapping any field after upload invalidates the ciphertext.
+
+The bytes stored at `item.url` are the raw AEAD ciphertext (ciphertext
+concatenated with the 16-byte authentication tag), with no framing.
+`item.ciphertext_hash` is `"sha256:" || hex(SHA-256(aead_ct))`, providing
+an integrity check that a downloader applies before invoking AEAD.Open.
+
+Three vectors:
+
+- `large-attachment-baseline-valid`: round-trip encrypt + decrypt of a
+  64-byte plaintext under the baseline ChaCha20-Poly1305 AEAD. Both
+  the ciphertext_hash check and the AEAD tag verify.
+- `large-attachment-tampered-metadata`: take the valid output and change
+  `item.filename`. The recomputed AEAD AAD differs from the AAD used at
+  encryption time and the Poly1305 tag fails. Demonstrates the §3.2
+  metadata binding.
+- `large-attachment-tampered-ciphertext`: flip one bit of the ciphertext
+  at `item.url`. Two independent integrity layers reject: SHA-256
+  (`ciphertext_hash` mismatch, surfaced before decryption) and the
+  Poly1305 tag on AEAD.Open. A receiver SHOULD short-circuit on the hash
+  check to avoid feeding adversarial input to the AEAD.
+
+**Bytes:** see [`vectors/v1.0.0/large-attachment.json`](vectors/v1.0.0/large-attachment.json).
+
+The post-quantum suite uses XChaCha20-Poly1305 (24-byte nonce) per §3.2
+and is deferred until the generator wires up an XChaCha20-Poly1305
+implementation; pyca/cryptography 45 does not currently expose it.
+
 ---
 
 ## 18. Relationship to Other Specifications
