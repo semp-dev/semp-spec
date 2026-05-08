@@ -1,0 +1,184 @@
+{
+  "version": "1.0.0",
+  "category": "delivery-receipt",
+  "description": "Layer 3 vectors for DELIVERY.md §1.1.1: signed delivery receipts. The receipt binds (envelope_hash, recipient_domain, accepted_at) under the recipient domain's Ed25519 signing key with the SEMP-DELIVERY-RECEIPT: domain-separation prefix.",
+  "spec_reference": "VECTORS.md §17.5; DELIVERY.md §1.1.1",
+  "construction": {
+    "envelope_hash_algorithm": "SHA-256",
+    "envelope_hash_input": "canonical envelope bytes per ENVELOPE.md §4.3",
+    "signature_algorithm": "Ed25519",
+    "domain_separation_prefix_utf8": "SEMP-DELIVERY-RECEIPT:",
+    "canonical_form": "Per ENVELOPE.md §4.3: sorted keys at every nesting level, no insignificant whitespace, UTF-8 encoding. Apply with receipt.signature.value set to \"\".",
+    "signing_input": "prefix || canonical_receipt_bytes",
+    "key_id_construction": "SHA-256(public_key) lowercase hex per KEY.md §4.4"
+  },
+  "vectors": [
+    {
+      "id": "delivery-receipt-valid",
+      "description": "Pinned recipient domain key signs a receipt over the pinned reference envelope. Both the envelope_hash comparison (step 4 of §1.1.1.7) and the Ed25519 signature verification (step 3) succeed.",
+      "spec_reference": "VECTORS.md §17.5; DELIVERY.md §1.1.1.4, §1.1.1.7",
+      "inputs": {
+        "recipient_domain_seed_hex": "c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1",
+        "recipient_domain_pub_hex": "acdcc8494d458f44a7aaac1d6a84ec624daee88436db2ae26e67ba645a106228",
+        "recipient_domain_key_id": "7c43b35c4bd15e85e504bfab0807c6ff00b4656a8195046b9766e1db0b0a0d1a",
+        "reference_envelope_json": {
+          "type": "SEMP_ENVELOPE",
+          "version": "1.0.0",
+          "postmark": {
+            "id": "01J7RECEIPTPOSTMARKXXXXXXXXX",
+            "session_id": "01J7RECEIPTSESSIONXXXXXXXXXX",
+            "from_domain": "alice.example",
+            "to_domain": "bob.example",
+            "expires": "2026-04-22T00:00:00Z",
+            "extensions": {}
+          },
+          "seal": {
+            "algorithm": "x25519-chacha20-poly1305",
+            "key_id": "alice-domain-fp",
+            "signature": "EXAMPLE_SIGNATURE",
+            "session_mac": "EXAMPLE_SESSION_MAC",
+            "brief_recipients": {
+              "bob-fp": "WRAPPED_K_BRIEF"
+            },
+            "enclosure_recipients": {
+              "bob-fp": "WRAPPED_K_ENCLOSURE"
+            },
+            "extensions": {}
+          },
+          "brief": "BRIEF_CIPHERTEXT_PLACEHOLDER",
+          "enclosure": "ENCLOSURE_CIPHERTEXT_PLACEHOLDER"
+        },
+        "receipt_pre_sign_json": {
+          "type": "SEMP_DELIVERY_RECEIPT",
+          "version": "1.0.0",
+          "envelope_hash": {
+            "algorithm": "sha-256",
+            "value": "hVWhGFKEFAY6sCZgAbPmSZk5HBdUG5DA0Qw5UbBFAC4="
+          },
+          "recipient_domain": "bob.example",
+          "accepted_at": "2026-04-21T10:15:32Z",
+          "signature": {
+            "algorithm": "ed25519",
+            "key_id": "7c43b35c4bd15e85e504bfab0807c6ff00b4656a8195046b9766e1db0b0a0d1a",
+            "value": ""
+          }
+        }
+      },
+      "intermediates": {
+        "canonical_envelope_for_hash_utf8": "{\"brief\":\"BRIEF_CIPHERTEXT_PLACEHOLDER\",\"enclosure\":\"ENCLOSURE_CIPHERTEXT_PLACEHOLDER\",\"postmark\":{\"expires\":\"2026-04-22T00:00:00Z\",\"extensions\":{},\"from_domain\":\"alice.example\",\"id\":\"01J7RECEIPTPOSTMARKXXXXXXXXX\",\"session_id\":\"01J7RECEIPTSESSIONXXXXXXXXXX\",\"to_domain\":\"bob.example\"},\"seal\":{\"algorithm\":\"x25519-chacha20-poly1305\",\"brief_recipients\":{\"bob-fp\":\"WRAPPED_K_BRIEF\"},\"enclosure_recipients\":{\"bob-fp\":\"WRAPPED_K_ENCLOSURE\"},\"extensions\":{},\"key_id\":\"alice-domain-fp\",\"session_mac\":\"\",\"signature\":\"\"},\"type\":\"SEMP_ENVELOPE\",\"version\":\"1.0.0\"}",
+        "envelope_hash_hex": "8555a118528414063ab0266001b3e64999391c17541b90c0d10c3951b045002e",
+        "canonical_receipt_with_blanked_signature_utf8": "{\"accepted_at\":\"2026-04-21T10:15:32Z\",\"envelope_hash\":{\"algorithm\":\"sha-256\",\"value\":\"hVWhGFKEFAY6sCZgAbPmSZk5HBdUG5DA0Qw5UbBFAC4=\"},\"recipient_domain\":\"bob.example\",\"signature\":{\"algorithm\":\"ed25519\",\"key_id\":\"7c43b35c4bd15e85e504bfab0807c6ff00b4656a8195046b9766e1db0b0a0d1a\",\"value\":\"\"},\"type\":\"SEMP_DELIVERY_RECEIPT\",\"version\":\"1.0.0\"}",
+        "signing_input_prefix_utf8": "SEMP-DELIVERY-RECEIPT:",
+        "signing_input_hex": "53454d502d44454c49564552592d524543454950543a7b2261636365707465645f6174223a22323032362d30342d32315431303a31353a33325a222c22656e76656c6f70655f68617368223a7b22616c676f726974686d223a227368612d323536222c2276616c7565223a226856576847464b454641593673435a674162506d535a6b35484264554735444130517735556242464143343d227d2c22726563697069656e745f646f6d61696e223a22626f622e6578616d706c65222c227369676e6174757265223a7b22616c676f726974686d223a2265643235353139222c226b65795f6964223a2237633433623335633462643135653835653530346266616230383037633666663030623436353661383139353034366239373636653164623062306130643161222c2276616c7565223a22227d2c2274797065223a2253454d505f44454c49564552595f52454345495054222c2276657273696f6e223a22312e302e30227d",
+        "signature_hex": "30546f225b3d02f75b89ecadc5aecb8cc2fe70304f2a9c0d42862f34808852554d3a5dcfcdc3698c8bc7449909d02867f9db8d2d7ee845d6f02e4ff1254df907"
+      },
+      "expected": {
+        "signed_receipt_json": {
+          "type": "SEMP_DELIVERY_RECEIPT",
+          "version": "1.0.0",
+          "envelope_hash": {
+            "algorithm": "sha-256",
+            "value": "hVWhGFKEFAY6sCZgAbPmSZk5HBdUG5DA0Qw5UbBFAC4="
+          },
+          "recipient_domain": "bob.example",
+          "accepted_at": "2026-04-21T10:15:32Z",
+          "signature": {
+            "algorithm": "ed25519",
+            "key_id": "7c43b35c4bd15e85e504bfab0807c6ff00b4656a8195046b9766e1db0b0a0d1a",
+            "value": "MFRvIls9Avdbieytxa7LjML+cDBPKpwNQoYvNICIUlVNOl3PzcNpjIvHRJkJ0Chn+duNLX7oRdbwLk/xJU35Bw=="
+          }
+        },
+        "signature_b64": "MFRvIls9Avdbieytxa7LjML+cDBPKpwNQoYvNICIUlVNOl3PzcNpjIvHRJkJ0Chn+duNLX7oRdbwLk/xJU35Bw==",
+        "signature_verifies": true,
+        "envelope_hash_matches_recomputation": true
+      }
+    },
+    {
+      "id": "delivery-receipt-tampered-envelope",
+      "description": "The receipt is genuine (signature still verifies) but the envelope has been altered. A verifier holding both the receipt and the tampered envelope recomputes a SHA-256 that differs from receipt.envelope_hash.value, so the §1.1.1.7 step 4 comparison fails. The receipt MUST NOT be treated as proof for this envelope.",
+      "spec_reference": "VECTORS.md §17.5; DELIVERY.md §1.1.1.7",
+      "inputs": {
+        "signed_receipt_json": {
+          "type": "SEMP_DELIVERY_RECEIPT",
+          "version": "1.0.0",
+          "envelope_hash": {
+            "algorithm": "sha-256",
+            "value": "hVWhGFKEFAY6sCZgAbPmSZk5HBdUG5DA0Qw5UbBFAC4="
+          },
+          "recipient_domain": "bob.example",
+          "accepted_at": "2026-04-21T10:15:32Z",
+          "signature": {
+            "algorithm": "ed25519",
+            "key_id": "7c43b35c4bd15e85e504bfab0807c6ff00b4656a8195046b9766e1db0b0a0d1a",
+            "value": "MFRvIls9Avdbieytxa7LjML+cDBPKpwNQoYvNICIUlVNOl3PzcNpjIvHRJkJ0Chn+duNLX7oRdbwLk/xJU35Bw=="
+          }
+        },
+        "tampered_envelope_json": {
+          "type": "SEMP_ENVELOPE",
+          "version": "1.0.0",
+          "postmark": {
+            "id": "01J7RECEIPTPOSTMARKXXXXXXXXX",
+            "session_id": "01J7RECEIPTSESSIONXXXXXXXXXX",
+            "from_domain": "mallory.example",
+            "to_domain": "bob.example",
+            "expires": "2026-04-22T00:00:00Z",
+            "extensions": {}
+          },
+          "seal": {
+            "algorithm": "x25519-chacha20-poly1305",
+            "key_id": "alice-domain-fp",
+            "signature": "EXAMPLE_SIGNATURE",
+            "session_mac": "EXAMPLE_SESSION_MAC",
+            "brief_recipients": {
+              "bob-fp": "WRAPPED_K_BRIEF"
+            },
+            "enclosure_recipients": {
+              "bob-fp": "WRAPPED_K_ENCLOSURE"
+            },
+            "extensions": {}
+          },
+          "brief": "BRIEF_CIPHERTEXT_PLACEHOLDER",
+          "enclosure": "ENCLOSURE_CIPHERTEXT_PLACEHOLDER"
+        },
+        "recipient_domain_pub_hex": "acdcc8494d458f44a7aaac1d6a84ec624daee88436db2ae26e67ba645a106228"
+      },
+      "intermediates": {
+        "tampered_canonical_envelope_utf8": "{\"brief\":\"BRIEF_CIPHERTEXT_PLACEHOLDER\",\"enclosure\":\"ENCLOSURE_CIPHERTEXT_PLACEHOLDER\",\"postmark\":{\"expires\":\"2026-04-22T00:00:00Z\",\"extensions\":{},\"from_domain\":\"mallory.example\",\"id\":\"01J7RECEIPTPOSTMARKXXXXXXXXX\",\"session_id\":\"01J7RECEIPTSESSIONXXXXXXXXXX\",\"to_domain\":\"bob.example\"},\"seal\":{\"algorithm\":\"x25519-chacha20-poly1305\",\"brief_recipients\":{\"bob-fp\":\"WRAPPED_K_BRIEF\"},\"enclosure_recipients\":{\"bob-fp\":\"WRAPPED_K_ENCLOSURE\"},\"extensions\":{},\"key_id\":\"alice-domain-fp\",\"session_mac\":\"\",\"signature\":\"\"},\"type\":\"SEMP_ENVELOPE\",\"version\":\"1.0.0\"}",
+        "tampered_envelope_hash_hex": "7530144ea7ccdd1c68306ed5d1e3b08aff4715d638d1958aa351fc69590f51f6",
+        "receipt_envelope_hash_hex": "8555a118528414063ab0266001b3e64999391c17541b90c0d10c3951b045002e"
+      },
+      "expected": {
+        "receipt_signature_still_verifies": true,
+        "envelope_hash_matches_recomputation": false,
+        "rejection_reason": "envelope_hash mismatch: receipt was issued for a different envelope than the one being inspected"
+      }
+    },
+    {
+      "id": "delivery-receipt-tampered-body",
+      "description": "Take the valid signed receipt and change accepted_at by one second. The reconstructed canonical bytes differ from what was signed, so Ed25519 verify rejects. Demonstrates that every receipt field other than signature.value is bound by the signature.",
+      "spec_reference": "VECTORS.md §17.5; DELIVERY.md §1.1.1.4",
+      "inputs": {
+        "tampered_receipt_json": {
+          "type": "SEMP_DELIVERY_RECEIPT",
+          "version": "1.0.0",
+          "envelope_hash": {
+            "algorithm": "sha-256",
+            "value": "hVWhGFKEFAY6sCZgAbPmSZk5HBdUG5DA0Qw5UbBFAC4="
+          },
+          "recipient_domain": "bob.example",
+          "accepted_at": "2026-04-21T10:15:33Z",
+          "signature": {
+            "algorithm": "ed25519",
+            "key_id": "7c43b35c4bd15e85e504bfab0807c6ff00b4656a8195046b9766e1db0b0a0d1a",
+            "value": "MFRvIls9Avdbieytxa7LjML+cDBPKpwNQoYvNICIUlVNOl3PzcNpjIvHRJkJ0Chn+duNLX7oRdbwLk/xJU35Bw=="
+          }
+        },
+        "recipient_domain_pub_hex": "acdcc8494d458f44a7aaac1d6a84ec624daee88436db2ae26e67ba645a106228"
+      },
+      "expected": {
+        "signature_verifies": false,
+        "rejection_reason": "receipt body altered post-signing; canonical bytes no longer match the signed input"
+      }
+    }
+  ]
+}

@@ -2768,6 +2768,238 @@ def build_envelope_roundtrip_json() -> dict:
     }
 
 
+# ---- Delivery-receipt vectors (Layer 3, DELIVERY.md §1.1.1) -----------------
+
+
+DELIVERY_RECEIPT_PREFIX = b"SEMP-DELIVERY-RECEIPT:"
+
+
+def receipt_canonical(receipt: dict) -> bytes:
+    r = copy.deepcopy(receipt)
+    if "signature" not in r:
+        raise ValueError("receipt missing signature block")
+    r["signature"]["value"] = ""
+    return canonical_json(r)
+
+
+def receipt_compute(receipt: dict, domain_priv: bytes) -> tuple[dict, dict]:
+    canonical = receipt_canonical(receipt)
+    prefixed = DELIVERY_RECEIPT_PREFIX + canonical
+    sig = ed25519_sign(domain_priv, prefixed)
+
+    import base64
+
+    signed = copy.deepcopy(receipt)
+    signed["signature"]["value"] = base64.b64encode(sig).decode("ascii")
+
+    inter = {
+        "canonical_receipt_with_blanked_signature_utf8": canonical.decode("utf-8"),
+        "signing_input_prefix_utf8": DELIVERY_RECEIPT_PREFIX.decode("utf-8"),
+        "signing_input_hex": prefixed.hex(),
+        "signature_hex": sig.hex(),
+    }
+    return signed, inter
+
+
+def receipt_verify(signed_receipt: dict, domain_pub: bytes) -> bool:
+    import base64
+
+    sig_b64 = signed_receipt["signature"]["value"]
+    sig = base64.b64decode(sig_b64)
+    canonical = receipt_canonical(signed_receipt)
+    prefixed = DELIVERY_RECEIPT_PREFIX + canonical
+    return ed25519_verify(domain_pub, sig, prefixed)
+
+
+def build_delivery_receipt_json() -> dict:
+    """Three vectors for DELIVERY.md §1.1.1: valid receipt, tampered
+    envelope (envelope_hash mismatches recomputation), tampered receipt
+    body (Ed25519 verify fails)."""
+
+    # Recipient domain signing key.
+    domain_seed = bytes([0xC1] * 32)
+    domain_pub = ed25519_pubkey_from_priv(domain_seed)
+    domain_fp = fingerprint_hex(domain_pub)
+
+    # Pin a small reference envelope. We don't need to fully encrypt it for
+    # the receipt — we just need its canonical bytes for the SHA-256 digest.
+    # The envelope below has all the §4.3 canonicalization corner cases
+    # (sorted keys, blanked signature/session_mac, padding/hop_count
+    # omitted) covered by canonical_envelope.
+    reference_envelope = {
+        "type": "SEMP_ENVELOPE",
+        "version": "1.0.0",
+        "postmark": {
+            "id": "01J7RECEIPTPOSTMARKXXXXXXXXX",
+            "session_id": "01J7RECEIPTSESSIONXXXXXXXXXX",
+            "from_domain": "alice.example",
+            "to_domain": "bob.example",
+            "expires": "2026-04-22T00:00:00Z",
+            "extensions": {},
+        },
+        "seal": {
+            "algorithm": "x25519-chacha20-poly1305",
+            "key_id": "alice-domain-fp",
+            "signature": "EXAMPLE_SIGNATURE",
+            "session_mac": "EXAMPLE_SESSION_MAC",
+            "brief_recipients": {"bob-fp": "WRAPPED_K_BRIEF"},
+            "enclosure_recipients": {"bob-fp": "WRAPPED_K_ENCLOSURE"},
+            "extensions": {},
+        },
+        "brief": "BRIEF_CIPHERTEXT_PLACEHOLDER",
+        "enclosure": "ENCLOSURE_CIPHERTEXT_PLACEHOLDER",
+    }
+
+    canonical_env_bytes = envelope_canonical_for_signature(reference_envelope)
+    envelope_digest = sha256(canonical_env_bytes)
+
+    import base64
+
+    receipt_pre_sign = {
+        "type": "SEMP_DELIVERY_RECEIPT",
+        "version": "1.0.0",
+        "envelope_hash": {
+            "algorithm": "sha-256",
+            "value": base64.b64encode(envelope_digest).decode("ascii"),
+        },
+        "recipient_domain": "bob.example",
+        "accepted_at": "2026-04-21T10:15:32Z",
+        "signature": {
+            "algorithm": "ed25519",
+            "key_id": domain_fp,
+            "value": "",
+        },
+    }
+
+    # Case 1: valid receipt.
+    receipt_signed, inter_valid = receipt_compute(receipt_pre_sign, domain_seed)
+    assert receipt_verify(receipt_signed, domain_pub)
+
+    # Case 2: tampered envelope. Compute the receipt over the original
+    # envelope's hash; the verifier holding a tampered envelope recomputes a
+    # different SHA-256 and the §1.1.1.7 step 4 comparison fails. The
+    # signature itself still verifies because the receipt body is unchanged.
+    tampered_envelope = copy.deepcopy(reference_envelope)
+    tampered_envelope["postmark"]["from_domain"] = "mallory.example"  # forged
+    tampered_canonical = envelope_canonical_for_signature(tampered_envelope)
+    tampered_digest = sha256(tampered_canonical)
+    digest_matches = tampered_digest == envelope_digest
+
+    # Case 3: tampered receipt body. Take the valid signed receipt, change
+    # `accepted_at` post-hoc, and try to verify. Ed25519 verify rejects.
+    tampered_receipt = copy.deepcopy(receipt_signed)
+    tampered_receipt["accepted_at"] = "2026-04-21T10:15:33Z"  # one second later
+    receipt_verifies_after_tamper = receipt_verify(tampered_receipt, domain_pub)
+    assert not receipt_verifies_after_tamper
+
+    return {
+        "version": "1.0.0",
+        "category": "delivery-receipt",
+        "description": (
+            "Layer 3 vectors for DELIVERY.md §1.1.1: signed delivery "
+            "receipts. The receipt binds (envelope_hash, recipient_domain, "
+            "accepted_at) under the recipient domain's Ed25519 signing key "
+            "with the SEMP-DELIVERY-RECEIPT: domain-separation prefix."
+        ),
+        "spec_reference": "VECTORS.md §17.5; DELIVERY.md §1.1.1",
+        "construction": {
+            "envelope_hash_algorithm": "SHA-256",
+            "envelope_hash_input": "canonical envelope bytes per ENVELOPE.md §4.3",
+            "signature_algorithm": "Ed25519",
+            "domain_separation_prefix_utf8": "SEMP-DELIVERY-RECEIPT:",
+            "canonical_form": (
+                "Per ENVELOPE.md §4.3: sorted keys at every nesting level, "
+                "no insignificant whitespace, UTF-8 encoding. Apply with "
+                "receipt.signature.value set to \"\"."
+            ),
+            "signing_input": "prefix || canonical_receipt_bytes",
+            "key_id_construction": "SHA-256(public_key) lowercase hex per KEY.md §4.4",
+        },
+        "vectors": [
+            {
+                "id": "delivery-receipt-valid",
+                "description": (
+                    "Pinned recipient domain key signs a receipt over the "
+                    "pinned reference envelope. Both the envelope_hash "
+                    "comparison (step 4 of §1.1.1.7) and the Ed25519 "
+                    "signature verification (step 3) succeed."
+                ),
+                "spec_reference": "VECTORS.md §17.5; DELIVERY.md §1.1.1.4, §1.1.1.7",
+                "inputs": {
+                    "recipient_domain_seed_hex": domain_seed.hex(),
+                    "recipient_domain_pub_hex": domain_pub.hex(),
+                    "recipient_domain_key_id": domain_fp,
+                    "reference_envelope_json": reference_envelope,
+                    "receipt_pre_sign_json": receipt_pre_sign,
+                },
+                "intermediates": {
+                    "canonical_envelope_for_hash_utf8": canonical_env_bytes.decode("utf-8"),
+                    "envelope_hash_hex": envelope_digest.hex(),
+                    **inter_valid,
+                },
+                "expected": {
+                    "signed_receipt_json": receipt_signed,
+                    "signature_b64": receipt_signed["signature"]["value"],
+                    "signature_verifies": True,
+                    "envelope_hash_matches_recomputation": True,
+                },
+            },
+            {
+                "id": "delivery-receipt-tampered-envelope",
+                "description": (
+                    "The receipt is genuine (signature still verifies) but "
+                    "the envelope has been altered. A verifier holding both "
+                    "the receipt and the tampered envelope recomputes a "
+                    "SHA-256 that differs from receipt.envelope_hash.value, "
+                    "so the §1.1.1.7 step 4 comparison fails. The receipt "
+                    "MUST NOT be treated as proof for this envelope."
+                ),
+                "spec_reference": "VECTORS.md §17.5; DELIVERY.md §1.1.1.7",
+                "inputs": {
+                    "signed_receipt_json": receipt_signed,
+                    "tampered_envelope_json": tampered_envelope,
+                    "recipient_domain_pub_hex": domain_pub.hex(),
+                },
+                "intermediates": {
+                    "tampered_canonical_envelope_utf8": tampered_canonical.decode("utf-8"),
+                    "tampered_envelope_hash_hex": tampered_digest.hex(),
+                    "receipt_envelope_hash_hex": envelope_digest.hex(),
+                },
+                "expected": {
+                    "receipt_signature_still_verifies": True,
+                    "envelope_hash_matches_recomputation": digest_matches,
+                    "rejection_reason": (
+                        "envelope_hash mismatch: receipt was issued for a "
+                        "different envelope than the one being inspected"
+                    ),
+                },
+            },
+            {
+                "id": "delivery-receipt-tampered-body",
+                "description": (
+                    "Take the valid signed receipt and change accepted_at "
+                    "by one second. The reconstructed canonical bytes differ "
+                    "from what was signed, so Ed25519 verify rejects. "
+                    "Demonstrates that every receipt field other than "
+                    "signature.value is bound by the signature."
+                ),
+                "spec_reference": "VECTORS.md §17.5; DELIVERY.md §1.1.1.4",
+                "inputs": {
+                    "tampered_receipt_json": tampered_receipt,
+                    "recipient_domain_pub_hex": domain_pub.hex(),
+                },
+                "expected": {
+                    "signature_verifies": receipt_verifies_after_tamper,
+                    "rejection_reason": (
+                        "receipt body altered post-signing; canonical bytes "
+                        "no longer match the signed input"
+                    ),
+                },
+            },
+        ],
+    }
+
+
 # ---- Forwarding vectors (Layer 3, ENVELOPE.md §6.6) -------------------------
 
 
@@ -3239,6 +3471,7 @@ def main() -> int:
         (OUTDIR / "sender-signature.json", build_sender_signature_json()),
         (OUTDIR / "forwarding.json", build_forwarding_json()),
         (OUTDIR / "envelope-roundtrip.json", build_envelope_roundtrip_json()),
+        (OUTDIR / "delivery-receipt.json", build_delivery_receipt_json()),
     ]
 
     ok = True

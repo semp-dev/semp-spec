@@ -959,6 +959,43 @@ can drill into the specific construction step that diverged.
 The post-quantum suite (`pq-kyber768-x25519`) envelope round-trip lands
 in a follow-up once Kyber768 is wired into the generator.
 
+### 17.5 Signed Delivery Receipt
+
+Reference: `DELIVERY.md` §1.1.1.
+
+A signed delivery receipt is a portable artifact the recipient server
+returns alongside every `delivered` acknowledgment. It binds three values
+under the recipient domain's Ed25519 signing key with the
+`SEMP-DELIVERY-RECEIPT:` prefix:
+
+- `envelope_hash.value` — SHA-256 of the canonical envelope bytes per
+  §4.3 (the same canonical form `seal.signature` covers).
+- `recipient_domain` — the recipient server's domain.
+- `accepted_at` — ISO 8601 UTC timestamp at second precision.
+
+Construction parallels §6.5 sender_signature: blank `signature.value`,
+canonicalize per §4.3, prefix with `SEMP-DELIVERY-RECEIPT:`, sign Ed25519,
+base64-encode, and replace the value.
+
+Three vectors:
+
+- `delivery-receipt-valid`: pinned domain key signs a receipt over a
+  pinned reference envelope. The intermediates include the canonical
+  envelope-for-hash bytes, the SHA-256 digest, and the canonical receipt
+  with the signature blanked. Both the §1.1.1.7 signature verification
+  (step 3) and the envelope_hash recomputation (step 4) succeed.
+- `delivery-receipt-tampered-envelope`: receipt is genuine but the
+  inspected envelope differs from the one the receipt was issued for.
+  The signature still verifies (the receipt body is intact), but the
+  recomputed SHA-256 of the tampered envelope's canonical bytes does
+  NOT match `envelope_hash.value`. The receipt MUST NOT be accepted
+  as proof for this envelope.
+- `delivery-receipt-tampered-body`: take the valid receipt and change
+  `accepted_at` by one second. Ed25519 verify rejects, isolating the
+  failure to receipt-body tampering rather than envelope tampering.
+
+**Bytes:** see [`vectors/v1.0.0/delivery-receipt.json`](vectors/v1.0.0/delivery-receipt.json).
+
 ---
 
 ## 18. Relationship to Other Specifications
