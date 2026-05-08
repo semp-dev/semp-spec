@@ -3755,6 +3755,256 @@ def build_forwarding_json() -> dict:
     }
 
 
+# ---- Negative envelope-rejection vectors (Layer 3 must-reject) -------------
+
+
+def build_negative_envelope_rejection_json() -> dict:
+    """Three concrete must-reject cases that exercise the §7.2 decryption
+    flow's rejection paths:
+
+      1. envelope_expired       (step 2: postmark.expires in past)
+      2. seal_invalid           (step 1: seal.signature does not verify)
+      3. session_mac_invalid    (step 4: seal.session_mac does not verify)
+
+    Each vector is built from a small but otherwise well-formed envelope so
+    the rejection is unambiguously attributable to the targeted field, not
+    to a confounding error somewhere else in the structure.
+    """
+    import base64
+
+    sender_identity_seed = bytes([0x91] * 32)
+    sender_identity_pub = ed25519_pubkey_from_priv(sender_identity_seed)
+    sender_identity_fp = fingerprint_hex(sender_identity_pub)
+    sender_domain_seed = bytes([0x92] * 32)
+    sender_domain_pub = ed25519_pubkey_from_priv(sender_domain_seed)
+    sender_domain_fp = fingerprint_hex(sender_domain_pub)
+
+    recipient_priv = bytes([0x93] * 32)
+    recipient_pub = x25519_pubkey_from_priv(recipient_priv)
+    recipient_fp = fingerprint_hex(recipient_pub)
+
+    K_brief = bytes([0x94] * 32)
+    K_enclosure = bytes([0x95] * 32)
+    brief_nonce = bytes([0x96] * 12)
+    enclosure_nonce = bytes([0x97] * 12)
+    K_env_mac = bytes([0x98] * 32)
+    eph_priv_brief = bytes([0x99] * 32)
+    eph_priv_enclosure = bytes([0x9A] * 32)
+
+    postmark_id = "01J7NEGPOSTMARKIDXXXXXXXXXXX"
+    session_id = "01J7NEGSESSIONIDXXXXXXXXXXXX"
+
+    brief = {
+        "message_id": "negative-test-msg",
+        "from": "sender@example",
+        "to": ["recipient@example"],
+        "sent_at": "2026-05-08T10:00:00Z",
+    }
+    enclosure_pre_sign = {
+        "subject": "Negative test",
+        "content_type": "text/plain",
+        "body": {"text/plain": "VGVzdA=="},
+        "attachments": [],
+        "forwarded_from": None,
+        "extensions": {},
+        "sender_signature": {
+            "algorithm": "ed25519",
+            "key_id": sender_identity_fp,
+            "value": "",
+        },
+    }
+    enclosure_signed, _ = sender_signature_compute(
+        enclosure_pre_sign, sender_identity_seed
+    )
+
+    brief_blob = encrypt_brief_or_enclosure(
+        K_brief, brief_nonce, canonical_json(brief), postmark_id
+    )
+    enclosure_blob = encrypt_brief_or_enclosure(
+        K_enclosure, enclosure_nonce, canonical_json(enclosure_signed), postmark_id
+    )
+
+    wrapped_brief, _ = seal_wrap_baseline(K_brief, recipient_pub, eph_priv_brief)
+    wrapped_enclosure, _ = seal_wrap_baseline(
+        K_enclosure, recipient_pub, eph_priv_enclosure
+    )
+
+    def make_envelope(*, expires: str) -> dict:
+        env = {
+            "type": "SEMP_ENVELOPE",
+            "version": "1.0.0",
+            "postmark": {
+                "id": postmark_id,
+                "session_id": session_id,
+                "from_domain": "example",
+                "to_domain": "example",
+                "expires": expires,
+                "extensions": {},
+            },
+            "seal": {
+                "algorithm": "x25519-chacha20-poly1305",
+                "key_id": sender_domain_fp,
+                "signature": "",
+                "session_mac": "",
+                "brief_recipients": {recipient_fp: wrapped_brief},
+                "enclosure_recipients": {recipient_fp: wrapped_enclosure},
+                "extensions": {},
+            },
+            "brief": brief_blob,
+            "enclosure": enclosure_blob,
+        }
+        canonical = envelope_canonical_for_signature(env)
+        sig = ed25519_sign(sender_domain_seed, SEAL_SIGNATURE_PREFIX + canonical)
+        mac = hmac_sha256(K_env_mac, canonical)
+        env["seal"]["signature"] = base64.b64encode(sig).decode("ascii")
+        env["seal"]["session_mac"] = base64.b64encode(mac).decode("ascii")
+        return env
+
+    # Sanity baseline: a fully valid envelope that should pass §7.2 steps 1
+    # and 4. We mutate copies of this for each negative case.
+    valid_env = make_envelope(expires="2026-12-31T23:59:59Z")
+    valid_canonical = envelope_canonical_for_signature(valid_env)
+    valid_sig = base64.b64decode(valid_env["seal"]["signature"])
+    valid_mac = base64.b64decode(valid_env["seal"]["session_mac"])
+    assert ed25519_verify(
+        sender_domain_pub, valid_sig, SEAL_SIGNATURE_PREFIX + valid_canonical
+    )
+    assert hmac_sha256(K_env_mac, valid_canonical) == valid_mac
+
+    # Vector 1: envelope_expired.
+    expired_env = make_envelope(expires="2020-01-01T00:00:00Z")
+    # Step 1 (signature) still passes because we re-signed over the
+    # expired envelope's canonical bytes. Step 2 (expires) is what rejects.
+    expired_canonical = envelope_canonical_for_signature(expired_env)
+    expired_sig = base64.b64decode(expired_env["seal"]["signature"])
+    expired_step_1 = ed25519_verify(
+        sender_domain_pub, expired_sig, SEAL_SIGNATURE_PREFIX + expired_canonical
+    )
+
+    expired_vector = {
+        "id": "envelope-expired",
+        "description": (
+            "A well-formed envelope whose postmark.expires is in the past. "
+            "§7.2 step 1 (seal.signature verification) still passes — the "
+            "envelope was correctly signed over its own canonical bytes — "
+            "but step 2 MUST reject with reason_code envelope_expired "
+            "before any further processing."
+        ),
+        "spec_reference": "VECTORS.md §17.7; ENVELOPE.md §7.2 step 2; ERRORS.md envelope_expired",
+        "inputs": {
+            "envelope_json": expired_env,
+            "sender_domain_pub_hex": sender_domain_pub.hex(),
+            "K_env_mac_hex": K_env_mac.hex(),
+            "now_iso": "2026-05-08T10:00:00Z",
+        },
+        "expected": {
+            "step_1_seal_signature_verifies": expired_step_1,
+            "step_2_postmark_expires_in_past": True,
+            "rejection_step": "step 2 (postmark.expires)",
+            "rejection_reason_code": "envelope_expired",
+        },
+    }
+
+    # Vector 2: seal_invalid (bad signature).
+    bad_sig_env = copy.deepcopy(valid_env)
+    # Replace seal.signature with a different (valid Ed25519 length but
+    # wrong) value. We pick the signature of an UNRELATED message so it has
+    # legitimate format but doesn't verify against the canonical envelope.
+    bogus_signature = ed25519_sign(sender_domain_seed, b"unrelated payload")
+    bad_sig_env["seal"]["signature"] = base64.b64encode(bogus_signature).decode("ascii")
+    bad_sig_canonical = envelope_canonical_for_signature(bad_sig_env)
+    bad_sig_step_1 = ed25519_verify(
+        sender_domain_pub, bogus_signature, SEAL_SIGNATURE_PREFIX + bad_sig_canonical
+    )
+    assert not bad_sig_step_1
+
+    bad_sig_vector = {
+        "id": "seal-signature-invalid",
+        "description": (
+            "Take the valid envelope and replace seal.signature with a "
+            "well-formed but unrelated Ed25519 signature (signed over "
+            "different bytes). §7.2 step 1 MUST reject with reason_code "
+            "seal_invalid before any further processing. Routing servers "
+            "perform this verification per §4.3 'Two-Layer Verification'."
+        ),
+        "spec_reference": "VECTORS.md §17.7; ENVELOPE.md §7.2 step 1; ERRORS.md seal_invalid",
+        "inputs": {
+            "envelope_json": bad_sig_env,
+            "sender_domain_pub_hex": sender_domain_pub.hex(),
+        },
+        "expected": {
+            "step_1_seal_signature_verifies": bad_sig_step_1,
+            "rejection_step": "step 1 (seal.signature)",
+            "rejection_reason_code": "seal_invalid",
+        },
+    }
+
+    # Vector 3: session_mac_invalid.
+    bad_mac_env = copy.deepcopy(valid_env)
+    # Replace session_mac with an HMAC computed under a different key (so
+    # the value has correct length and shape, but verification under the
+    # actual K_env_mac fails).
+    other_key = bytes([0xCC] * 32)
+    bogus_mac = hmac_sha256(other_key, valid_canonical)
+    bad_mac_env["seal"]["session_mac"] = base64.b64encode(bogus_mac).decode("ascii")
+    # The seal.signature still verifies because we changed only session_mac
+    # AFTER the signature was computed... actually no, both are blanked
+    # during canonicalization, so changing session_mac post-signature does
+    # NOT invalidate seal.signature. Verify that explicitly.
+    bad_mac_canonical = envelope_canonical_for_signature(bad_mac_env)
+    bad_mac_sig = base64.b64decode(bad_mac_env["seal"]["signature"])
+    bad_mac_step_1 = ed25519_verify(
+        sender_domain_pub, bad_mac_sig, SEAL_SIGNATURE_PREFIX + bad_mac_canonical
+    )
+    assert bad_mac_step_1, "seal.signature should still verify when only session_mac is mutated"
+    expected_mac_step_4 = hmac_sha256(K_env_mac, bad_mac_canonical)
+    bad_mac_step_4 = expected_mac_step_4 == bogus_mac
+    assert not bad_mac_step_4
+
+    bad_mac_vector = {
+        "id": "session-mac-invalid",
+        "description": (
+            "Take the valid envelope and replace seal.session_mac with an "
+            "HMAC computed under a different key. §4.3 canonicalization "
+            "blanks both seal.signature and seal.session_mac before either "
+            "is computed, so seal.signature still verifies (step 1 passes) "
+            "— this is the receiving-server-only check at step 4. The "
+            "recipient server MUST reject with reason_code "
+            "session_mac_invalid; the rejection is distinct from "
+            "seal_invalid because routing servers cannot perform this "
+            "check (they do not hold K_env_mac)."
+        ),
+        "spec_reference": "VECTORS.md §17.7; ENVELOPE.md §7.2 step 4; ERRORS.md session_mac_invalid",
+        "inputs": {
+            "envelope_json": bad_mac_env,
+            "sender_domain_pub_hex": sender_domain_pub.hex(),
+            "K_env_mac_hex": K_env_mac.hex(),
+            "wrong_key_used_to_forge_mac_hex": other_key.hex(),
+        },
+        "expected": {
+            "step_1_seal_signature_verifies": bad_mac_step_1,
+            "step_4_session_mac_verifies": bad_mac_step_4,
+            "rejection_step": "step 4 (seal.session_mac)",
+            "rejection_reason_code": "session_mac_invalid",
+        },
+    }
+
+    return {
+        "version": "1.0.0",
+        "category": "negative-envelope-rejection",
+        "description": (
+            "Concrete must-reject cases for the §7.2 decryption flow. "
+            "Each vector targets exactly one §7.2 step so the rejection "
+            "is unambiguously attributable; rejection_reason_code is "
+            "drawn from ERRORS.md and exercised in rejection-codes.json. "
+            "Every byte is reproducible via the deterministic compose "
+            "path used elsewhere in Layer 3."
+        ),
+        "spec_reference": "VECTORS.md §17.7; ENVELOPE.md §7.2; ERRORS.md",
+        "vectors": [expired_vector, bad_sig_vector, bad_mac_vector],
+    }
+
+
 # ---- Recipient status vectors (§15) -----------------------------------------
 
 
@@ -3910,6 +4160,7 @@ def main() -> int:
         (OUTDIR / "envelope-roundtrip.json", build_envelope_roundtrip_json()),
         (OUTDIR / "delivery-receipt.json", build_delivery_receipt_json()),
         (OUTDIR / "large-attachment.json", build_large_attachment_json()),
+        (OUTDIR / "negative-envelope-rejection.json", build_negative_envelope_rejection_json()),
     ]
 
     ok = True

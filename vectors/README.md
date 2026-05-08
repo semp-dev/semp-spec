@@ -128,7 +128,8 @@ A runner is a small, language-idiomatic test harness — typically a few hundred
 | 5     | Account recovery bundle         | `account-recovery.json`    | TODO          |
 | 5     | Provider migration              | `provider-migration.json`  | TODO          |
 | 5     | Account closure                 | `account-closure.json`     | TODO          |
-| 6     | Negative tests (must-reject)    | `negative-*.json`          | TODO          |
+| 6     | Envelope rejection (must-reject) | `negative-envelope-rejection.json` | seeded |
+| 6     | Other must-reject cases          | `negative-*.json`          | partial (tampered cases live in their own categories) |
 
 `seeded` means the file exists with a starter set of vectors. `TODO` means the layer is acknowledged but not yet machine-readable.
 

@@ -1056,6 +1056,34 @@ A fourth vector covers the post-quantum suite:
 
 **Bytes:** see [`vectors/v1.0.0/large-attachment.json`](vectors/v1.0.0/large-attachment.json).
 
+### 17.7 Negative Envelope Rejection
+
+Reference: `ENVELOPE.md` §7.2; `ERRORS.md`.
+
+Three concrete must-reject cases that exercise the §7.2 decryption flow's
+rejection paths. Each vector targets exactly one §7.2 step so that a failed
+implementation can pinpoint which check is broken without confounding
+errors elsewhere in the structure.
+
+- `envelope-expired`: postmark.expires is in the past. Step 1 (seal
+  signature) passes; step 2 MUST reject with reason_code
+  `envelope_expired`.
+- `seal-signature-invalid`: seal.signature is replaced with a well-formed
+  Ed25519 signature over different bytes. Step 1 MUST reject with
+  reason_code `seal_invalid`. Routing servers perform this check.
+- `session-mac-invalid`: seal.session_mac is forged under a different HMAC
+  key. Step 1 still passes because §4.3 canonicalization blanks both
+  signature and session_mac before signing; step 4 MUST reject with
+  reason_code `session_mac_invalid`. Recipient servers perform this check;
+  routing servers cannot (they do not hold K_env_mac).
+
+Together with the tampered cases inside `sender-signature.json`,
+`forwarding.json`, `delivery-receipt.json`, and `large-attachment.json`,
+this file covers every must-reject path exercised by the Layer 3
+construction vectors.
+
+**Bytes:** see [`vectors/v1.0.0/negative-envelope-rejection.json`](vectors/v1.0.0/negative-envelope-rejection.json).
+
 ---
 
 ## 18. Relationship to Other Specifications

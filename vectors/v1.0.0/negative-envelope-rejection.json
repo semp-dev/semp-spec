@@ -1,0 +1,134 @@
+{
+  "version": "1.0.0",
+  "category": "negative-envelope-rejection",
+  "description": "Concrete must-reject cases for the §7.2 decryption flow. Each vector targets exactly one §7.2 step so the rejection is unambiguously attributable; rejection_reason_code is drawn from ERRORS.md and exercised in rejection-codes.json. Every byte is reproducible via the deterministic compose path used elsewhere in Layer 3.",
+  "spec_reference": "VECTORS.md §17.7; ENVELOPE.md §7.2; ERRORS.md",
+  "vectors": [
+    {
+      "id": "envelope-expired",
+      "description": "A well-formed envelope whose postmark.expires is in the past. §7.2 step 1 (seal.signature verification) still passes — the envelope was correctly signed over its own canonical bytes — but step 2 MUST reject with reason_code envelope_expired before any further processing.",
+      "spec_reference": "VECTORS.md §17.7; ENVELOPE.md §7.2 step 2; ERRORS.md envelope_expired",
+      "inputs": {
+        "envelope_json": {
+          "type": "SEMP_ENVELOPE",
+          "version": "1.0.0",
+          "postmark": {
+            "id": "01J7NEGPOSTMARKIDXXXXXXXXXXX",
+            "session_id": "01J7NEGSESSIONIDXXXXXXXXXXXX",
+            "from_domain": "example",
+            "to_domain": "example",
+            "expires": "2020-01-01T00:00:00Z",
+            "extensions": {}
+          },
+          "seal": {
+            "algorithm": "x25519-chacha20-poly1305",
+            "key_id": "390a4948c6e3a0c929f4ccfca89446a3acc089e313d60f6a35926bf16b56ea2f",
+            "signature": "OdH20E1eQq0g8PgRZ10Y7iVfPUfeVHXO8CsCmEHaDrRDl7E6vF5ZZBVMjXppIPK0eEArF45YQ2+RJ8WWPQRmAQ==",
+            "session_mac": "z6r9QNDiRLDH7zcIAUMaB6DVXCqnJlBYGfRPESgJSc0=",
+            "brief_recipients": {
+              "e79f9b218c860dfd9a21b925a2309a2238b3a3f8f3cc403ee59de91678e44fc6": "uhk4Ns/x9OhmwTlxXTBkCNJqdvdtY4o5r8EAEITSVBHhDLm3cbe6Q4Xsme7mdGnYs4KcxN3fNt7Hy89HZppGYDrdIfV3cd2v4QsPHiKvd9g="
+            },
+            "enclosure_recipients": {
+              "e79f9b218c860dfd9a21b925a2309a2238b3a3f8f3cc403ee59de91678e44fc6": "uWMqP+TaBTALYOxt+xbMRIfUIovKWa1A1lMTfQj5qGVd+yRFHiNET8amiRJEhOXhEigRP2Rq0wM17pK3j8RWBSdpZgqoTPgLENnlHxw8J6A="
+            },
+            "extensions": {}
+          },
+          "brief": "lpaWlpaWlpaWlpaW2MVcAkaMttd74IR0WfoOYGxwmyImtxXm6roRcijEBEcM8mG0wbVPV4nZWq1/x6+ZOqgtkvJBQH4uFImNSME1IpxF1NUv9GajPx8b8LNdgzbGvg9jdK/739OvlJf8xLnKf8yQHy2X3LfeAry4ey3Wz2cYjB8ybOmsz6B8EK8mAT0Iz8rVS1w=",
+          "enclosure": "l5eXl5eXl5eXl5eXJ0jQSwoq+ib2QagxaPY9d80rbf3nI0j64akLQZntriGWjmWb6udff68bxiF/IVHhczrb9zjpjCa6kkh+OoPW3IvS22+w27L2lqhRQEQEvbzQugoK1m9otz8r0LmbRXT9HoX7OuHtVIo5QCbxlqCNEIJpW9NoB21ruGG+GR8crPiD7Tlo7Es5VqC4tQo4Uc9vXoWMZX76ZozlqnrExNero8uFGB4OoWZm1olGvi1kOvbGyQvst19x/90DnjkuTRYJ3f3wSlVoS6OsvtSQEu00GywZ283oPSDd5UnV8I+FYyKw3Q+ZPQkpphpMz4R8nqSCVgv9ggP/ewVzaBNvGBop/04221bQ0rnx1AQGZBE2NWq78K41ZLXL+lPu0qyzr2J8RTQHG6cIP52UcP00JwgB9e5K9mrehIu9TZlxbpgBT9geLm4JQxynl1+gOAfSP33e92kpcaML37KJU4jYrlX1fi6ENigd+JZPwbsPG8cmIgQykmsyZkHCTH8="
+        },
+        "sender_domain_pub_hex": "c6d0c796bb4c3c923615f8dc85e6fc35149eb6b1317de523d3a5085584f5c109",
+        "K_env_mac_hex": "9898989898989898989898989898989898989898989898989898989898989898",
+        "now_iso": "2026-05-08T10:00:00Z"
+      },
+      "expected": {
+        "step_1_seal_signature_verifies": true,
+        "step_2_postmark_expires_in_past": true,
+        "rejection_step": "step 2 (postmark.expires)",
+        "rejection_reason_code": "envelope_expired"
+      }
+    },
+    {
+      "id": "seal-signature-invalid",
+      "description": "Take the valid envelope and replace seal.signature with a well-formed but unrelated Ed25519 signature (signed over different bytes). §7.2 step 1 MUST reject with reason_code seal_invalid before any further processing. Routing servers perform this verification per §4.3 'Two-Layer Verification'.",
+      "spec_reference": "VECTORS.md §17.7; ENVELOPE.md §7.2 step 1; ERRORS.md seal_invalid",
+      "inputs": {
+        "envelope_json": {
+          "type": "SEMP_ENVELOPE",
+          "version": "1.0.0",
+          "postmark": {
+            "id": "01J7NEGPOSTMARKIDXXXXXXXXXXX",
+            "session_id": "01J7NEGSESSIONIDXXXXXXXXXXXX",
+            "from_domain": "example",
+            "to_domain": "example",
+            "expires": "2026-12-31T23:59:59Z",
+            "extensions": {}
+          },
+          "seal": {
+            "algorithm": "x25519-chacha20-poly1305",
+            "key_id": "390a4948c6e3a0c929f4ccfca89446a3acc089e313d60f6a35926bf16b56ea2f",
+            "signature": "/wBhDjYOepOgKjsEpaplI9wY4efIlHi7WMtYsuArLRP1y3vLZgsFXm5U2LG9sMaVy87C/JMKgastzO0wXvw4AQ==",
+            "session_mac": "q0MFhQy2prIAinBaK6O5jSF9BTfxiFUl4cUsb2I8WVE=",
+            "brief_recipients": {
+              "e79f9b218c860dfd9a21b925a2309a2238b3a3f8f3cc403ee59de91678e44fc6": "uhk4Ns/x9OhmwTlxXTBkCNJqdvdtY4o5r8EAEITSVBHhDLm3cbe6Q4Xsme7mdGnYs4KcxN3fNt7Hy89HZppGYDrdIfV3cd2v4QsPHiKvd9g="
+            },
+            "enclosure_recipients": {
+              "e79f9b218c860dfd9a21b925a2309a2238b3a3f8f3cc403ee59de91678e44fc6": "uWMqP+TaBTALYOxt+xbMRIfUIovKWa1A1lMTfQj5qGVd+yRFHiNET8amiRJEhOXhEigRP2Rq0wM17pK3j8RWBSdpZgqoTPgLENnlHxw8J6A="
+            },
+            "extensions": {}
+          },
+          "brief": "lpaWlpaWlpaWlpaW2MVcAkaMttd74IR0WfoOYGxwmyImtxXm6roRcijEBEcM8mG0wbVPV4nZWq1/x6+ZOqgtkvJBQH4uFImNSME1IpxF1NUv9GajPx8b8LNdgzbGvg9jdK/739OvlJf8xLnKf8yQHy2X3LfeAry4ey3Wz2cYjB8ybOmsz6B8EK8mAT0Iz8rVS1w=",
+          "enclosure": "l5eXl5eXl5eXl5eXJ0jQSwoq+ib2QagxaPY9d80rbf3nI0j64akLQZntriGWjmWb6udff68bxiF/IVHhczrb9zjpjCa6kkh+OoPW3IvS22+w27L2lqhRQEQEvbzQugoK1m9otz8r0LmbRXT9HoX7OuHtVIo5QCbxlqCNEIJpW9NoB21ruGG+GR8crPiD7Tlo7Es5VqC4tQo4Uc9vXoWMZX76ZozlqnrExNero8uFGB4OoWZm1olGvi1kOvbGyQvst19x/90DnjkuTRYJ3f3wSlVoS6OsvtSQEu00GywZ283oPSDd5UnV8I+FYyKw3Q+ZPQkpphpMz4R8nqSCVgv9ggP/ewVzaBNvGBop/04221bQ0rnx1AQGZBE2NWq78K41ZLXL+lPu0qyzr2J8RTQHG6cIP52UcP00JwgB9e5K9mrehIu9TZlxbpgBT9geLm4JQxynl1+gOAfSP33e92kpcaML37KJU4jYrlX1fi6ENigd+JZPwbsPG8cmIgQykmsyZkHCTH8="
+        },
+        "sender_domain_pub_hex": "c6d0c796bb4c3c923615f8dc85e6fc35149eb6b1317de523d3a5085584f5c109"
+      },
+      "expected": {
+        "step_1_seal_signature_verifies": false,
+        "rejection_step": "step 1 (seal.signature)",
+        "rejection_reason_code": "seal_invalid"
+      }
+    },
+    {
+      "id": "session-mac-invalid",
+      "description": "Take the valid envelope and replace seal.session_mac with an HMAC computed under a different key. §4.3 canonicalization blanks both seal.signature and seal.session_mac before either is computed, so seal.signature still verifies (step 1 passes) — this is the receiving-server-only check at step 4. The recipient server MUST reject with reason_code session_mac_invalid; the rejection is distinct from seal_invalid because routing servers cannot perform this check (they do not hold K_env_mac).",
+      "spec_reference": "VECTORS.md §17.7; ENVELOPE.md §7.2 step 4; ERRORS.md session_mac_invalid",
+      "inputs": {
+        "envelope_json": {
+          "type": "SEMP_ENVELOPE",
+          "version": "1.0.0",
+          "postmark": {
+            "id": "01J7NEGPOSTMARKIDXXXXXXXXXXX",
+            "session_id": "01J7NEGSESSIONIDXXXXXXXXXXXX",
+            "from_domain": "example",
+            "to_domain": "example",
+            "expires": "2026-12-31T23:59:59Z",
+            "extensions": {}
+          },
+          "seal": {
+            "algorithm": "x25519-chacha20-poly1305",
+            "key_id": "390a4948c6e3a0c929f4ccfca89446a3acc089e313d60f6a35926bf16b56ea2f",
+            "signature": "erb92Iek6JSG4/HiTy9729PIc0lqWs7rIBmr3+njEIpXpKUGod0HlR1SA5d5A7uQ7W5XGw/ikyuH9zQZkYaWCA==",
+            "session_mac": "/OQ16OiouiFUvxWJ6aVnLysL6J6Ecx5BCHXg0pBT9z4=",
+            "brief_recipients": {
+              "e79f9b218c860dfd9a21b925a2309a2238b3a3f8f3cc403ee59de91678e44fc6": "uhk4Ns/x9OhmwTlxXTBkCNJqdvdtY4o5r8EAEITSVBHhDLm3cbe6Q4Xsme7mdGnYs4KcxN3fNt7Hy89HZppGYDrdIfV3cd2v4QsPHiKvd9g="
+            },
+            "enclosure_recipients": {
+              "e79f9b218c860dfd9a21b925a2309a2238b3a3f8f3cc403ee59de91678e44fc6": "uWMqP+TaBTALYOxt+xbMRIfUIovKWa1A1lMTfQj5qGVd+yRFHiNET8amiRJEhOXhEigRP2Rq0wM17pK3j8RWBSdpZgqoTPgLENnlHxw8J6A="
+            },
+            "extensions": {}
+          },
+          "brief": "lpaWlpaWlpaWlpaW2MVcAkaMttd74IR0WfoOYGxwmyImtxXm6roRcijEBEcM8mG0wbVPV4nZWq1/x6+ZOqgtkvJBQH4uFImNSME1IpxF1NUv9GajPx8b8LNdgzbGvg9jdK/739OvlJf8xLnKf8yQHy2X3LfeAry4ey3Wz2cYjB8ybOmsz6B8EK8mAT0Iz8rVS1w=",
+          "enclosure": "l5eXl5eXl5eXl5eXJ0jQSwoq+ib2QagxaPY9d80rbf3nI0j64akLQZntriGWjmWb6udff68bxiF/IVHhczrb9zjpjCa6kkh+OoPW3IvS22+w27L2lqhRQEQEvbzQugoK1m9otz8r0LmbRXT9HoX7OuHtVIo5QCbxlqCNEIJpW9NoB21ruGG+GR8crPiD7Tlo7Es5VqC4tQo4Uc9vXoWMZX76ZozlqnrExNero8uFGB4OoWZm1olGvi1kOvbGyQvst19x/90DnjkuTRYJ3f3wSlVoS6OsvtSQEu00GywZ283oPSDd5UnV8I+FYyKw3Q+ZPQkpphpMz4R8nqSCVgv9ggP/ewVzaBNvGBop/04221bQ0rnx1AQGZBE2NWq78K41ZLXL+lPu0qyzr2J8RTQHG6cIP52UcP00JwgB9e5K9mrehIu9TZlxbpgBT9geLm4JQxynl1+gOAfSP33e92kpcaML37KJU4jYrlX1fi6ENigd+JZPwbsPG8cmIgQykmsyZkHCTH8="
+        },
+        "sender_domain_pub_hex": "c6d0c796bb4c3c923615f8dc85e6fc35149eb6b1317de523d3a5085584f5c109",
+        "K_env_mac_hex": "9898989898989898989898989898989898989898989898989898989898989898",
+        "wrong_key_used_to_forge_mac_hex": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc"
+      },
+      "expected": {
+        "step_1_seal_signature_verifies": true,
+        "step_4_session_mac_verifies": false,
+        "rejection_step": "step 4 (seal.session_mac)",
+        "rejection_reason_code": "session_mac_invalid"
+      }
+    }
+  ]
+}
