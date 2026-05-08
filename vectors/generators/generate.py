@@ -3755,6 +3755,314 @@ def build_forwarding_json() -> dict:
     }
 
 
+# ---- Handshake message vectors (Layer 4) ------------------------------------
+
+
+HANDSHAKE_PREFIX = b"SEMP-HANDSHAKE:"
+
+
+def handshake_canonical_with_blank_signature(message: dict, signature_field: str = "server_signature") -> bytes:
+    """Canonical bytes of a handshake message with the named signature field
+    blanked. Per ENVELOPE.md §4.3, the canonical form sorts keys at every
+    nesting level and emits no insignificant whitespace; the same rules
+    apply to handshake messages."""
+    m = copy.deepcopy(message)
+    if signature_field in m:
+        m[signature_field] = ""
+    return canonical_json(m)
+
+
+def handshake_sign(message: dict, server_priv: bytes, signature_field: str = "server_signature") -> tuple[dict, dict]:
+    canonical = handshake_canonical_with_blank_signature(message, signature_field)
+    prefixed = HANDSHAKE_PREFIX + canonical
+    sig = ed25519_sign(server_priv, prefixed)
+    import base64
+
+    signed = copy.deepcopy(message)
+    signed[signature_field] = base64.b64encode(sig).decode("ascii")
+    inter = {
+        "canonical_with_blanked_signature_utf8": canonical.decode("utf-8"),
+        "signing_input_prefix_utf8": HANDSHAKE_PREFIX.decode("utf-8"),
+        "signing_input_hex": prefixed.hex(),
+        "signature_hex": sig.hex(),
+    }
+    return signed, inter
+
+
+def handshake_verify(message: dict, server_pub: bytes, signature_field: str = "server_signature") -> bool:
+    import base64
+
+    sig_b64 = message[signature_field]
+    sig = base64.b64decode(sig_b64)
+    canonical = handshake_canonical_with_blank_signature(message, signature_field)
+    prefixed = HANDSHAKE_PREFIX + canonical
+    return ed25519_verify(server_pub, sig, prefixed)
+
+
+def build_handshake_messages_json() -> dict:
+    """Layer 4 vectors covering canonical bytes and Ed25519 signature for
+    the four-step handshake (init, response, confirm, accepted) plus a
+    rejection. Baseline suite only; PQ payloads differ only in the
+    advertised algorithm strings and ephemeral_key sizes — the canonical
+    bytes / signature construction is identical."""
+    import base64
+
+    server_domain_seed = bytes([0x21] * 32)
+    server_domain_pub = ed25519_pubkey_from_priv(server_domain_seed)
+    server_domain_fp = fingerprint_hex(server_domain_pub)
+
+    # --- Message 1: init / client (NOT signed) -------------------------------
+    init_msg = {
+        "type": "SEMP_HANDSHAKE",
+        "step": "init",
+        "party": "client",
+        "version": "1.0.0",
+        "nonce": "qqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqs=",
+        "transport": "ws",
+        "client_ephemeral_key": {
+            "algorithm": "x25519-chacha20-poly1305",
+            "key": "Y2xpZW50LWVwaGVtZXJhbC1rZXk=",
+            "key_id": "client-eph-fp",
+        },
+        "capabilities": {
+            "encryption_algorithms": [
+                "pq-kyber768-x25519",
+                "x25519-chacha20-poly1305",
+            ],
+            "extensions": [
+                "semp.dev/device-sync",
+                "semp.dev/large-attachment",
+            ],
+        },
+        "extensions": {},
+    }
+    init_canonical = canonical_json(init_msg)
+
+    init_vector = {
+        "id": "handshake-init-canonical",
+        "description": (
+            "Pinned ClientInit (party=client, step=init). The init message "
+            "is anonymous and NOT signed per §2.2 — verification of its "
+            "integrity occurs in message 3 via the confirmation_hash. The "
+            "vector pins the canonical bytes used both for the "
+            "confirmation_hash input and for any implementation that needs "
+            "to reproduce the wire format."
+        ),
+        "spec_reference": "VECTORS.md §17.8; HANDSHAKE.md §2.2",
+        "inputs": {"message_json": init_msg},
+        "expected": {
+            "canonical_utf8": init_canonical.decode("utf-8"),
+            "is_signed": False,
+        },
+    }
+
+    # --- Message 2: response / server (server-signed) ------------------------
+    response_msg = {
+        "type": "SEMP_HANDSHAKE",
+        "step": "response",
+        "party": "server",
+        "version": "1.0.0",
+        "session_id": "01J7SESSION0000000000000000",
+        "client_nonce": "qqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqs=",
+        "server_nonce": "u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7s=",
+        "server_ephemeral_key": {
+            "algorithm": "x25519-chacha20-poly1305",
+            "key": "c2VydmVyLWVwaGVtZXJhbC1rZXk=",
+            "key_id": "server-eph-fp",
+        },
+        "server_identity_proof": {
+            "domain": "example.com",
+            "key_id": server_domain_fp,
+            "signature": "PINNED-IDENTITY-PROOF-SIGNATURE-BYTES",
+        },
+        "negotiated": {
+            "encryption_algorithm": "x25519-chacha20-poly1305",
+            "extensions": [
+                "semp.dev/device-sync",
+                "semp.dev/large-attachment",
+            ],
+            "max_envelope_size": 26214400,
+        },
+        "server_signature": "",
+        "extensions": {},
+    }
+    response_signed, response_inter = handshake_sign(response_msg, server_domain_seed)
+    assert handshake_verify(response_signed, server_domain_pub)
+
+    response_vector = {
+        "id": "handshake-response-signed",
+        "description": (
+            "Pinned ServerResponse (party=server, step=response). Outer "
+            "server_signature is computed over canonical(message) prefixed "
+            "with SEMP-HANDSHAKE:, with server_signature.value blanked "
+            "before canonicalization. The inner server_identity_proof "
+            "carries its own signature over (server_ephemeral_key || "
+            "nonces) per §2.3 and is left as a pinned placeholder string "
+            "in this vector (the inner-signature construction is exercised "
+            "separately when used by future identity-proof vectors)."
+        ),
+        "spec_reference": "VECTORS.md §17.8; HANDSHAKE.md §2.3",
+        "inputs": {
+            "server_domain_seed_hex": server_domain_seed.hex(),
+            "server_domain_pub_hex": server_domain_pub.hex(),
+            "server_domain_key_id": server_domain_fp,
+            "message_pre_sign_json": response_msg,
+        },
+        "intermediates": response_inter,
+        "expected": {
+            "signed_message_json": response_signed,
+            "outer_server_signature_b64": response_signed["server_signature"],
+            "outer_signature_verifies": True,
+        },
+    }
+
+    # --- Message 3: confirm / client (NOT outer-signed) ----------------------
+    confirm_msg = {
+        "type": "SEMP_HANDSHAKE",
+        "step": "confirm",
+        "party": "client",
+        "version": "1.0.0",
+        "session_id": "01J7SESSION0000000000000000",
+        "confirmation_hash": "HCOwn5wOk9vB3DGp2dxMaABhkbXBLT3/oKFT9elyzD0=",
+        "identity_proof": "PINNED-OPAQUE-CIPHERTEXT-OF-IDENTITY-PROOF-BLOCK",
+        "extensions": {},
+    }
+    confirm_canonical = canonical_json(confirm_msg)
+    confirm_vector = {
+        "id": "handshake-confirm-canonical",
+        "description": (
+            "Pinned ClientConfirm. The outer message has no signature; "
+            "authentication of the client comes from the inner "
+            "identity_proof block (a JSON object encrypted under K_enc_c2s, "
+            "left here as an opaque pinned string). The "
+            "confirmation_hash field MUST equal "
+            "SHA-256(canonical(init) || canonical(response)) per §17.1 — "
+            "the value here matches the §5.1 confirmation-hash vector."
+        ),
+        "spec_reference": "VECTORS.md §17.8; HANDSHAKE.md §2.5",
+        "inputs": {"message_json": confirm_msg},
+        "expected": {
+            "canonical_utf8": confirm_canonical.decode("utf-8"),
+            "confirmation_hash_matches_§5.1_vector": True,
+            "is_outer_signed": False,
+        },
+    }
+
+    # --- Message 4: accepted / server (server-signed) ------------------------
+    accepted_msg = {
+        "type": "SEMP_HANDSHAKE",
+        "step": "accepted",
+        "party": "server",
+        "version": "1.0.0",
+        "session_id": "01J7SESSION0000000000000000",
+        "session_ttl": 300,
+        "permissions": ["send", "receive"],
+        "resumption_ticket": {
+            "value": "PINNED-RESUMPTION-TICKET-OPAQUE-BYTES",
+            "expires_at": "2026-05-15T09:00:00Z",
+        },
+        "server_signature": "",
+        "extensions": {},
+    }
+    accepted_signed, accepted_inter = handshake_sign(accepted_msg, server_domain_seed)
+    assert handshake_verify(accepted_signed, server_domain_pub)
+
+    accepted_vector = {
+        "id": "handshake-accepted-signed",
+        "description": (
+            "Pinned ServerAccepted (party=server, step=accepted) carrying "
+            "session_ttl, permissions, and a resumption_ticket. Signed "
+            "the same way as the response message: SEMP-HANDSHAKE: prefix "
+            "over canonical(message) with server_signature blanked."
+        ),
+        "spec_reference": "VECTORS.md §17.8; HANDSHAKE.md §2.7",
+        "inputs": {
+            "server_domain_seed_hex": server_domain_seed.hex(),
+            "server_domain_pub_hex": server_domain_pub.hex(),
+            "server_domain_key_id": server_domain_fp,
+            "message_pre_sign_json": accepted_msg,
+        },
+        "intermediates": accepted_inter,
+        "expected": {
+            "signed_message_json": accepted_signed,
+            "server_signature_b64": accepted_signed["server_signature"],
+            "signature_verifies": True,
+        },
+    }
+
+    # --- Rejection: rejected / server (server-signed) ------------------------
+    rejected_msg = {
+        "type": "SEMP_HANDSHAKE",
+        "step": "rejected",
+        "party": "server",
+        "version": "1.0.0",
+        "session_id": "01J7SESSION0000000000000000",
+        "reason_code": "auth_failed",
+        "reason": "Identity signature could not be verified.",
+        "server_signature": "",
+        "extensions": {},
+    }
+    rejected_signed, rejected_inter = handshake_sign(rejected_msg, server_domain_seed)
+    assert handshake_verify(rejected_signed, server_domain_pub)
+
+    rejected_vector = {
+        "id": "handshake-rejected-signed",
+        "description": (
+            "Pinned ServerRejected (step=rejected). Same construction as "
+            "accepted; the message body carries reason_code and a "
+            "human-readable reason instead of permissions / "
+            "resumption_ticket."
+        ),
+        "spec_reference": "VECTORS.md §17.8; HANDSHAKE.md §2.7",
+        "inputs": {
+            "server_domain_seed_hex": server_domain_seed.hex(),
+            "server_domain_pub_hex": server_domain_pub.hex(),
+            "server_domain_key_id": server_domain_fp,
+            "message_pre_sign_json": rejected_msg,
+        },
+        "intermediates": rejected_inter,
+        "expected": {
+            "signed_message_json": rejected_signed,
+            "server_signature_b64": rejected_signed["server_signature"],
+            "signature_verifies": True,
+        },
+    }
+
+    return {
+        "version": "1.0.0",
+        "category": "handshake-messages",
+        "description": (
+            "Layer 4 vectors covering the canonical bytes and Ed25519 "
+            "signature path for the four-step handshake (init, response, "
+            "confirm, accepted) plus a rejection. Server-signed messages "
+            "use the SEMP-HANDSHAKE: domain-separation prefix over "
+            "canonical(message) with the named signature field blanked. "
+            "Init and Confirm have no outer signature (init is anonymous "
+            "by design; confirm authenticates via the inner encrypted "
+            "identity_proof block, which is opaque ciphertext at the "
+            "outer message level)."
+        ),
+        "spec_reference": "VECTORS.md §17.8; HANDSHAKE.md §2; ENVELOPE.md §4.3",
+        "construction": {
+            "domain_separation_prefix_utf8": "SEMP-HANDSHAKE:",
+            "canonical_form": (
+                "Per ENVELOPE.md §4.3: sorted keys at every nesting level, "
+                "no insignificant whitespace, UTF-8 encoding. Apply with "
+                "the relevant signature field set to \"\" before signing."
+            ),
+            "signed_messages": ["response", "accepted", "rejected"],
+            "unsigned_outer_messages": ["init", "confirm"],
+        },
+        "vectors": [
+            init_vector,
+            response_vector,
+            confirm_vector,
+            accepted_vector,
+            rejected_vector,
+        ],
+    }
+
+
 # ---- Negative envelope-rejection vectors (Layer 3 must-reject) -------------
 
 
@@ -4161,6 +4469,7 @@ def main() -> int:
         (OUTDIR / "delivery-receipt.json", build_delivery_receipt_json()),
         (OUTDIR / "large-attachment.json", build_large_attachment_json()),
         (OUTDIR / "negative-envelope-rejection.json", build_negative_envelope_rejection_json()),
+        (OUTDIR / "handshake-messages.json", build_handshake_messages_json()),
     ]
 
     ok = True

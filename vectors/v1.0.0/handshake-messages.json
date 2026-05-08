@@ -1,0 +1,254 @@
+{
+  "version": "1.0.0",
+  "category": "handshake-messages",
+  "description": "Layer 4 vectors covering the canonical bytes and Ed25519 signature path for the four-step handshake (init, response, confirm, accepted) plus a rejection. Server-signed messages use the SEMP-HANDSHAKE: domain-separation prefix over canonical(message) with the named signature field blanked. Init and Confirm have no outer signature (init is anonymous by design; confirm authenticates via the inner encrypted identity_proof block, which is opaque ciphertext at the outer message level).",
+  "spec_reference": "VECTORS.md §17.8; HANDSHAKE.md §2; ENVELOPE.md §4.3",
+  "construction": {
+    "domain_separation_prefix_utf8": "SEMP-HANDSHAKE:",
+    "canonical_form": "Per ENVELOPE.md §4.3: sorted keys at every nesting level, no insignificant whitespace, UTF-8 encoding. Apply with the relevant signature field set to \"\" before signing.",
+    "signed_messages": [
+      "response",
+      "accepted",
+      "rejected"
+    ],
+    "unsigned_outer_messages": [
+      "init",
+      "confirm"
+    ]
+  },
+  "vectors": [
+    {
+      "id": "handshake-init-canonical",
+      "description": "Pinned ClientInit (party=client, step=init). The init message is anonymous and NOT signed per §2.2 — verification of its integrity occurs in message 3 via the confirmation_hash. The vector pins the canonical bytes used both for the confirmation_hash input and for any implementation that needs to reproduce the wire format.",
+      "spec_reference": "VECTORS.md §17.8; HANDSHAKE.md §2.2",
+      "inputs": {
+        "message_json": {
+          "type": "SEMP_HANDSHAKE",
+          "step": "init",
+          "party": "client",
+          "version": "1.0.0",
+          "nonce": "qqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqs=",
+          "transport": "ws",
+          "client_ephemeral_key": {
+            "algorithm": "x25519-chacha20-poly1305",
+            "key": "Y2xpZW50LWVwaGVtZXJhbC1rZXk=",
+            "key_id": "client-eph-fp"
+          },
+          "capabilities": {
+            "encryption_algorithms": [
+              "pq-kyber768-x25519",
+              "x25519-chacha20-poly1305"
+            ],
+            "extensions": [
+              "semp.dev/device-sync",
+              "semp.dev/large-attachment"
+            ]
+          },
+          "extensions": {}
+        }
+      },
+      "expected": {
+        "canonical_utf8": "{\"capabilities\":{\"encryption_algorithms\":[\"pq-kyber768-x25519\",\"x25519-chacha20-poly1305\"],\"extensions\":[\"semp.dev/device-sync\",\"semp.dev/large-attachment\"]},\"client_ephemeral_key\":{\"algorithm\":\"x25519-chacha20-poly1305\",\"key\":\"Y2xpZW50LWVwaGVtZXJhbC1rZXk=\",\"key_id\":\"client-eph-fp\"},\"extensions\":{},\"nonce\":\"qqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqs=\",\"party\":\"client\",\"step\":\"init\",\"transport\":\"ws\",\"type\":\"SEMP_HANDSHAKE\",\"version\":\"1.0.0\"}",
+        "is_signed": false
+      }
+    },
+    {
+      "id": "handshake-response-signed",
+      "description": "Pinned ServerResponse (party=server, step=response). Outer server_signature is computed over canonical(message) prefixed with SEMP-HANDSHAKE:, with server_signature.value blanked before canonicalization. The inner server_identity_proof carries its own signature over (server_ephemeral_key || nonces) per §2.3 and is left as a pinned placeholder string in this vector (the inner-signature construction is exercised separately when used by future identity-proof vectors).",
+      "spec_reference": "VECTORS.md §17.8; HANDSHAKE.md §2.3",
+      "inputs": {
+        "server_domain_seed_hex": "2121212121212121212121212121212121212121212121212121212121212121",
+        "server_domain_pub_hex": "884b8857f4eaa1613c61504db34d4beaf346517a0e31de3cddd4d9b4201d9d0b",
+        "server_domain_key_id": "48cca97f8993ffaebcac9728d7f94f7144f18090d329d9370a7dfc42db38d14d",
+        "message_pre_sign_json": {
+          "type": "SEMP_HANDSHAKE",
+          "step": "response",
+          "party": "server",
+          "version": "1.0.0",
+          "session_id": "01J7SESSION0000000000000000",
+          "client_nonce": "qqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqs=",
+          "server_nonce": "u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7s=",
+          "server_ephemeral_key": {
+            "algorithm": "x25519-chacha20-poly1305",
+            "key": "c2VydmVyLWVwaGVtZXJhbC1rZXk=",
+            "key_id": "server-eph-fp"
+          },
+          "server_identity_proof": {
+            "domain": "example.com",
+            "key_id": "48cca97f8993ffaebcac9728d7f94f7144f18090d329d9370a7dfc42db38d14d",
+            "signature": "PINNED-IDENTITY-PROOF-SIGNATURE-BYTES"
+          },
+          "negotiated": {
+            "encryption_algorithm": "x25519-chacha20-poly1305",
+            "extensions": [
+              "semp.dev/device-sync",
+              "semp.dev/large-attachment"
+            ],
+            "max_envelope_size": 26214400
+          },
+          "server_signature": "",
+          "extensions": {}
+        }
+      },
+      "intermediates": {
+        "canonical_with_blanked_signature_utf8": "{\"client_nonce\":\"qqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqs=\",\"extensions\":{},\"negotiated\":{\"encryption_algorithm\":\"x25519-chacha20-poly1305\",\"extensions\":[\"semp.dev/device-sync\",\"semp.dev/large-attachment\"],\"max_envelope_size\":26214400},\"party\":\"server\",\"server_ephemeral_key\":{\"algorithm\":\"x25519-chacha20-poly1305\",\"key\":\"c2VydmVyLWVwaGVtZXJhbC1rZXk=\",\"key_id\":\"server-eph-fp\"},\"server_identity_proof\":{\"domain\":\"example.com\",\"key_id\":\"48cca97f8993ffaebcac9728d7f94f7144f18090d329d9370a7dfc42db38d14d\",\"signature\":\"PINNED-IDENTITY-PROOF-SIGNATURE-BYTES\"},\"server_nonce\":\"u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7s=\",\"server_signature\":\"\",\"session_id\":\"01J7SESSION0000000000000000\",\"step\":\"response\",\"type\":\"SEMP_HANDSHAKE\",\"version\":\"1.0.0\"}",
+        "signing_input_prefix_utf8": "SEMP-HANDSHAKE:",
+        "signing_input_hex": "53454d502d48414e445348414b453a7b22636c69656e745f6e6f6e6365223a22717171717171717171717171717171717171717171717171717171717171717171717171717171717171733d222c22657874656e73696f6e73223a7b7d2c226e65676f746961746564223a7b22656e6372797074696f6e5f616c676f726974686d223a227832353531392d63686163686132302d706f6c7931333035222c22657874656e73696f6e73223a5b2273656d702e6465762f6465766963652d73796e63222c2273656d702e6465762f6c617267652d6174746163686d656e74225d2c226d61785f656e76656c6f70655f73697a65223a32363231343430307d2c227061727479223a22736572766572222c227365727665725f657068656d6572616c5f6b6579223a7b22616c676f726974686d223a227832353531392d63686163686132302d706f6c7931333035222c226b6579223a2263325679646d56794c575677614756745a584a68624331725a586b3d222c226b65795f6964223a227365727665722d6570682d6670227d2c227365727665725f6964656e746974795f70726f6f66223a7b22646f6d61696e223a226578616d706c652e636f6d222c226b65795f6964223a2234386363613937663839393366666165626361633937323864376639346637313434663138303930643332396439333730613764666334326462333864313464222c227369676e6174757265223a2250494e4e45442d4944454e544954592d50524f4f462d5349474e41545552452d4259544553227d2c227365727665725f6e6f6e6365223a22753775377537753775377537753775377537753775377537753775377537753775377537753775377537733d222c227365727665725f7369676e6174757265223a22222c2273657373696f6e5f6964223a2230314a3753455353494f4e30303030303030303030303030303030222c2273746570223a22726573706f6e7365222c2274797065223a2253454d505f48414e445348414b45222c2276657273696f6e223a22312e302e30227d",
+        "signature_hex": "71889c617a26a37b1ccb3f86ecb6fcbcd47fd66a2650e8456a72c83152a386c881fa207fc9ed6742abd40b0e422415506394e3baa0bdeaddb2c334afdc22db01"
+      },
+      "expected": {
+        "signed_message_json": {
+          "type": "SEMP_HANDSHAKE",
+          "step": "response",
+          "party": "server",
+          "version": "1.0.0",
+          "session_id": "01J7SESSION0000000000000000",
+          "client_nonce": "qqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqs=",
+          "server_nonce": "u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7s=",
+          "server_ephemeral_key": {
+            "algorithm": "x25519-chacha20-poly1305",
+            "key": "c2VydmVyLWVwaGVtZXJhbC1rZXk=",
+            "key_id": "server-eph-fp"
+          },
+          "server_identity_proof": {
+            "domain": "example.com",
+            "key_id": "48cca97f8993ffaebcac9728d7f94f7144f18090d329d9370a7dfc42db38d14d",
+            "signature": "PINNED-IDENTITY-PROOF-SIGNATURE-BYTES"
+          },
+          "negotiated": {
+            "encryption_algorithm": "x25519-chacha20-poly1305",
+            "extensions": [
+              "semp.dev/device-sync",
+              "semp.dev/large-attachment"
+            ],
+            "max_envelope_size": 26214400
+          },
+          "server_signature": "cYicYXomo3scyz+G7Lb8vNR/1momUOhFanLIMVKjhsiB+iB/ye1nQqvUCw5CJBVQY5TjuqC96t2ywzSv3CLbAQ==",
+          "extensions": {}
+        },
+        "outer_server_signature_b64": "cYicYXomo3scyz+G7Lb8vNR/1momUOhFanLIMVKjhsiB+iB/ye1nQqvUCw5CJBVQY5TjuqC96t2ywzSv3CLbAQ==",
+        "outer_signature_verifies": true
+      }
+    },
+    {
+      "id": "handshake-confirm-canonical",
+      "description": "Pinned ClientConfirm. The outer message has no signature; authentication of the client comes from the inner identity_proof block (a JSON object encrypted under K_enc_c2s, left here as an opaque pinned string). The confirmation_hash field MUST equal SHA-256(canonical(init) || canonical(response)) per §17.1 — the value here matches the §5.1 confirmation-hash vector.",
+      "spec_reference": "VECTORS.md §17.8; HANDSHAKE.md §2.5",
+      "inputs": {
+        "message_json": {
+          "type": "SEMP_HANDSHAKE",
+          "step": "confirm",
+          "party": "client",
+          "version": "1.0.0",
+          "session_id": "01J7SESSION0000000000000000",
+          "confirmation_hash": "HCOwn5wOk9vB3DGp2dxMaABhkbXBLT3/oKFT9elyzD0=",
+          "identity_proof": "PINNED-OPAQUE-CIPHERTEXT-OF-IDENTITY-PROOF-BLOCK",
+          "extensions": {}
+        }
+      },
+      "expected": {
+        "canonical_utf8": "{\"confirmation_hash\":\"HCOwn5wOk9vB3DGp2dxMaABhkbXBLT3/oKFT9elyzD0=\",\"extensions\":{},\"identity_proof\":\"PINNED-OPAQUE-CIPHERTEXT-OF-IDENTITY-PROOF-BLOCK\",\"party\":\"client\",\"session_id\":\"01J7SESSION0000000000000000\",\"step\":\"confirm\",\"type\":\"SEMP_HANDSHAKE\",\"version\":\"1.0.0\"}",
+        "confirmation_hash_matches_§5.1_vector": true,
+        "is_outer_signed": false
+      }
+    },
+    {
+      "id": "handshake-accepted-signed",
+      "description": "Pinned ServerAccepted (party=server, step=accepted) carrying session_ttl, permissions, and a resumption_ticket. Signed the same way as the response message: SEMP-HANDSHAKE: prefix over canonical(message) with server_signature blanked.",
+      "spec_reference": "VECTORS.md §17.8; HANDSHAKE.md §2.7",
+      "inputs": {
+        "server_domain_seed_hex": "2121212121212121212121212121212121212121212121212121212121212121",
+        "server_domain_pub_hex": "884b8857f4eaa1613c61504db34d4beaf346517a0e31de3cddd4d9b4201d9d0b",
+        "server_domain_key_id": "48cca97f8993ffaebcac9728d7f94f7144f18090d329d9370a7dfc42db38d14d",
+        "message_pre_sign_json": {
+          "type": "SEMP_HANDSHAKE",
+          "step": "accepted",
+          "party": "server",
+          "version": "1.0.0",
+          "session_id": "01J7SESSION0000000000000000",
+          "session_ttl": 300,
+          "permissions": [
+            "send",
+            "receive"
+          ],
+          "resumption_ticket": {
+            "value": "PINNED-RESUMPTION-TICKET-OPAQUE-BYTES",
+            "expires_at": "2026-05-15T09:00:00Z"
+          },
+          "server_signature": "",
+          "extensions": {}
+        }
+      },
+      "intermediates": {
+        "canonical_with_blanked_signature_utf8": "{\"extensions\":{},\"party\":\"server\",\"permissions\":[\"send\",\"receive\"],\"resumption_ticket\":{\"expires_at\":\"2026-05-15T09:00:00Z\",\"value\":\"PINNED-RESUMPTION-TICKET-OPAQUE-BYTES\"},\"server_signature\":\"\",\"session_id\":\"01J7SESSION0000000000000000\",\"session_ttl\":300,\"step\":\"accepted\",\"type\":\"SEMP_HANDSHAKE\",\"version\":\"1.0.0\"}",
+        "signing_input_prefix_utf8": "SEMP-HANDSHAKE:",
+        "signing_input_hex": "53454d502d48414e445348414b453a7b22657874656e73696f6e73223a7b7d2c227061727479223a22736572766572222c227065726d697373696f6e73223a5b2273656e64222c2272656365697665225d2c22726573756d7074696f6e5f7469636b6574223a7b22657870697265735f6174223a22323032362d30352d31355430393a30303a30305a222c2276616c7565223a2250494e4e45442d524553554d5054494f4e2d5449434b45542d4f50415155452d4259544553227d2c227365727665725f7369676e6174757265223a22222c2273657373696f6e5f6964223a2230314a3753455353494f4e30303030303030303030303030303030222c2273657373696f6e5f74746c223a3330302c2273746570223a226163636570746564222c2274797065223a2253454d505f48414e445348414b45222c2276657273696f6e223a22312e302e30227d",
+        "signature_hex": "a6e4e7d0862ef5cf088ae49265cc246bf217d93d5f44a76b1e4e1cb07143aa130893e2cce4e3eef997f62f5ffc1e9cefa117027d1e57821be1c0cc003d73c50b"
+      },
+      "expected": {
+        "signed_message_json": {
+          "type": "SEMP_HANDSHAKE",
+          "step": "accepted",
+          "party": "server",
+          "version": "1.0.0",
+          "session_id": "01J7SESSION0000000000000000",
+          "session_ttl": 300,
+          "permissions": [
+            "send",
+            "receive"
+          ],
+          "resumption_ticket": {
+            "value": "PINNED-RESUMPTION-TICKET-OPAQUE-BYTES",
+            "expires_at": "2026-05-15T09:00:00Z"
+          },
+          "server_signature": "puTn0IYu9c8IiuSSZcwka/IX2T1fRKdrHk4csHFDqhMIk+LM5OPu+Zf2L1/8HpzvoRcCfR5XghvhwMwAPXPFCw==",
+          "extensions": {}
+        },
+        "server_signature_b64": "puTn0IYu9c8IiuSSZcwka/IX2T1fRKdrHk4csHFDqhMIk+LM5OPu+Zf2L1/8HpzvoRcCfR5XghvhwMwAPXPFCw==",
+        "signature_verifies": true
+      }
+    },
+    {
+      "id": "handshake-rejected-signed",
+      "description": "Pinned ServerRejected (step=rejected). Same construction as accepted; the message body carries reason_code and a human-readable reason instead of permissions / resumption_ticket.",
+      "spec_reference": "VECTORS.md §17.8; HANDSHAKE.md §2.7",
+      "inputs": {
+        "server_domain_seed_hex": "2121212121212121212121212121212121212121212121212121212121212121",
+        "server_domain_pub_hex": "884b8857f4eaa1613c61504db34d4beaf346517a0e31de3cddd4d9b4201d9d0b",
+        "server_domain_key_id": "48cca97f8993ffaebcac9728d7f94f7144f18090d329d9370a7dfc42db38d14d",
+        "message_pre_sign_json": {
+          "type": "SEMP_HANDSHAKE",
+          "step": "rejected",
+          "party": "server",
+          "version": "1.0.0",
+          "session_id": "01J7SESSION0000000000000000",
+          "reason_code": "auth_failed",
+          "reason": "Identity signature could not be verified.",
+          "server_signature": "",
+          "extensions": {}
+        }
+      },
+      "intermediates": {
+        "canonical_with_blanked_signature_utf8": "{\"extensions\":{},\"party\":\"server\",\"reason\":\"Identity signature could not be verified.\",\"reason_code\":\"auth_failed\",\"server_signature\":\"\",\"session_id\":\"01J7SESSION0000000000000000\",\"step\":\"rejected\",\"type\":\"SEMP_HANDSHAKE\",\"version\":\"1.0.0\"}",
+        "signing_input_prefix_utf8": "SEMP-HANDSHAKE:",
+        "signing_input_hex": "53454d502d48414e445348414b453a7b22657874656e73696f6e73223a7b7d2c227061727479223a22736572766572222c22726561736f6e223a224964656e74697479207369676e617475726520636f756c64206e6f742062652076657269666965642e222c22726561736f6e5f636f6465223a22617574685f6661696c6564222c227365727665725f7369676e6174757265223a22222c2273657373696f6e5f6964223a2230314a3753455353494f4e30303030303030303030303030303030222c2273746570223a2272656a6563746564222c2274797065223a2253454d505f48414e445348414b45222c2276657273696f6e223a22312e302e30227d",
+        "signature_hex": "d085b9e675d4480cb0ce9b649bd32052543db974d83d5ac11a48ce47deae6fcc26a6c032575103e344c829f059ccf6e90b25880351c4c9b78e5fcced5a5fdf0b"
+      },
+      "expected": {
+        "signed_message_json": {
+          "type": "SEMP_HANDSHAKE",
+          "step": "rejected",
+          "party": "server",
+          "version": "1.0.0",
+          "session_id": "01J7SESSION0000000000000000",
+          "reason_code": "auth_failed",
+          "reason": "Identity signature could not be verified.",
+          "server_signature": "0IW55nXUSAywzptkm9MgUlQ9uXTYPVrBGkjOR96ub8wmpsAyV1ED40TIKfBZzPbpCyWIA1HEybeOX8ztWl/fCw==",
+          "extensions": {}
+        },
+        "server_signature_b64": "0IW55nXUSAywzptkm9MgUlQ9uXTYPVrBGkjOR96ub8wmpsAyV1ED40TIKfBZzPbpCyWIA1HEybeOX8ztWl/fCw==",
+        "signature_verifies": true
+      }
+    }
+  ]
+}

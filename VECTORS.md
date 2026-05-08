@@ -1084,6 +1084,45 @@ construction vectors.
 
 **Bytes:** see [`vectors/v1.0.0/negative-envelope-rejection.json`](vectors/v1.0.0/negative-envelope-rejection.json).
 
+### 17.8 Handshake Messages (Layer 4)
+
+Reference: `HANDSHAKE.md` §2.
+
+Five vectors cover the four-message handshake plus a rejection. The
+construction is identical for every signed handshake message: blank the
+relevant signature field, canonicalize per §4.3 (sorted keys, no
+whitespace, UTF-8), prefix with `SEMP-HANDSHAKE:` per §4.3's
+domain-separation table, sign Ed25519, base64-encode, replace the field.
+
+- `handshake-init-canonical`: ClientInit. The init message is anonymous
+  by design and NOT outer-signed (§2.2). Pinned for the canonical bytes
+  used as input to the §5.1 confirmation_hash.
+- `handshake-response-signed`: ServerResponse. Outer `server_signature`
+  uses the construction above. The inner `server_identity_proof.signature`
+  (over server_ephemeral_key || nonces) is left as a pinned placeholder
+  in this vector; its construction will be exercised separately by future
+  identity-proof vectors.
+- `handshake-confirm-canonical`: ClientConfirm. No outer signature; the
+  inner `identity_proof` is encrypted under `K_enc_c2s` and is treated
+  as opaque ciphertext at the outer level. The `confirmation_hash` field
+  matches the §5.1 vector exactly, demonstrating cross-vector
+  consistency.
+- `handshake-accepted-signed`: ServerAccepted carrying session_ttl,
+  permissions, and a resumption_ticket. Same construction as response.
+- `handshake-rejected-signed`: ServerRejected carrying reason_code and
+  human-readable reason. Same construction as accepted.
+
+**Bytes:** see [`vectors/v1.0.0/handshake-messages.json`](vectors/v1.0.0/handshake-messages.json).
+Each signed vector lists its `intermediates` (canonical bytes with the
+signature blanked, prefixed signing input hex, raw signature hex) so a
+failed implementation can drill into the specific construction step
+that diverged.
+
+PQ-suite handshakes use the same construction; the only differences
+are the advertised algorithm strings in the message bodies and the
+sizes of the `client_ephemeral_key.key` / `server_ephemeral_key.key`
+fields. PQ handshake message vectors land in a follow-up.
+
 ---
 
 ## 18. Relationship to Other Specifications
