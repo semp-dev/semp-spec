@@ -23,6 +23,13 @@ generation, encryption) cannot be tested with static vectors. Those operations
 are tested indirectly through round-trip vectors where both encryption and
 decryption inputs are provided.
 
+Machine-readable JSON copies of the vectors in this document live under
+[`vectors/`](vectors/). Implementations SHOULD ship a runner that loads
+those files and asserts every expected output. The JSON files are the
+executable contract; the prose in this document is the normative
+explanation. When the two disagree, this document wins and the JSON
+file is amended to match.
+
 ---
 
 ## 1. Notation

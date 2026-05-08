@@ -1,0 +1,23 @@
+{
+  "version": "1.0.0",
+  "category": "confirmation-hash",
+  "description": "SHA-256 over (canonical message_1 || canonical message_2) used to bind the client's identity proof to a specific handshake exchange. Source of truth: VECTORS.md §5.",
+  "spec_reference": "VECTORS.md §5; HANDSHAKE.md §2.5.3",
+  "hash": "SHA-256",
+  "vectors": [
+    {
+      "id": "confirmation-hash-pq-kyber-baseline",
+      "description": "Hash over a canonical INIT (party=client) concatenated with a canonical RESPONSE (party=server) for the pq-kyber768-x25519 suite.",
+      "spec_reference": "VECTORS.md §5.1; HANDSHAKE.md §2.5.3",
+      "inputs": {
+        "message_1_canonical_utf8": "{\"capabilities\":{\"encryption_algorithms\":[\"pq-kyber768-x25519\",\"x25519-chacha20-poly1305\"],\"extensions\":[\"semp.dev/device-sync\",\"semp.dev/large-attachment\"]},\"client_ephemeral_key\":{\"algorithm\":\"pq-kyber768-x25519\",\"key\":\"Y2xpZW50LWVwaGVtZXJhbC1rZXk=\",\"key_id\":\"client-eph-fp\"},\"extensions\":{},\"nonce\":\"qqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqs=\",\"party\":\"client\",\"step\":\"init\",\"transport\":\"ws\",\"type\":\"SEMP_HANDSHAKE\",\"version\":\"1.0.0\"}",
+        "message_2_canonical_utf8": "{\"client_nonce\":\"qqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqs=\",\"extensions\":{},\"negotiated\":{\"encryption_algorithm\":\"pq-kyber768-x25519\",\"extensions\":[\"semp.dev/device-sync\",\"semp.dev/large-attachment\"]},\"party\":\"server\",\"server_ephemeral_key\":{\"algorithm\":\"pq-kyber768-x25519\",\"key\":\"c2VydmVyLWVwaGVtZXJhbC1rZXk=\",\"key_id\":\"server-eph-fp\"},\"server_identity_proof\":{\"domain\":\"example.com\",\"key_id\":\"server-lt-fp\",\"signature\":\"c2VydmVyLXNpZw==\"},\"server_nonce\":\"u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7s=\",\"server_signature\":\"c2VydmVyLXNpZ25hdHVyZQ==\",\"session_id\":\"01JTEST33333333333333333333\",\"step\":\"response\",\"type\":\"SEMP_HANDSHAKE\",\"version\":\"1.0.0\"}",
+        "concatenation": "canonical(message_1) || canonical(message_2)"
+      },
+      "expected": {
+        "hash_hex": "1c23b09f9c0e93dbc1dc31a9d9dc4c68006191b5c12d3dffa0a153f5e972cc3d",
+        "hash_b64": "HCOwn5wOk9vB3DGp2dxMaABhkbXBLT3/oKFT9elyzD0="
+      }
+    }
+  ]
+}

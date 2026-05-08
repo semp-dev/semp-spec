@@ -1,0 +1,67 @@
+{
+  "version": "1.0.0",
+  "category": "hkdf",
+  "description": "HKDF-SHA-512 derivation of the five session keys from a shared secret, salt, and per-key info labels. Source of truth: VECTORS.md §2.",
+  "spec_reference": "VECTORS.md §2; HANDSHAKE.md §2.4; SESSION.md §2.1; ENVELOPE.md §7.3.1",
+  "kdf": "HKDF-SHA-512",
+  "vectors": [
+    {
+      "id": "hkdf-baseline",
+      "description": "Initial-handshake derivation of K_enc_c2s, K_enc_s2c, K_mac_c2s, K_mac_s2c, K_env_mac from a synthetic 64-byte hybrid IKM and 64-byte (client_nonce || server_nonce) salt.",
+      "spec_reference": "VECTORS.md §2.1",
+      "inputs": {
+        "ikm_hex": "0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c",
+        "client_nonce_hex": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "server_nonce_hex": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+        "salt_construction": "client_nonce || server_nonce",
+        "info_labels_utf8": {
+          "K_enc_c2s": "SEMP-v1-session-enc-c2s",
+          "K_enc_s2c": "SEMP-v1-session-enc-s2c",
+          "K_mac_c2s": "SEMP-v1-session-mac-c2s",
+          "K_mac_s2c": "SEMP-v1-session-mac-s2c",
+          "K_env_mac": "SEMP-v1-session-env-mac"
+        },
+        "key_length_bytes": 32
+      },
+      "expected": {
+        "prk_hex": "1ca5eed820a07ef313053ec19352a69c6dd00c924139d012ff571faa55f07037087ced0021ce2b853c3ee8ffeabea0697586d06f989c315cab24859bb3b9ef6e",
+        "keys": {
+          "K_enc_c2s_hex": "cf74d91d41de6ac8f838715bc44a31d7e23b8e9b4dd7dab6be6ad4b8d0567af6",
+          "K_enc_s2c_hex": "bed26f42d9b1762ab5665b429ef511316e2f9a9be7b4721a310488b3540f90cd",
+          "K_mac_c2s_hex": "7f7c8b61c27e91c160dba88063346afb920b99fa2736aa0c54b5d022ff58484e",
+          "K_mac_s2c_hex": "7905bf680e3095c0b71b4d331c2a586316171ab6ad072842b5bea4a0c374723a",
+          "K_env_mac_hex": "32925224f762c4f921db929271bfdc5e911b0d877bc30cd4695f9d6530337c02"
+        }
+      }
+    },
+    {
+      "id": "hkdf-rekey",
+      "description": "Mid-session rekey derivation. Same five info labels as the initial handshake; the salt is (rekey_nonce || responder_nonce) instead of session nonces.",
+      "spec_reference": "VECTORS.md §2.2; SESSION.md §3.3",
+      "inputs": {
+        "ikm_hex": "d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1e2e2e2e2e2e2e2e2e2e2e2e2e2e2e2e2e2e2e2e2e2e2e2e2e2e2e2e2e2e2e2e2",
+        "rekey_nonce_hex": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+        "responder_nonce_hex": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+        "salt_construction": "rekey_nonce || responder_nonce",
+        "info_labels_utf8": {
+          "K_enc_c2s": "SEMP-v1-session-enc-c2s",
+          "K_enc_s2c": "SEMP-v1-session-enc-s2c",
+          "K_mac_c2s": "SEMP-v1-session-mac-c2s",
+          "K_mac_s2c": "SEMP-v1-session-mac-s2c",
+          "K_env_mac": "SEMP-v1-session-env-mac"
+        },
+        "key_length_bytes": 32
+      },
+      "expected": {
+        "prk_hex": "3e62694adf1c3ae0bf998d6c74498ba7148406359c374cbd6fa54f14ca2a2561260c9bc3944c48204505f4ad8455958a616b2c5b9ba0eebe99ee6ad15eac9c23",
+        "keys": {
+          "K_enc_c2s_hex": "b3b8093896f5ed916ebe6a55b6a0d3e0dc1bb6bf6e23f58a317f01135c4dead0",
+          "K_enc_s2c_hex": "c10997d1c541bffa1131ee886a3ab372e4622603f168f6e3bb69caf4bdf93910",
+          "K_mac_c2s_hex": "3b723faad0d05e17bb96b82efcec2257a3900bd00b30ae7dc0254b59e3abe153",
+          "K_mac_s2c_hex": "1f91269a2493c11eb02a61114b8debe7499a38e2cd0886ae3ee715383bac6ab6",
+          "K_env_mac_hex": "187cd04362c27d37f95c6cc4558935398037a13f1c6015e23dbef97ba3aa8db3"
+        }
+      }
+    }
+  ]
+}

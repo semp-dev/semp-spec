@@ -1,0 +1,93 @@
+{
+  "version": "1.0.0",
+  "category": "envelope-canonical",
+  "description": "Canonical envelope encoding (the input to seal.signature and seal.session_mac). Source of truth: VECTORS.md §3.",
+  "spec_reference": "VECTORS.md §3; ENVELOPE.md §4.3",
+  "rules_summary": [
+    "seal.signature → set to \"\"",
+    "seal.session_mac → set to \"\"",
+    "postmark.hop_count → omitted",
+    "padding → omitted",
+    "All keys sorted lexicographically at every nesting level",
+    "No insignificant whitespace",
+    "UTF-8 encoding"
+  ],
+  "vectors": [
+    {
+      "id": "envelope-canonical-minimal",
+      "description": "Minimal envelope with empty recipient maps and empty extensions. Confirms hop_count and padding are stripped, signature/session_mac are blanked, and top-level keys sort correctly.",
+      "spec_reference": "VECTORS.md §3.1",
+      "inputs": {
+        "envelope_json": {
+          "type": "SEMP_ENVELOPE",
+          "version": "1.0.0",
+          "postmark": {
+            "id": "01J4K7P2XVEM3Q8YNZHBRC5T06",
+            "session_id": "01J4K7Q0ABCDEFGHJKLMNPQRST",
+            "from_domain": "sender.example",
+            "to_domain": "recipient.example",
+            "expires": "2025-06-10T21:00:00Z",
+            "hop_count": 2,
+            "extensions": {}
+          },
+          "seal": {
+            "algorithm": "pq-kyber768-x25519",
+            "key_id": "abc123def456",
+            "signature": "existing-signature-value",
+            "session_mac": "existing-mac-value",
+            "brief_recipients": {},
+            "enclosure_recipients": {},
+            "extensions": {}
+          },
+          "brief": "ZW5jcnlwdGVkLWJyaWVm",
+          "enclosure": "ZW5jcnlwdGVkLWVuY2xvc3VyZQ==",
+          "padding": "cGFkZGluZy1ieXRlcy1mb3ItMTAyNC1idWNrZXQ="
+        }
+      },
+      "expected": {
+        "canonical_utf8": "{\"brief\":\"ZW5jcnlwdGVkLWJyaWVm\",\"enclosure\":\"ZW5jcnlwdGVkLWVuY2xvc3VyZQ==\",\"postmark\":{\"expires\":\"2025-06-10T21:00:00Z\",\"extensions\":{},\"from_domain\":\"sender.example\",\"id\":\"01J4K7P2XVEM3Q8YNZHBRC5T06\",\"session_id\":\"01J4K7Q0ABCDEFGHJKLMNPQRST\",\"to_domain\":\"recipient.example\"},\"seal\":{\"algorithm\":\"pq-kyber768-x25519\",\"brief_recipients\":{},\"enclosure_recipients\":{},\"extensions\":{},\"key_id\":\"abc123def456\",\"session_mac\":\"\",\"signature\":\"\"},\"type\":\"SEMP_ENVELOPE\",\"version\":\"1.0.0\"}"
+      }
+    },
+    {
+      "id": "envelope-canonical-with-extensions",
+      "description": "Envelope with two postmark extensions and two brief recipients. Confirms nested extension keys sort and recipient-map keys sort.",
+      "spec_reference": "VECTORS.md §3.2",
+      "inputs": {
+        "envelope_json": {
+          "type": "SEMP_ENVELOPE",
+          "version": "1.0.0",
+          "postmark": {
+            "id": "01JTEST00000000000000000000",
+            "session_id": "01JTEST11111111111111111111",
+            "from_domain": "alpha.example",
+            "to_domain": "beta.example",
+            "expires": "2025-07-01T12:00:00Z",
+            "extensions": {
+              "vendor.example.com/priority": "high",
+              "another.example.com/class": "transactional"
+            }
+          },
+          "seal": {
+            "algorithm": "x25519-chacha20-poly1305",
+            "key_id": "key-fingerprint-xyz",
+            "signature": "to-be-replaced",
+            "session_mac": "to-be-replaced",
+            "brief_recipients": {
+              "server-key-fp": "wrapped-K_brief-for-server",
+              "client-key-fp": "wrapped-K_brief-for-client"
+            },
+            "enclosure_recipients": {
+              "client-key-fp": "wrapped-K_enclosure-for-client"
+            },
+            "extensions": {}
+          },
+          "brief": "YnJpZWYtZGF0YQ==",
+          "enclosure": "ZW5jbG9zdXJlLWRhdGE="
+        }
+      },
+      "expected": {
+        "canonical_utf8": "{\"brief\":\"YnJpZWYtZGF0YQ==\",\"enclosure\":\"ZW5jbG9zdXJlLWRhdGE=\",\"postmark\":{\"expires\":\"2025-07-01T12:00:00Z\",\"extensions\":{\"another.example.com/class\":\"transactional\",\"vendor.example.com/priority\":\"high\"},\"from_domain\":\"alpha.example\",\"id\":\"01JTEST00000000000000000000\",\"session_id\":\"01JTEST11111111111111111111\",\"to_domain\":\"beta.example\"},\"seal\":{\"algorithm\":\"x25519-chacha20-poly1305\",\"brief_recipients\":{\"client-key-fp\":\"wrapped-K_brief-for-client\",\"server-key-fp\":\"wrapped-K_brief-for-server\"},\"enclosure_recipients\":{\"client-key-fp\":\"wrapped-K_enclosure-for-client\"},\"extensions\":{},\"key_id\":\"key-fingerprint-xyz\",\"session_mac\":\"\",\"signature\":\"\"},\"type\":\"SEMP_ENVELOPE\",\"version\":\"1.0.0\"}"
+      }
+    }
+  ]
+}
