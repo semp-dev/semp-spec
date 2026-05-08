@@ -3755,6 +3755,292 @@ def build_forwarding_json() -> dict:
     }
 
 
+# ---- Discovery-signed + Transparency STH (Layer 5) -------------------------
+
+
+DISCOVERY_PREFIX = b"SEMP-DISCOVERY:"
+TRANSPARENCY_STH_PREFIX = b"SEMP-TRANSPARENCY-STH:"
+
+
+def build_discovery_signed_json() -> dict:
+    """SEMP_DISCOVERY response signed with the SEMP-DISCOVERY: prefix per
+    §4.3."""
+    domain_seed = bytes([0x41] * 32)
+    domain_pub = ed25519_pubkey_from_priv(domain_seed)
+    domain_fp = fingerprint_hex(domain_pub)
+
+    response_pre_sign = {
+        "type": "SEMP_DISCOVERY",
+        "step": "response",
+        "version": "1.0.0",
+        "id": "01J7DISCOVERYRESPONSEXXXXXXX",
+        "timestamp": "2026-04-19T12:00:00Z",
+        "results": [
+            {
+                "address": "alice@example.com",
+                "status": "semp",
+                "transports": ["ws", "h2"],
+                "extensions": ["semp.dev/device-sync"],
+                "server": "semp.example.com",
+                "ttl": 3600,
+            },
+        ],
+        "signature": {
+            "algorithm": "ed25519",
+            "key_id": domain_fp,
+            "value": "",
+        },
+        "extensions": {},
+    }
+    signed, inter = _sign_doc(
+        response_pre_sign, domain_seed, DISCOVERY_PREFIX, ["signature"]
+    )
+    assert _verify_doc(signed, domain_pub, DISCOVERY_PREFIX, ["signature"])
+
+    return {
+        "version": "1.0.0",
+        "category": "discovery-signed",
+        "description": (
+            "DISCOVERY.md §7: SEMP_DISCOVERY responses are signed by the "
+            "responding server's domain key with the SEMP-DISCOVERY: "
+            "prefix. Verifiers reject unsigned or invalid responses "
+            "before caching or acting on per-address results."
+        ),
+        "spec_reference": "VECTORS.md §17.10; DISCOVERY.md §7; ENVELOPE.md §4.3",
+        "construction": {
+            "domain_separation_prefix_utf8": "SEMP-DISCOVERY:",
+            "signing_key": "responding server's domain signing key",
+            "canonical_form": "ENVELOPE.md §4.3 with signature.value blanked",
+        },
+        "vectors": [
+            {
+                "id": "discovery-response-signed-valid",
+                "description": (
+                    "Pinned domain key signs a single-result SEMP_DISCOVERY "
+                    "response. Signature verifies under the published "
+                    "domain public key. Companion to discovery.json's "
+                    "discovery-response-parsing vector, which covers the "
+                    "structural parsing path; this vector covers the "
+                    "signature path."
+                ),
+                "spec_reference": "VECTORS.md §17.10; DISCOVERY.md §7.1",
+                "inputs": {
+                    "domain_seed_hex": domain_seed.hex(),
+                    "domain_pub_hex": domain_pub.hex(),
+                    "domain_key_id": domain_fp,
+                    "response_pre_sign_json": response_pre_sign,
+                },
+                "intermediates": inter,
+                "expected": {
+                    "signed_response_json": signed,
+                    "signature_b64": signed["signature"]["value"],
+                    "signature_verifies": True,
+                },
+            },
+        ],
+    }
+
+
+def merkle_leaf_hash(leaf_data: bytes) -> bytes:
+    """RFC 6962 §2.1: leaf hash is SHA-256(0x00 || leaf_data)."""
+    return hashlib.sha256(b"\x00" + leaf_data).digest()
+
+
+def merkle_internal_hash(left: bytes, right: bytes) -> bytes:
+    """RFC 6962 §2.1: internal node hash is SHA-256(0x01 || left || right)."""
+    return hashlib.sha256(b"\x01" + left + right).digest()
+
+
+def merkle_root(leaves: list[bytes]) -> bytes:
+    """Compute the RFC 6962 Merkle root of a list of leaves (each already
+    leaf-hashed)."""
+    if len(leaves) == 0:
+        return hashlib.sha256(b"").digest()
+    if len(leaves) == 1:
+        return leaves[0]
+    # split point: largest power of two strictly less than n
+    k = 1
+    while k * 2 < len(leaves):
+        k *= 2
+    return merkle_internal_hash(merkle_root(leaves[:k]), merkle_root(leaves[k:]))
+
+
+def merkle_inclusion_path(leaves: list[bytes], leaf_index: int) -> list[bytes]:
+    """RFC 6962 §2.1.1 inclusion proof: returns the sibling hashes along the
+    path from leaf_index up to the root."""
+    if not (0 <= leaf_index < len(leaves)):
+        raise ValueError("leaf_index out of range")
+
+    def helper(start: int, end: int, target: int) -> list[bytes]:
+        if end - start == 1:
+            return []
+        k = 1
+        while k * 2 < end - start:
+            k *= 2
+        mid = start + k
+        if target < mid:
+            return helper(start, mid, target) + [merkle_root(leaves[mid:end])]
+        return helper(mid, end, target) + [merkle_root(leaves[start:mid])]
+
+    return helper(0, len(leaves), leaf_index)
+
+
+def merkle_verify_inclusion(
+    leaf_hash: bytes,
+    leaf_index: int,
+    log_size: int,
+    path: list[bytes],
+    expected_root: bytes,
+) -> bool:
+    """RFC 6962 §2.1.1 inclusion-proof verification."""
+    if not (0 <= leaf_index < log_size):
+        return False
+    fn = leaf_index
+    sn = log_size - 1
+    r = leaf_hash
+    for p in path:
+        if sn == 0:
+            return False
+        if fn % 2 == 1 or fn == sn:
+            r = merkle_internal_hash(p, r)
+            while not (fn == 0 or fn % 2 == 1):
+                fn //= 2
+                sn //= 2
+        else:
+            r = merkle_internal_hash(r, p)
+        fn //= 2
+        sn //= 2
+    return sn == 0 and r == expected_root
+
+
+def build_transparency_json() -> dict:
+    """Layer 5 vectors for TRANSPARENCY.md §2-§3: signed tree head plus an
+    RFC 6962 inclusion-proof round-trip."""
+    import base64
+
+    domain_seed = bytes([0x42] * 32)
+    domain_pub = ed25519_pubkey_from_priv(domain_seed)
+    domain_fp = fingerprint_hex(domain_pub)
+
+    # Build a tiny tree of 8 leaves so paths have meaningful depth.
+    leaf_payloads = [f"transparency-leaf-{i}".encode("utf-8") for i in range(8)]
+    leaves = [merkle_leaf_hash(p) for p in leaf_payloads]
+    root = merkle_root(leaves)
+    log_size = len(leaves)
+
+    sth_pre_sign = {
+        "log_size": log_size,
+        "root_hash": base64.b64encode(root).decode("ascii"),
+        "timestamp": "2026-04-19T12:00:00Z",
+        "signature": {
+            "algorithm": "ed25519",
+            "key_id": domain_fp,
+            "value": "",
+        },
+    }
+    sth_signed, sth_inter = _sign_doc(
+        sth_pre_sign, domain_seed, TRANSPARENCY_STH_PREFIX, ["signature"]
+    )
+    assert _verify_doc(sth_signed, domain_pub, TRANSPARENCY_STH_PREFIX, ["signature"])
+
+    # Inclusion proof for leaf 4 (arbitrary middle entry).
+    leaf_index = 4
+    path = merkle_inclusion_path(leaves, leaf_index)
+    inclusion_verifies = merkle_verify_inclusion(
+        leaves[leaf_index], leaf_index, log_size, path, root
+    )
+    assert inclusion_verifies
+
+    # Tampered inclusion: flip one bit of one path element; verification rejects.
+    if path:
+        bad_path = list(path)
+        bad_first = bytearray(bad_path[0])
+        bad_first[0] ^= 0x01
+        bad_path[0] = bytes(bad_first)
+        bad_inclusion_verifies = merkle_verify_inclusion(
+            leaves[leaf_index], leaf_index, log_size, bad_path, root
+        )
+        assert not bad_inclusion_verifies
+    else:
+        bad_path = path
+        bad_inclusion_verifies = False
+
+    sth_vector = {
+        "id": "transparency-sth-signed",
+        "description": (
+            "Signed Tree Head per TRANSPARENCY.md §2.3. Domain key signs "
+            "{log_size, root_hash, timestamp, signature.algorithm, "
+            "signature.key_id} (with signature.value blanked) prefixed "
+            "with SEMP-TRANSPARENCY-STH:. The pinned tree has 8 leaves "
+            "with payloads 'transparency-leaf-0' through "
+            "'transparency-leaf-7' so the root is reproducible."
+        ),
+        "spec_reference": "VECTORS.md §17.10; TRANSPARENCY.md §2.3",
+        "inputs": {
+            "domain_seed_hex": domain_seed.hex(),
+            "domain_pub_hex": domain_pub.hex(),
+            "domain_key_id": domain_fp,
+            "leaf_payloads_utf8": [p.decode("utf-8") for p in leaf_payloads],
+            "sth_pre_sign_json": sth_pre_sign,
+        },
+        "intermediates": {
+            "leaf_hashes_hex": [h.hex() for h in leaves],
+            "root_hash_hex": root.hex(),
+            **sth_inter,
+        },
+        "expected": {
+            "sth_signed_json": sth_signed,
+            "signature_b64": sth_signed["signature"]["value"],
+            "signature_verifies": True,
+        },
+    }
+
+    inclusion_vector = {
+        "id": "transparency-inclusion-proof",
+        "description": (
+            "RFC 6962 §2.1.1 inclusion proof for leaf 4 in the §17.10 STH "
+            "tree. The path is the sequence of sibling hashes from the "
+            "leaf up to the root; verification recomputes the root and "
+            "compares against the STH's root_hash. Verification of a "
+            "tampered path (one bit flipped in the first sibling) "
+            "rejects, demonstrating the proof's integrity."
+        ),
+        "spec_reference": "VECTORS.md §17.10; TRANSPARENCY.md §3.1; RFC 6962 §2.1.1",
+        "inputs": {
+            "log_size": log_size,
+            "leaf_index": leaf_index,
+            "leaf_hash_hex": leaves[leaf_index].hex(),
+            "expected_root_hex": root.hex(),
+            "path_hex": [h.hex() for h in path],
+        },
+        "expected": {
+            "valid_path_verifies": inclusion_verifies,
+            "tampered_path_first_element_hex": (
+                bad_path[0].hex() if path else None
+            ),
+            "tampered_path_verifies": bad_inclusion_verifies,
+        },
+    }
+
+    return {
+        "version": "1.0.0",
+        "category": "transparency",
+        "description": (
+            "Layer 5 vectors for TRANSPARENCY.md: domain-signed tree heads "
+            "and RFC 6962 Merkle inclusion proofs. Consistency proofs and "
+            "the §4 augmented key-fetch path are TODO."
+        ),
+        "spec_reference": "VECTORS.md §17.10; TRANSPARENCY.md §2-§3",
+        "construction": {
+            "merkle_leaf_hash": "SHA-256(0x00 || leaf_data) per RFC 6962 §2.1",
+            "merkle_internal_hash": "SHA-256(0x01 || left || right) per RFC 6962 §2.1",
+            "sth_signature_prefix_utf8": "SEMP-TRANSPARENCY-STH:",
+            "canonical_form": "ENVELOPE.md §4.3 with signature.value blanked",
+        },
+        "vectors": [sth_vector, inclusion_vector],
+    }
+
+
 # ---- Account closure / user policy / migration (Layer 4 Ed25519 patterns) --
 
 
@@ -4831,6 +5117,8 @@ def main() -> int:
         (OUTDIR / "account-closure.json", build_account_closure_json()),
         (OUTDIR / "user-policy.json", build_user_policy_json()),
         (OUTDIR / "migration.json", build_migration_json()),
+        (OUTDIR / "discovery-signed.json", build_discovery_signed_json()),
+        (OUTDIR / "transparency.json", build_transparency_json()),
     ]
 
     ok = True

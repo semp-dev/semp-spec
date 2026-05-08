@@ -1,0 +1,89 @@
+{
+  "version": "1.0.0",
+  "category": "discovery-signed",
+  "description": "DISCOVERY.md §7: SEMP_DISCOVERY responses are signed by the responding server's domain key with the SEMP-DISCOVERY: prefix. Verifiers reject unsigned or invalid responses before caching or acting on per-address results.",
+  "spec_reference": "VECTORS.md §17.10; DISCOVERY.md §7; ENVELOPE.md §4.3",
+  "construction": {
+    "domain_separation_prefix_utf8": "SEMP-DISCOVERY:",
+    "signing_key": "responding server's domain signing key",
+    "canonical_form": "ENVELOPE.md §4.3 with signature.value blanked"
+  },
+  "vectors": [
+    {
+      "id": "discovery-response-signed-valid",
+      "description": "Pinned domain key signs a single-result SEMP_DISCOVERY response. Signature verifies under the published domain public key. Companion to discovery.json's discovery-response-parsing vector, which covers the structural parsing path; this vector covers the signature path.",
+      "spec_reference": "VECTORS.md §17.10; DISCOVERY.md §7.1",
+      "inputs": {
+        "domain_seed_hex": "4141414141414141414141414141414141414141414141414141414141414141",
+        "domain_pub_hex": "db995fe25169d141cab9bbba92baa01f9f2e1ece7df4cb2ac05190f37fcc1f9d",
+        "domain_key_id": "9a92d2b54a9a5402de3e65a07a5cb12a8dc6758bd8e8c2ec459563d6b2c081c4",
+        "response_pre_sign_json": {
+          "type": "SEMP_DISCOVERY",
+          "step": "response",
+          "version": "1.0.0",
+          "id": "01J7DISCOVERYRESPONSEXXXXXXX",
+          "timestamp": "2026-04-19T12:00:00Z",
+          "results": [
+            {
+              "address": "alice@example.com",
+              "status": "semp",
+              "transports": [
+                "ws",
+                "h2"
+              ],
+              "extensions": [
+                "semp.dev/device-sync"
+              ],
+              "server": "semp.example.com",
+              "ttl": 3600
+            }
+          ],
+          "signature": {
+            "algorithm": "ed25519",
+            "key_id": "9a92d2b54a9a5402de3e65a07a5cb12a8dc6758bd8e8c2ec459563d6b2c081c4",
+            "value": ""
+          },
+          "extensions": {}
+        }
+      },
+      "intermediates": {
+        "canonical_with_blanked_signature_utf8": "{\"extensions\":{},\"id\":\"01J7DISCOVERYRESPONSEXXXXXXX\",\"results\":[{\"address\":\"alice@example.com\",\"extensions\":[\"semp.dev/device-sync\"],\"server\":\"semp.example.com\",\"status\":\"semp\",\"transports\":[\"ws\",\"h2\"],\"ttl\":3600}],\"signature\":{\"algorithm\":\"ed25519\",\"key_id\":\"9a92d2b54a9a5402de3e65a07a5cb12a8dc6758bd8e8c2ec459563d6b2c081c4\",\"value\":\"\"},\"step\":\"response\",\"timestamp\":\"2026-04-19T12:00:00Z\",\"type\":\"SEMP_DISCOVERY\",\"version\":\"1.0.0\"}",
+        "signing_input_prefix_utf8": "SEMP-DISCOVERY:",
+        "signing_input_hex": "53454d502d444953434f564552593a7b22657874656e73696f6e73223a7b7d2c226964223a2230314a37444953434f56455259524553504f4e534558585858585858222c22726573756c7473223a5b7b2261646472657373223a22616c696365406578616d706c652e636f6d222c22657874656e73696f6e73223a5b2273656d702e6465762f6465766963652d73796e63225d2c22736572766572223a2273656d702e6578616d706c652e636f6d222c22737461747573223a2273656d70222c227472616e73706f727473223a5b227773222c226832225d2c2274746c223a333630307d5d2c227369676e6174757265223a7b22616c676f726974686d223a2265643235353139222c226b65795f6964223a2239613932643262353461396135343032646533653635613037613563623132613864633637353862643865386332656334353935363364366232633038316334222c2276616c7565223a22227d2c2273746570223a22726573706f6e7365222c2274696d657374616d70223a22323032362d30342d31395431323a30303a30305a222c2274797065223a2253454d505f444953434f56455259222c2276657273696f6e223a22312e302e30227d",
+        "signature_hex": "2b24c37f12b00d0374ff099c3bf57017d17212a4ba6278ad33c73db65dc04fc4f72c763bbd5942a3dfce7f613fb4d4508052fb00b6c0b315afe771c55639590d"
+      },
+      "expected": {
+        "signed_response_json": {
+          "type": "SEMP_DISCOVERY",
+          "step": "response",
+          "version": "1.0.0",
+          "id": "01J7DISCOVERYRESPONSEXXXXXXX",
+          "timestamp": "2026-04-19T12:00:00Z",
+          "results": [
+            {
+              "address": "alice@example.com",
+              "status": "semp",
+              "transports": [
+                "ws",
+                "h2"
+              ],
+              "extensions": [
+                "semp.dev/device-sync"
+              ],
+              "server": "semp.example.com",
+              "ttl": 3600
+            }
+          ],
+          "signature": {
+            "algorithm": "ed25519",
+            "key_id": "9a92d2b54a9a5402de3e65a07a5cb12a8dc6758bd8e8c2ec459563d6b2c081c4",
+            "value": "KyTDfxKwDQN0/wmcO/VwF9FyEqS6YnitM8c9tl3AT8T3LHY7vVlCo9/Of2E/tNRQgFL7ALbAsxWv53HFVjlZDQ=="
+          },
+          "extensions": {}
+        },
+        "signature_b64": "KyTDfxKwDQN0/wmcO/VwF9FyEqS6YnitM8c9tl3AT8T3LHY7vVlCo9/Of2E/tNRQgFL7ALbAsxWv53HFVjlZDQ==",
+        "signature_verifies": true
+      }
+    }
+  ]
+}

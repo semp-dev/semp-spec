@@ -1147,6 +1147,37 @@ Three signed-document categories share the same Ed25519 + canonical-bytes
 [`vectors/v1.0.0/user-policy.json`](vectors/v1.0.0/user-policy.json),
 [`vectors/v1.0.0/migration.json`](vectors/v1.0.0/migration.json).
 
+### 17.10 Discovery Signing and Key Transparency (Layer 5)
+
+References: `DISCOVERY.md` §7; `TRANSPARENCY.md` §2-§3; RFC 6962.
+
+Two related vector files cover the §4.3 prefixes that Layer 5 introduces.
+
+**`discovery-signed.json`** — `SEMP-DISCOVERY:` over a SEMP_DISCOVERY
+response. Companion to `discovery.json`'s structural-parsing vectors;
+this one covers the signature path. Verifiers MUST check the response
+signature before caching or acting on per-address results.
+
+**`transparency.json`** — `SEMP-TRANSPARENCY-STH:` over a Signed Tree
+Head per `TRANSPARENCY.md` §2.3, plus an RFC 6962 inclusion proof.
+
+- `transparency-sth-signed`: domain key signs an STH over a small
+  Merkle tree (8 leaves with deterministic payloads). The pinned
+  inputs include the leaf payloads so any implementation can
+  reproduce the leaf hashes and root.
+- `transparency-inclusion-proof`: an inclusion proof for leaf 4 of
+  the same tree. The vector pins both the valid path and a
+  one-bit-flipped variant; verification rejects the latter,
+  demonstrating the proof's integrity.
+
+The Merkle hash construction follows RFC 6962:
+`leaf_hash = SHA-256(0x00 || leaf_data)` and
+`internal_hash = SHA-256(0x01 || left || right)`. Consistency proofs
+and the §4 augmented key-fetch path are TODO.
+
+**Bytes:** see [`vectors/v1.0.0/discovery-signed.json`](vectors/v1.0.0/discovery-signed.json),
+[`vectors/v1.0.0/transparency.json`](vectors/v1.0.0/transparency.json).
+
 ---
 
 ## 18. Relationship to Other Specifications

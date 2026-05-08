@@ -1,0 +1,96 @@
+{
+  "version": "1.0.0",
+  "category": "transparency",
+  "description": "Layer 5 vectors for TRANSPARENCY.md: domain-signed tree heads and RFC 6962 Merkle inclusion proofs. Consistency proofs and the §4 augmented key-fetch path are TODO.",
+  "spec_reference": "VECTORS.md §17.10; TRANSPARENCY.md §2-§3",
+  "construction": {
+    "merkle_leaf_hash": "SHA-256(0x00 || leaf_data) per RFC 6962 §2.1",
+    "merkle_internal_hash": "SHA-256(0x01 || left || right) per RFC 6962 §2.1",
+    "sth_signature_prefix_utf8": "SEMP-TRANSPARENCY-STH:",
+    "canonical_form": "ENVELOPE.md §4.3 with signature.value blanked"
+  },
+  "vectors": [
+    {
+      "id": "transparency-sth-signed",
+      "description": "Signed Tree Head per TRANSPARENCY.md §2.3. Domain key signs {log_size, root_hash, timestamp, signature.algorithm, signature.key_id} (with signature.value blanked) prefixed with SEMP-TRANSPARENCY-STH:. The pinned tree has 8 leaves with payloads 'transparency-leaf-0' through 'transparency-leaf-7' so the root is reproducible.",
+      "spec_reference": "VECTORS.md §17.10; TRANSPARENCY.md §2.3",
+      "inputs": {
+        "domain_seed_hex": "4242424242424242424242424242424242424242424242424242424242424242",
+        "domain_pub_hex": "2152f8d19b791d24453242e15f2eab6cb7cffa7b6a5ed30097960e069881db12",
+        "domain_key_id": "3097e2dee2cb4a34b53840cdb705aed71067c36f68db0e0f559c3f3fa043315f",
+        "leaf_payloads_utf8": [
+          "transparency-leaf-0",
+          "transparency-leaf-1",
+          "transparency-leaf-2",
+          "transparency-leaf-3",
+          "transparency-leaf-4",
+          "transparency-leaf-5",
+          "transparency-leaf-6",
+          "transparency-leaf-7"
+        ],
+        "sth_pre_sign_json": {
+          "log_size": 8,
+          "root_hash": "N3+B32Unq2CyiIQhlXnUEv3PBnMMyVAEARwsxpINq4E=",
+          "timestamp": "2026-04-19T12:00:00Z",
+          "signature": {
+            "algorithm": "ed25519",
+            "key_id": "3097e2dee2cb4a34b53840cdb705aed71067c36f68db0e0f559c3f3fa043315f",
+            "value": ""
+          }
+        }
+      },
+      "intermediates": {
+        "leaf_hashes_hex": [
+          "02765ec57a8a35ea02c815048488508876fd2a987acee72a7992db5298501e32",
+          "9d535c9e8600395c30786fac7a8119fff529d88285f7c997b0b823468e45fed1",
+          "939821bdc8fcd9b5d867f78ca77374e780211a3532f64cebd768ff1c84c1ffd3",
+          "54d617b12e50b85d7f57a418eb110d15bccc22f3874cfabf0de555efc7564d85",
+          "c4993a66c85be234afa8209ebde81bdba0bbe748d8c39013dac5f104509ed3b8",
+          "94a10f99b02dc48c44e12476d706622cdb274c98b4daa197f7a17553f85f1fa4",
+          "b7bb6e372bee82ee02779ac3051568a28fdb90ebf69557dcf23ead4a924360ff",
+          "c40c4c27548558ea5d6fa3ee6614151c4d538900cbc1ee9e64db95fc84e56013"
+        ],
+        "root_hash_hex": "377f81df6527ab60b28884219579d412fdcf06730cc95004011c2cc6920dab81",
+        "canonical_with_blanked_signature_utf8": "{\"log_size\":8,\"root_hash\":\"N3+B32Unq2CyiIQhlXnUEv3PBnMMyVAEARwsxpINq4E=\",\"signature\":{\"algorithm\":\"ed25519\",\"key_id\":\"3097e2dee2cb4a34b53840cdb705aed71067c36f68db0e0f559c3f3fa043315f\",\"value\":\"\"},\"timestamp\":\"2026-04-19T12:00:00Z\"}",
+        "signing_input_prefix_utf8": "SEMP-TRANSPARENCY-STH:",
+        "signing_input_hex": "53454d502d5452414e53504152454e43592d5354483a7b226c6f675f73697a65223a382c22726f6f745f68617368223a224e332b423332556e71324379694951686c586e5545763350426e4d4d79564145415277737870494e7134453d222c227369676e6174757265223a7b22616c676f726974686d223a2265643235353139222c226b65795f6964223a2233303937653264656532636234613334623533383430636462373035616564373130363763333666363864623065306635353963336633666130343333313566222c2276616c7565223a22227d2c2274696d657374616d70223a22323032362d30342d31395431323a30303a30305a227d",
+        "signature_hex": "00699b1ef750bab8da77df4bd0048ef7a1f3b7da05b10b5d133222c7d49e3c67354624d2e8855751937df19a77a59d06daf4d1b7f818017ba81907a886e2de05"
+      },
+      "expected": {
+        "sth_signed_json": {
+          "log_size": 8,
+          "root_hash": "N3+B32Unq2CyiIQhlXnUEv3PBnMMyVAEARwsxpINq4E=",
+          "timestamp": "2026-04-19T12:00:00Z",
+          "signature": {
+            "algorithm": "ed25519",
+            "key_id": "3097e2dee2cb4a34b53840cdb705aed71067c36f68db0e0f559c3f3fa043315f",
+            "value": "AGmbHvdQurjad99L0ASO96Hzt9oFsQtdEzIix9SePGc1RiTS6IVXUZN98Zp3pZ0G2vTRt/gYAXuoGQeohuLeBQ=="
+          }
+        },
+        "signature_b64": "AGmbHvdQurjad99L0ASO96Hzt9oFsQtdEzIix9SePGc1RiTS6IVXUZN98Zp3pZ0G2vTRt/gYAXuoGQeohuLeBQ==",
+        "signature_verifies": true
+      }
+    },
+    {
+      "id": "transparency-inclusion-proof",
+      "description": "RFC 6962 §2.1.1 inclusion proof for leaf 4 in the §17.10 STH tree. The path is the sequence of sibling hashes from the leaf up to the root; verification recomputes the root and compares against the STH's root_hash. Verification of a tampered path (one bit flipped in the first sibling) rejects, demonstrating the proof's integrity.",
+      "spec_reference": "VECTORS.md §17.10; TRANSPARENCY.md §3.1; RFC 6962 §2.1.1",
+      "inputs": {
+        "log_size": 8,
+        "leaf_index": 4,
+        "leaf_hash_hex": "c4993a66c85be234afa8209ebde81bdba0bbe748d8c39013dac5f104509ed3b8",
+        "expected_root_hex": "377f81df6527ab60b28884219579d412fdcf06730cc95004011c2cc6920dab81",
+        "path_hex": [
+          "94a10f99b02dc48c44e12476d706622cdb274c98b4daa197f7a17553f85f1fa4",
+          "4af880659da29e1ddda7ceb23b5cfb0d2a81e7bcadc31e1f67e4960e817813c9",
+          "81c9a73e15ab5537e8128e4a54d96e20ab4bf0957de703c99d6c2234a5e90953"
+        ]
+      },
+      "expected": {
+        "valid_path_verifies": true,
+        "tampered_path_first_element_hex": "95a10f99b02dc48c44e12476d706622cdb274c98b4daa197f7a17553f85f1fa4",
+        "tampered_path_verifies": false
+      }
+    }
+  ]
+}
