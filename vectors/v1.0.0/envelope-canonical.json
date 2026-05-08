@@ -4,10 +4,10 @@
   "description": "Canonical envelope encoding (the input to seal.signature and seal.session_mac). Source of truth: VECTORS.md §3.",
   "spec_reference": "VECTORS.md §3; ENVELOPE.md §4.3",
   "rules_summary": [
-    "seal.signature → set to \"\"",
-    "seal.session_mac → set to \"\"",
-    "postmark.hop_count → omitted",
-    "padding → omitted",
+    "seal.signature -> set to \"\"",
+    "seal.session_mac -> set to \"\"",
+    "postmark.hop_count -> omitted",
+    "padding -> omitted",
     "All keys sorted lexicographically at every nesting level",
     "No insignificant whitespace",
     "UTF-8 encoding"

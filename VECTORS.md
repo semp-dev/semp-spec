@@ -62,147 +62,54 @@ when they are defined.
 
 ### 2.1 Vector: Baseline Key Derivation
 
-**Inputs:**
-
-Shared secret (IKM): 64 bytes, representing the combined output of a hybrid
-key agreement (`K_kyber || K_x25519`). This is a synthetic test value, not the
-output of a real Kyber768 or X25519 operation.
-
-```
-IKM (hex): 0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b
-            0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b
-            0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c
-            0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c
-```
-
-That is, 32 bytes of `0x0b` followed by 32 bytes of `0x0c`.
-
-Client nonce (32 bytes):
-
-```
-client_nonce (hex): aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
-```
-
-Server nonce (32 bytes):
-
-```
-server_nonce (hex): bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb
-```
-
-**Derivation procedure:**
+**Procedure:**
 
 1. Compute salt: `client_nonce || server_nonce` (64 bytes).
 2. HKDF-Extract(salt, IKM) → PRK.
-3. For each key, HKDF-Expand(PRK, info_label, 32) → key.
+3. For each of the five keys, HKDF-Expand(PRK, info_label, 32) → key, using
+   the per-key UTF-8 info labels:
+   - `K_enc_c2s` ← `"SEMP-v1-session-enc-c2s"`
+   - `K_enc_s2c` ← `"SEMP-v1-session-enc-s2c"`
+   - `K_mac_c2s` ← `"SEMP-v1-session-mac-c2s"`
+   - `K_mac_s2c` ← `"SEMP-v1-session-mac-s2c"`
+   - `K_env_mac` ← `"SEMP-v1-session-env-mac"`
 
-**Info labels (UTF-8 encoded):**
+The IKM in this vector is a synthetic 64-byte value (32 bytes of `0x0b`
+followed by 32 bytes of `0x0c`) representing the combined output of a hybrid
+key agreement (`K_kyber || K_x25519`). It is not the output of a real Kyber768
+or X25519 operation. The client nonce is 32 bytes of `0xaa`; the server nonce
+is 32 bytes of `0xbb`.
 
-```
-K_enc_c2s:  "SEMP-v1-session-enc-c2s"
-K_enc_s2c:  "SEMP-v1-session-enc-s2c"
-K_mac_c2s:  "SEMP-v1-session-mac-c2s"
-K_mac_s2c:  "SEMP-v1-session-mac-s2c"
-K_env_mac:  "SEMP-v1-session-env-mac"
-```
+**Bytes:** see [`vectors/v1.0.0/hkdf.json`](vectors/v1.0.0/hkdf.json), entry
+`id: hkdf-baseline`. The JSON carries the IKM, both nonces, the info labels,
+the expected PRK, and the five expected derived keys.
 
-**Expected PRK (64 bytes):**
-
-```
-PRK (hex): 1ca5eed820a07ef313053ec19352a69c
-           6dd00c924139d012ff571faa55f07037
-           087ced0021ce2b853c3ee8ffeabea069
-           7586d06f989c315cab24859bb3b9ef6e
-```
-
-**Expected session keys (32 bytes each):**
-
-```
-K_enc_c2s (hex): cf74d91d41de6ac8f838715bc44a31d7
-                 e23b8e9b4dd7dab6be6ad4b8d0567af6
-
-K_enc_s2c (hex): bed26f42d9b1762ab5665b429ef51131
-                 6e2f9a9be7b4721a310488b3540f90cd
-
-K_mac_c2s (hex): 7f7c8b61c27e91c160dba88063346afb
-                 920b99fa2736aa0c54b5d022ff58484e
-
-K_mac_s2c (hex): 7905bf680e3095c0b71b4d331c2a5863
-                 16171ab6ad072842b5bea4a0c374723a
-
-K_env_mac (hex): 32925224f762c4f921db929271bfdc5e
-                 911b0d877bc30cd4695f9d6530337c02
-```
-
-**Verification:** An implementation MUST derive all five keys from the given
-IKM, salt, and labels and compare against these expected values. Any mismatch
-indicates incorrect HKDF-SHA-512 usage, incorrect label encoding, or incorrect
-salt construction.
+**Verification:** An implementation MUST derive all five keys from the inputs
+in the JSON and compare against `expected.prk_hex` and the five
+`expected.keys.K_*_hex` values. Any mismatch indicates incorrect HKDF-SHA-512
+usage, incorrect label encoding, or incorrect salt construction.
 
 ### 2.2 Vector: Rekey Derivation
 
 Reference: `SESSION.md` §3.3.
 
-Rekeying uses a different info context: `"SEMP-v1-rekey"`. The salt is
-`rekey_nonce || responder_nonce`. All other parameters are identical to the
-initial derivation.
-
-**Inputs:**
-
-```
-IKM (hex):            d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1
-                      d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1
-                      e2e2e2e2e2e2e2e2e2e2e2e2e2e2e2e2
-                      e2e2e2e2e2e2e2e2e2e2e2e2e2e2e2e2
-
-rekey_nonce (hex):    cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc
-
-responder_nonce (hex):dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd
-```
-
-**Derivation procedure:**
-
-1. Compute salt: `rekey_nonce || responder_nonce` (64 bytes).
-2. HKDF-Extract(salt, IKM) → PRK.
-3. For each key, HKDF-Expand(PRK, info_label, 32) → key, using the same
-   five label strings as section 2.1 but applied to the new PRK.
+Rekeying uses the same five per-key info labels as §2.1, applied to a fresh
+PRK derived from new key material. The salt is
+`rekey_nonce || responder_nonce` (64 bytes). The IKM in this vector is 32
+bytes of `0xd1` followed by 32 bytes of `0xe2`; the rekey nonce is 32 bytes
+of `0xcc`; the responder nonce is 32 bytes of `0xdd`.
 
 **Note:** The info labels for rekey derivation use the same key-specific labels
 as the initial derivation (`"SEMP-v1-session-enc-c2s"`, etc.). The
 `"SEMP-v1-rekey"` context string distinguishes the rekey from the initial
 derivation through the different salt (rekey nonces vs. session nonces), not
-through the per-key expand labels.
+through the per-key expand labels. Implementations MUST produce identical keys
+when given the same IKM, salt, and labels, regardless of whether the
+derivation occurs during an initial handshake or a rekey. The PRK will differ
+because the salt differs.
 
-Implementations MUST produce identical keys when given the same IKM, salt, and
-labels, regardless of whether the derivation occurs during an initial handshake
-or a rekey. The PRK will differ because the salt differs.
-
-**Expected PRK (64 bytes):**
-
-```
-PRK (hex): 3e62694adf1c3ae0bf998d6c74498ba7
-           148406359c374cbd6fa54f14ca2a2561
-           260c9bc3944c48204505f4ad8455958a
-           616b2c5b9ba0eebe99ee6ad15eac9c23
-```
-
-**Expected session keys (32 bytes each):**
-
-```
-K_enc_c2s (hex): b3b8093896f5ed916ebe6a55b6a0d3e0
-                 dc1bb6bf6e23f58a317f01135c4dead0
-
-K_enc_s2c (hex): c10997d1c541bffa1131ee886a3ab372
-                 e4622603f168f6e3bb69caf4bdf93910
-
-K_mac_c2s (hex): 3b723faad0d05e17bb96b82efcec2257
-                 a3900bd00b30ae7dc0254b59e3abe153
-
-K_mac_s2c (hex): 1f91269a2493c11eb02a61114b8debe7
-                 499a38e2cd0886ae3ee715383bac6ab6
-
-K_env_mac (hex): 187cd04362c27d37f95c6cc4558935398
-                 037a13f1c6015e23dbef97ba3aa8db3
-```
+**Bytes:** see [`vectors/v1.0.0/hkdf.json`](vectors/v1.0.0/hkdf.json), entry
+`id: hkdf-rekey`.
 
 ---
 
@@ -216,37 +123,7 @@ sequence from a given envelope, which is the input to both `seal.signature` and
 
 ### 3.1 Vector: Minimal Envelope
 
-**Input envelope (as parsed JSON):**
-
-```json
-{
-    "type": "SEMP_ENVELOPE",
-    "version": "1.0.0",
-    "postmark": {
-        "id": "01J4K7P2XVEM3Q8YNZHBRC5T06",
-        "session_id": "01J4K7Q0ABCDEFGHJKLMNPQRST",
-        "from_domain": "sender.example",
-        "to_domain": "recipient.example",
-        "expires": "2025-06-10T21:00:00Z",
-        "hop_count": 2,
-        "extensions": {}
-    },
-    "seal": {
-        "algorithm": "pq-kyber768-x25519",
-        "key_id": "abc123def456",
-        "signature": "existing-signature-value",
-        "session_mac": "existing-mac-value",
-        "brief_recipients": {},
-        "enclosure_recipients": {},
-        "extensions": {}
-    },
-    "brief": "ZW5jcnlwdGVkLWJyaWVm",
-    "enclosure": "ZW5jcnlwdGVkLWVuY2xvc3VyZQ==",
-    "padding": "cGFkZGluZy1ieXRlcy1mb3ItMTAyNC1idWNrZXQ="
-}
-```
-
-**Canonicalization rules applied:**
+**Canonicalization rules:**
 
 1. `seal.signature` → set to `""`
 2. `seal.session_mac` → set to `""`
@@ -256,11 +133,10 @@ sequence from a given envelope, which is the input to both `seal.signature` and
 6. No insignificant whitespace
 7. UTF-8 encoding
 
-**Expected canonical form (UTF-8 string):**
-
-```
-{"brief":"ZW5jcnlwdGVkLWJyaWVm","enclosure":"ZW5jcnlwdGVkLWVuY2xvc3VyZQ==","postmark":{"expires":"2025-06-10T21:00:00Z","extensions":{},"from_domain":"sender.example","id":"01J4K7P2XVEM3Q8YNZHBRC5T06","session_id":"01J4K7Q0ABCDEFGHJKLMNPQRST","to_domain":"recipient.example"},"seal":{"algorithm":"pq-kyber768-x25519","brief_recipients":{},"enclosure_recipients":{},"extensions":{},"key_id":"abc123def456","session_mac":"","signature":""},"type":"SEMP_ENVELOPE","version":"1.0.0"}
-```
+**Bytes:** see [`vectors/v1.0.0/envelope-canonical.json`](vectors/v1.0.0/envelope-canonical.json),
+entry `id: envelope-canonical-minimal`. The JSON carries the input envelope
+under `inputs.envelope_json` and the expected canonical UTF-8 string under
+`expected.canonical_utf8`.
 
 **Key observations for implementers:**
 
@@ -280,47 +156,12 @@ sequence from a given envelope, which is the input to both `seal.signature` and
 
 ### 3.2 Vector: Envelope with Extensions
 
-**Input envelope:**
+This vector adds two postmark extensions and two brief recipients to confirm
+that nested-object keys (extensions and recipient maps) sort lexicographically
+just like top-level keys.
 
-```json
-{
-    "type": "SEMP_ENVELOPE",
-    "version": "1.0.0",
-    "postmark": {
-        "id": "01JTEST00000000000000000000",
-        "session_id": "01JTEST11111111111111111111",
-        "from_domain": "alpha.example",
-        "to_domain": "beta.example",
-        "expires": "2025-07-01T12:00:00Z",
-        "extensions": {
-            "vendor.example.com/priority": "high",
-            "another.example.com/class": "transactional"
-        }
-    },
-    "seal": {
-        "algorithm": "x25519-chacha20-poly1305",
-        "key_id": "key-fingerprint-xyz",
-        "signature": "to-be-replaced",
-        "session_mac": "to-be-replaced",
-        "brief_recipients": {
-            "server-key-fp": "wrapped-K_brief-for-server",
-            "client-key-fp": "wrapped-K_brief-for-client"
-        },
-        "enclosure_recipients": {
-            "client-key-fp": "wrapped-K_enclosure-for-client"
-        },
-        "extensions": {}
-    },
-    "brief": "YnJpZWYtZGF0YQ==",
-    "enclosure": "ZW5jbG9zdXJlLWRhdGE="
-}
-```
-
-**Expected canonical form:**
-
-```
-{"brief":"YnJpZWYtZGF0YQ==","enclosure":"ZW5jbG9zdXJlLWRhdGE=","postmark":{"expires":"2025-07-01T12:00:00Z","extensions":{"another.example.com/class":"transactional","vendor.example.com/priority":"high"},"from_domain":"alpha.example","id":"01JTEST00000000000000000000","session_id":"01JTEST11111111111111111111","to_domain":"beta.example"},"seal":{"algorithm":"x25519-chacha20-poly1305","brief_recipients":{"client-key-fp":"wrapped-K_brief-for-client","server-key-fp":"wrapped-K_brief-for-server"},"enclosure_recipients":{"client-key-fp":"wrapped-K_enclosure-for-client"},"extensions":{},"key_id":"key-fingerprint-xyz","session_mac":"","signature":""},"type":"SEMP_ENVELOPE","version":"1.0.0"}
-```
+**Bytes:** see [`vectors/v1.0.0/envelope-canonical.json`](vectors/v1.0.0/envelope-canonical.json),
+entry `id: envelope-canonical-with-extensions`.
 
 **Key observations:**
 
@@ -500,20 +341,6 @@ handshake exchange.
 
 ### 5.1 Vector: Confirmation Hash Computation
 
-**Inputs:**
-
-Message 1 (init) canonical form:
-
-```json
-{"capabilities":{"encryption_algorithms":["pq-kyber768-x25519","x25519-chacha20-poly1305"],"extensions":["semp.dev/device-sync","semp.dev/large-attachment"]},"client_ephemeral_key":{"algorithm":"pq-kyber768-x25519","key":"Y2xpZW50LWVwaGVtZXJhbC1rZXk=","key_id":"client-eph-fp"},"extensions":{},"nonce":"qqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqs=","party":"client","step":"init","transport":"ws","type":"SEMP_HANDSHAKE","version":"1.0.0"}
-```
-
-Message 2 (response) canonical form:
-
-```json
-{"client_nonce":"qqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqs=","extensions":{},"negotiated":{"encryption_algorithm":"pq-kyber768-x25519","extensions":["semp.dev/device-sync","semp.dev/large-attachment"]},"party":"server","server_ephemeral_key":{"algorithm":"pq-kyber768-x25519","key":"c2VydmVyLWVwaGVtZXJhbC1rZXk=","key_id":"server-eph-fp"},"server_identity_proof":{"domain":"example.com","key_id":"server-lt-fp","signature":"c2VydmVyLXNpZw=="},"server_nonce":"u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7s=","server_signature":"c2VydmVyLXNpZ25hdHVyZQ==","session_id":"01JTEST33333333333333333333","step":"response","type":"SEMP_HANDSHAKE","version":"1.0.0"}
-```
-
 **Procedure:**
 
 ```
@@ -521,24 +348,19 @@ confirmation_hash = SHA-256( canonical(message_1) || canonical(message_2) )
 ```
 
 Where `canonical()` produces the UTF-8 bytes of the sorted, minified JSON
-(the same canonicalization used for envelope seals). The two byte sequences
-are concatenated directly with no separator.
+(the same canonicalization used for envelope seals, see §3). The two byte
+sequences are concatenated directly with no separator. The client then signs
+`session_id || confirmation_hash` with its long-term identity key.
 
-**Expected confirmation_hash:**
+**Bytes:** see [`vectors/v1.0.0/confirmation-hash.json`](vectors/v1.0.0/confirmation-hash.json),
+entry `id: confirmation-hash-pq-kyber-baseline`. The JSON carries the canonical
+forms of message 1 (init, party=client) and message 2 (response, party=server)
+under `inputs.message_1_canonical_utf8` and `inputs.message_2_canonical_utf8`,
+plus the expected hash under `expected.hash_hex` / `expected.hash_b64`.
 
-```
-SHA-256 (hex): 1c23b09f9c0e93dbc1dc31a9d9dc4c68
-               006191b5c12d3dffa0a153f5e972cc3d
-
-Base64:        HCOwn5wOk9vB3DGp2dxMaABhkbXBLT3/oKFT9elyzD0=
-```
-
-The client then signs `session_id || confirmation_hash` with its long-term
-identity key.
-
-**Verification:** Given the exact canonical forms above, two implementations
-MUST produce the SHA-256 output shown. Any difference indicates a
-canonicalization or encoding bug.
+**Verification:** Given the exact canonical forms in the JSON, two
+implementations MUST produce the SHA-256 output shown. Any difference indicates
+a canonicalization or encoding bug.
 
 ---
 
@@ -551,36 +373,24 @@ envelope bytes.
 
 ### 6.1 Vector: Session MAC Computation
 
-**Inputs:**
-
-`K_env_mac` from Vector 2.1:
-
-```
-K_env_mac (hex): 32925224f762c4f921db929271bfdc5e
-                 911b0d877bc30cd4695f9d6530337c02
-```
-
-Canonical envelope bytes: the UTF-8 bytes of the canonical form from
-section 3.1.
-
 **Procedure:**
 
 ```
 session_mac = HMAC-SHA-256(K_env_mac, canonical_envelope_bytes)
 ```
 
-**Expected output:**
+`K_env_mac` is the `K_env_mac` derived in §2.1 (vector `hkdf-baseline`); the
+canonical envelope bytes are the UTF-8 output from §3.1 (vector
+`envelope-canonical-minimal`). The base64 encoding of the resulting MAC is
+stored in `seal.session_mac`.
 
-```
-HMAC-SHA-256 (hex): b59371cec75f07a5b40444ffc46049b1
-                    fa9c6673e1072903ff821ab4506c9bfe
+**Bytes:** see [`vectors/v1.0.0/session-mac.json`](vectors/v1.0.0/session-mac.json),
+entry `id: session-mac-minimal-envelope`. The JSON carries the key under
+`inputs.key_hex`, the canonical message under `inputs.message_canonical_utf8`,
+and the expected MAC under `expected.mac_hex` / `expected.mac_b64`.
 
-Base64:             tZNxzsdfB6W0BET/xGBJsfqcZnPhBykD/4IatFBsm/4=
-```
-
-**Verification:** Given the same `K_env_mac` and the same canonical bytes,
-two implementations MUST produce the HMAC-SHA-256 output shown. The base64
-encoding of this value is stored in `seal.session_mac`. Any difference
+**Verification:** Given the same key and the same canonical bytes, two
+implementations MUST produce the HMAC-SHA-256 output shown. Any difference
 indicates incorrect canonicalization, incorrect key usage, or an HMAC
 implementation bug.
 
