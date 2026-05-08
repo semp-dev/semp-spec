@@ -1,0 +1,57 @@
+{
+  "version": "1.0.0",
+  "category": "configuration-update",
+  "description": "DISCOVERY.md §3.5.4: SEMP_CONFIGURATION_UPDATE messages are signed by the issuing domain's current signing key with the SEMP-CONFIGURATION-UPDATE: prefix per ENVELOPE.md §4.3. Federation peers verify the signature before treating the advertised revision as authoritative; an invalid signature MUST result in the message being discarded silently.",
+  "spec_reference": "VECTORS.md §17.14; DISCOVERY.md §3.5.4; ENVELOPE.md §4.3",
+  "construction": {
+    "domain_separation_prefix_utf8": "SEMP-CONFIGURATION-UPDATE:",
+    "signing_key": "issuing domain's current signing key",
+    "canonical_form": "ENVELOPE.md §4.3 with signature.value blanked"
+  },
+  "vectors": [
+    {
+      "id": "configuration-update-signed-valid",
+      "description": "Pinned domain key signs a revision-18 update for example.com. The signature MUST verify under the domain's published public key. A peer that fails this verification MUST discard the message and MUST NOT trigger an out-of-band re-fetch on its basis (§3.5.4).",
+      "spec_reference": "VECTORS.md §17.14; DISCOVERY.md §3.5.4",
+      "inputs": {
+        "domain_seed_hex": "5555555555555555555555555555555555555555555555555555555555555555",
+        "domain_pub_hex": "c6822637c7d310ec57627be00ba259d253749f4aaf644470cffbe53a35f73242",
+        "domain_key_id": "b4c1ece898ece24e24e601232f95c6a18971689a0dd669e6d78218537c21c389",
+        "update_pre_sign_json": {
+          "type": "SEMP_CONFIGURATION_UPDATE",
+          "version": "1.0.0",
+          "domain": "example.com",
+          "revision": 18,
+          "timestamp": "2026-04-19T12:00:00Z",
+          "signature": {
+            "algorithm": "ed25519",
+            "key_id": "b4c1ece898ece24e24e601232f95c6a18971689a0dd669e6d78218537c21c389",
+            "value": ""
+          }
+        }
+      },
+      "intermediates": {
+        "canonical_with_blanked_signature_utf8": "{\"domain\":\"example.com\",\"revision\":18,\"signature\":{\"algorithm\":\"ed25519\",\"key_id\":\"b4c1ece898ece24e24e601232f95c6a18971689a0dd669e6d78218537c21c389\",\"value\":\"\"},\"timestamp\":\"2026-04-19T12:00:00Z\",\"type\":\"SEMP_CONFIGURATION_UPDATE\",\"version\":\"1.0.0\"}",
+        "signing_input_prefix_utf8": "SEMP-CONFIGURATION-UPDATE:",
+        "signing_input_hex": "53454d502d434f4e46494755524154494f4e2d5550444154453a7b22646f6d61696e223a226578616d706c652e636f6d222c227265766973696f6e223a31382c227369676e6174757265223a7b22616c676f726974686d223a2265643235353139222c226b65795f6964223a2262346331656365383938656365323465323465363031323332663935633661313839373136383961306464363639653664373832313835333763323163333839222c2276616c7565223a22227d2c2274696d657374616d70223a22323032362d30342d31395431323a30303a30305a222c2274797065223a2253454d505f434f4e46494755524154494f4e5f555044415445222c2276657273696f6e223a22312e302e30227d",
+        "signature_hex": "ed5eab85ed696033eac34c4c99450d1de0e5014443635ddbad4dacff58b33b97d26aafe60f90789345459dbe0384b8aec498c1fec7306d3cd6d77bdea243e002"
+      },
+      "expected": {
+        "signed_update_json": {
+          "type": "SEMP_CONFIGURATION_UPDATE",
+          "version": "1.0.0",
+          "domain": "example.com",
+          "revision": 18,
+          "timestamp": "2026-04-19T12:00:00Z",
+          "signature": {
+            "algorithm": "ed25519",
+            "key_id": "b4c1ece898ece24e24e601232f95c6a18971689a0dd669e6d78218537c21c389",
+            "value": "7V6rhe1pYDPqw0xMmUUNHeDlAURDY13brU2s/1izO5fSaq/mD5B4k0VFnb4DhLiuxJjB/scwbTzW13veokPgAg=="
+          }
+        },
+        "signature_b64": "7V6rhe1pYDPqw0xMmUUNHeDlAURDY13brU2s/1izO5fSaq/mD5B4k0VFnb4DhLiuxJjB/scwbTzW13veokPgAg==",
+        "signature_verifies": true
+      }
+    }
+  ]
+}

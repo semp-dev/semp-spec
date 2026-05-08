@@ -453,6 +453,7 @@ where a signature valid in one context could be misinterpreted in another.
 | Key response signature | `SEMP-KEYS:` |
 | User key self-signature | `SEMP-KEY-SELF-SIG:` |
 | Discovery response signature | `SEMP-DISCOVERY:` |
+| Configuration update notification (domain signing key) | `SEMP-CONFIGURATION-UPDATE:` |
 | Revocation signature | `SEMP-REVOCATION:` |
 | Delivery receipt signature | `SEMP-DELIVERY-RECEIPT:` |
 | Recovery backup bundle signature | `SEMP-RECOVERY-BUNDLE:` |

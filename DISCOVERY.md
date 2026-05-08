@@ -655,7 +655,7 @@ message over each live federation session:
 | `domain`      | `string`  | Yes      | The domain whose configuration has changed.                                 |
 | `revision`    | `integer` | Yes      | The new configuration revision the peer should expect on next fetch.        |
 | `timestamp`   | `string`  | Yes      | ISO 8601 UTC timestamp of the notification.                                 |
-| `signature`   | `object`  | Yes      | Domain-key signature over the canonical bytes of the message with `signature.value` set to `""`. |
+| `signature`   | `object`  | Yes      | Domain-key signature over the canonical bytes of the message with `signature.value` set to `""`, prefixed with `SEMP-CONFIGURATION-UPDATE:` per `ENVELOPE.md` section 4.3. |
 
 The signature MUST be produced by the domain's currently published
 signing key. Peers MUST verify the signature against the cached

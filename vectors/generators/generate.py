@@ -3755,6 +3755,218 @@ def build_forwarding_json() -> dict:
     }
 
 
+# ---- Configuration update + PQ handshake variants --------------------------
+
+
+CONFIGURATION_UPDATE_PREFIX = b"SEMP-CONFIGURATION-UPDATE:"
+
+
+def build_configuration_update_json() -> dict:
+    """DISCOVERY.md §3.5.4: a SEMP_CONFIGURATION_UPDATE notification signed
+    by the domain's current signing key with the SEMP-CONFIGURATION-UPDATE:
+    prefix per ENVELOPE.md §4.3."""
+    domain_seed = bytes([0x55] * 32)
+    domain_pub = ed25519_pubkey_from_priv(domain_seed)
+    domain_fp = fingerprint_hex(domain_pub)
+
+    update_pre_sign = {
+        "type": "SEMP_CONFIGURATION_UPDATE",
+        "version": "1.0.0",
+        "domain": "example.com",
+        "revision": 18,
+        "timestamp": "2026-04-19T12:00:00Z",
+        "signature": {
+            "algorithm": "ed25519",
+            "key_id": domain_fp,
+            "value": "",
+        },
+    }
+    signed, inter = _sign_doc(
+        update_pre_sign, domain_seed, CONFIGURATION_UPDATE_PREFIX, ["signature"]
+    )
+    assert _verify_doc(signed, domain_pub, CONFIGURATION_UPDATE_PREFIX, ["signature"])
+
+    return {
+        "version": "1.0.0",
+        "category": "configuration-update",
+        "description": (
+            "DISCOVERY.md §3.5.4: SEMP_CONFIGURATION_UPDATE messages are "
+            "signed by the issuing domain's current signing key with the "
+            "SEMP-CONFIGURATION-UPDATE: prefix per ENVELOPE.md §4.3. "
+            "Federation peers verify the signature before treating the "
+            "advertised revision as authoritative; an invalid signature "
+            "MUST result in the message being discarded silently."
+        ),
+        "spec_reference": "VECTORS.md §17.14; DISCOVERY.md §3.5.4; ENVELOPE.md §4.3",
+        "construction": {
+            "domain_separation_prefix_utf8": "SEMP-CONFIGURATION-UPDATE:",
+            "signing_key": "issuing domain's current signing key",
+            "canonical_form": "ENVELOPE.md §4.3 with signature.value blanked",
+        },
+        "vectors": [
+            {
+                "id": "configuration-update-signed-valid",
+                "description": (
+                    "Pinned domain key signs a revision-18 update for "
+                    "example.com. The signature MUST verify under the "
+                    "domain's published public key. A peer that fails "
+                    "this verification MUST discard the message and "
+                    "MUST NOT trigger an out-of-band re-fetch on its "
+                    "basis (§3.5.4)."
+                ),
+                "spec_reference": "VECTORS.md §17.14; DISCOVERY.md §3.5.4",
+                "inputs": {
+                    "domain_seed_hex": domain_seed.hex(),
+                    "domain_pub_hex": domain_pub.hex(),
+                    "domain_key_id": domain_fp,
+                    "update_pre_sign_json": update_pre_sign,
+                },
+                "intermediates": inter,
+                "expected": {
+                    "signed_update_json": signed,
+                    "signature_b64": signed["signature"]["value"],
+                    "signature_verifies": True,
+                },
+            },
+        ],
+    }
+
+
+def build_handshake_messages_pq_json() -> dict:
+    """PQ-suite variants of the §17.8 handshake messages. The construction
+    is identical; only the advertised algorithm strings and the size of
+    client_ephemeral_key.key / server_ephemeral_key.key change. We include
+    just the two outer-signed messages (response, accepted) because those
+    are the ones whose canonical bytes change with PQ payloads in a
+    cryptographically meaningful way; init and confirm differ only in
+    body strings."""
+    import base64
+
+    server_domain_seed = bytes([0x56] * 32)
+    server_domain_pub = ed25519_pubkey_from_priv(server_domain_seed)
+    server_domain_fp = fingerprint_hex(server_domain_pub)
+
+    # A 1184-byte Kyber768 ek is too large to inline; in real handshakes
+    # the public key is base64-encoded inline. For vector reproducibility,
+    # we generate a deterministic 1184-byte ek via Kyber keygen and use
+    # its base64 here. The ephemeral X25519 portion is concatenated per
+    # the suite's hybrid layout.
+    kyber_d = bytes([0x57] * 32)
+    kyber_z = bytes([0x58] * 32)
+    kyber_ek, kyber_dk = kyber768_keygen_internal(kyber_d, kyber_z)
+    x25519_eph_priv = bytes([0x59] * 32)
+    x25519_eph_pub = x25519_pubkey_from_priv(x25519_eph_priv)
+    pq_ephemeral_pub_bytes = kyber_ek + x25519_eph_pub  # 1184 + 32
+
+    response_msg = {
+        "type": "SEMP_HANDSHAKE",
+        "step": "response",
+        "party": "server",
+        "version": "1.0.0",
+        "session_id": "01J7PQHANDSHAKESESSIONXXXXXX",
+        "client_nonce": "qqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqs=",
+        "server_nonce": "u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7s=",
+        "server_ephemeral_key": {
+            "algorithm": "pq-kyber768-x25519",
+            "key": base64.b64encode(pq_ephemeral_pub_bytes).decode("ascii"),
+            "key_id": "server-eph-pq-fp",
+        },
+        "server_identity_proof": {
+            "domain": "example.com",
+            "key_id": server_domain_fp,
+            "signature": "PINNED-IDENTITY-PROOF-SIGNATURE-BYTES",
+        },
+        "negotiated": {
+            "encryption_algorithm": "pq-kyber768-x25519",
+            "extensions": ["semp.dev/device-sync", "semp.dev/large-attachment"],
+            "max_envelope_size": 26214400,
+        },
+        "server_signature": "",
+        "extensions": {},
+    }
+    response_signed, response_inter = handshake_sign(response_msg, server_domain_seed)
+    assert handshake_verify(response_signed, server_domain_pub)
+
+    accepted_msg = {
+        "type": "SEMP_HANDSHAKE",
+        "step": "accepted",
+        "party": "server",
+        "version": "1.0.0",
+        "session_id": "01J7PQHANDSHAKESESSIONXXXXXX",
+        "session_ttl": 300,
+        "permissions": ["send", "receive"],
+        "resumption_ticket": {
+            "value": "PINNED-PQ-RESUMPTION-TICKET-OPAQUE-BYTES",
+            "expires_at": "2026-05-15T09:00:00Z",
+        },
+        "server_signature": "",
+        "extensions": {},
+    }
+    accepted_signed, accepted_inter = handshake_sign(accepted_msg, server_domain_seed)
+    assert handshake_verify(accepted_signed, server_domain_pub)
+
+    return {
+        "version": "1.0.0",
+        "category": "handshake-messages-pq",
+        "description": (
+            "PQ-suite (pq-kyber768-x25519) variants of the §17.8 "
+            "outer-signed handshake messages. Construction is identical "
+            "(SEMP-HANDSHAKE: prefix over canonical bytes with the "
+            "server_signature blanked); only the advertised algorithm "
+            "strings and ephemeral-key payload size change. The "
+            "ephemeral key field carries the 1216-byte hybrid public "
+            "key (kyber_ek (1184) || x25519_pub (32)) base64-encoded."
+        ),
+        "spec_reference": "VECTORS.md §17.14; HANDSHAKE.md §2; ENVELOPE.md §4.3, §7.3",
+        "vectors": [
+            {
+                "id": "handshake-response-pq-signed",
+                "description": (
+                    "PQ ServerResponse with hybrid kyber_ek || x25519_pub "
+                    "ephemeral key. Same outer-signature construction as "
+                    "the baseline §17.8 response."
+                ),
+                "spec_reference": "VECTORS.md §17.14; HANDSHAKE.md §2.3",
+                "inputs": {
+                    "server_domain_seed_hex": server_domain_seed.hex(),
+                    "server_domain_pub_hex": server_domain_pub.hex(),
+                    "server_domain_key_id": server_domain_fp,
+                    "kyber_d_hex": kyber_d.hex(),
+                    "kyber_z_hex": kyber_z.hex(),
+                    "x25519_eph_priv_hex": x25519_eph_priv.hex(),
+                    "kyber_ek_hex": kyber_ek.hex(),
+                    "x25519_eph_pub_hex": x25519_eph_pub.hex(),
+                    "message_pre_sign_json": response_msg,
+                },
+                "intermediates": response_inter,
+                "expected": {
+                    "signed_message_json": response_signed,
+                    "signature_verifies": True,
+                },
+            },
+            {
+                "id": "handshake-accepted-pq-signed",
+                "description": (
+                    "PQ ServerAccepted carrying a PQ-tagged resumption "
+                    "ticket. Construction unchanged from baseline."
+                ),
+                "spec_reference": "VECTORS.md §17.14; HANDSHAKE.md §2.7",
+                "inputs": {
+                    "server_domain_seed_hex": server_domain_seed.hex(),
+                    "server_domain_pub_hex": server_domain_pub.hex(),
+                    "server_domain_key_id": server_domain_fp,
+                    "message_pre_sign_json": accepted_msg,
+                },
+                "intermediates": accepted_inter,
+                "expected": {
+                    "signed_message_json": accepted_signed,
+                    "signature_verifies": True,
+                },
+            },
+        ],
+    }
+
+
 # ---- Account recovery bundle (Layer 5) -------------------------------------
 
 
@@ -5758,6 +5970,8 @@ def main() -> int:
         (OUTDIR / "first-contact-token.json", build_first_contact_token_json()),
         (OUTDIR / "clock-tolerance.json", build_clock_tolerance_json()),
         (OUTDIR / "account-recovery.json", build_account_recovery_json()),
+        (OUTDIR / "configuration-update.json", build_configuration_update_json()),
+        (OUTDIR / "handshake-messages-pq.json", build_handshake_messages_pq_json()),
     ]
 
     ok = True

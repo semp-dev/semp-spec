@@ -1251,6 +1251,30 @@ Shamir device-split backup (§2 alternative recovery mechanism) is TODO.
 
 **Bytes:** see [`vectors/v1.0.0/account-recovery.json`](vectors/v1.0.0/account-recovery.json).
 
+### 17.14 Configuration Update + PQ Handshake
+
+References: `DISCOVERY.md` §3.5.4; `HANDSHAKE.md` §2.
+
+`configuration-update.json` covers the `SEMP_CONFIGURATION_UPDATE`
+notification a server may send to active federation peers when its
+configuration revision changes. Signed by the issuing domain's current
+signing key with the `SEMP-CONFIGURATION-UPDATE:` prefix. The vector
+pins the domain seed and the revision-18 message; verification of the
+signature MUST precede any out-of-band re-fetch.
+
+`handshake-messages-pq.json` covers the post-quantum suite variants of
+the outer-signed handshake messages. The construction matches §17.8
+exactly; only the message-body strings change (algorithm becomes
+`pq-kyber768-x25519`; the ephemeral_key payload is the 1216-byte
+hybrid `kyber_ek (1184) || x25519_pub (32)` base64-encoded). Two
+vectors — response and accepted — exercise the signed messages whose
+canonical bytes meaningfully change with PQ payloads. Init and confirm
+differ only in body strings and are covered by their §17.8 counterparts
+plus the algorithm-string change.
+
+**Bytes:** see [`vectors/v1.0.0/configuration-update.json`](vectors/v1.0.0/configuration-update.json),
+[`vectors/v1.0.0/handshake-messages-pq.json`](vectors/v1.0.0/handshake-messages-pq.json).
+
 ---
 
 ## 18. Relationship to Other Specifications
