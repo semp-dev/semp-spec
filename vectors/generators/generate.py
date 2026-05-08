@@ -230,8 +230,18 @@ def build_envelope_canonical_json() -> dict:
             "to_domain": "beta.example",
             "expires": "2025-07-01T12:00:00Z",
             "extensions": {
-                "vendor.example.com/priority": "high",
-                "another.example.com/class": "transactional",
+                # EXTENSIONS.md §2.1 requires every extension entry to
+                # carry the {required, data} envelope. Bare-value
+                # extensions (e.g. just `"high"`) are non-conforming and
+                # MUST be rejected by validators.
+                "vendor.example.com/priority": {
+                    "required": False,
+                    "data": "high",
+                },
+                "another.example.com/class": {
+                    "required": False,
+                    "data": "transactional",
+                },
             },
         },
         "seal": {
