@@ -1123,6 +1123,30 @@ are the advertised algorithm strings in the message bodies and the
 sizes of the `client_ephemeral_key.key` / `server_ephemeral_key.key`
 fields. PQ handshake message vectors land in a follow-up.
 
+### 17.9 Signed Documents (Closure, User Policy, Migration)
+
+Three signed-document categories share the same Ed25519 + canonical-bytes
++ domain-separation construction but use different prefixes per
+`ENVELOPE.md` §4.3:
+
+- `account-closure.json` — `SEMP-ACCOUNT-CLOSURE:` over a closure
+  request signed by a full-access device key. Reference:
+  `CLOSURE.md` §2.
+- `user-policy.json` — `SEMP-USER-POLICY:` over a `SEMP_USER_POLICY`
+  update carrying multiple operations across distinct kinds, signed
+  by the originating device. Reference: `DELIVERY.md` §7.
+- `migration.json` — `SEMP-MIGRATION-RECORD:` over a four-signature
+  migration record. Cooperative migrations carry signatures in the
+  §3.3 order: old_identity, new_identity, new_domain, old_domain.
+  Each signature is computed over the canonical record with all
+  prior signatures at their final values and the signing
+  signature's value blanked. The vector asserts every signature in
+  the chain at generation time. Reference: `MIGRATION.md` §3.
+
+**Bytes:** see [`vectors/v1.0.0/account-closure.json`](vectors/v1.0.0/account-closure.json),
+[`vectors/v1.0.0/user-policy.json`](vectors/v1.0.0/user-policy.json),
+[`vectors/v1.0.0/migration.json`](vectors/v1.0.0/migration.json).
+
 ---
 
 ## 18. Relationship to Other Specifications

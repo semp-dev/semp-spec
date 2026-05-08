@@ -1,0 +1,95 @@
+{
+  "version": "1.0.0",
+  "category": "user-policy",
+  "description": "DELIVERY.md §7.1: SEMP_USER_POLICY messages are signed by the originating device with the SEMP-USER-POLICY: prefix. The home server verifies the signature, checks policy_version monotonicity, and propagates accepted updates to other registered devices.",
+  "spec_reference": "VECTORS.md §17.9; DELIVERY.md §7",
+  "construction": {
+    "domain_separation_prefix_utf8": "SEMP-USER-POLICY:",
+    "signing_key": "originating device identity key",
+    "canonical_form": "ENVELOPE.md §4.3 with signature.value blanked"
+  },
+  "vectors": [
+    {
+      "id": "user-policy-update-valid",
+      "description": "Pinned device key signs a SEMP_USER_POLICY update carrying two operations across distinct kinds (an add to semp.dev/block and a modify to semp.dev/first_contact). All operations apply atomically per §7.2 with respect to policy_version advancement.",
+      "spec_reference": "VECTORS.md §17.9; DELIVERY.md §7.2",
+      "inputs": {
+        "device_seed_hex": "3232323232323232323232323232323232323232323232323232323232323232",
+        "device_pub_hex": "5e212c0980e4b39fc09721134aa02109374edfd260c0d3d03cb501c8d65457a9",
+        "device_key_id": "eeec86207f875ff654d070a8179f86becb1fda1395b3312be417542c99c6ba53",
+        "update_pre_sign_json": {
+          "type": "SEMP_USER_POLICY",
+          "step": "update",
+          "version": "1.0.0",
+          "user_id": "alice@example.com",
+          "device_id": "01JDEVICE000000000000000000",
+          "policy_version": 42,
+          "timestamp": "2026-05-08T10:00:00Z",
+          "operations": [
+            {
+              "op": "add",
+              "kind": "semp.dev/block",
+              "entry": {
+                "id": "01JBLOCK0000000000000000000",
+                "address": "spam@bad.example"
+              }
+            },
+            {
+              "op": "modify",
+              "kind": "semp.dev/first_contact",
+              "entry": {
+                "mode": "challenge"
+              }
+            }
+          ],
+          "signature": {
+            "algorithm": "ed25519",
+            "key_id": "eeec86207f875ff654d070a8179f86becb1fda1395b3312be417542c99c6ba53",
+            "value": ""
+          }
+        }
+      },
+      "intermediates": {
+        "canonical_with_blanked_signature_utf8": "{\"device_id\":\"01JDEVICE000000000000000000\",\"operations\":[{\"entry\":{\"address\":\"spam@bad.example\",\"id\":\"01JBLOCK0000000000000000000\"},\"kind\":\"semp.dev/block\",\"op\":\"add\"},{\"entry\":{\"mode\":\"challenge\"},\"kind\":\"semp.dev/first_contact\",\"op\":\"modify\"}],\"policy_version\":42,\"signature\":{\"algorithm\":\"ed25519\",\"key_id\":\"eeec86207f875ff654d070a8179f86becb1fda1395b3312be417542c99c6ba53\",\"value\":\"\"},\"step\":\"update\",\"timestamp\":\"2026-05-08T10:00:00Z\",\"type\":\"SEMP_USER_POLICY\",\"user_id\":\"alice@example.com\",\"version\":\"1.0.0\"}",
+        "signing_input_prefix_utf8": "SEMP-USER-POLICY:",
+        "signing_input_hex": "53454d502d555345522d504f4c4943593a7b226465766963655f6964223a2230314a444556494345303030303030303030303030303030303030222c226f7065726174696f6e73223a5b7b22656e747279223a7b2261646472657373223a227370616d406261642e6578616d706c65222c226964223a2230314a424c4f434b30303030303030303030303030303030303030227d2c226b696e64223a2273656d702e6465762f626c6f636b222c226f70223a22616464227d2c7b22656e747279223a7b226d6f6465223a226368616c6c656e6765227d2c226b696e64223a2273656d702e6465762f66697273745f636f6e74616374222c226f70223a226d6f64696679227d5d2c22706f6c6963795f76657273696f6e223a34322c227369676e6174757265223a7b22616c676f726974686d223a2265643235353139222c226b65795f6964223a2265656563383632303766383735666636353464303730613831373966383662656362316664613133393562333331326265343137353432633939633662613533222c2276616c7565223a22227d2c2273746570223a22757064617465222c2274696d657374616d70223a22323032362d30352d30385431303a30303a30305a222c2274797065223a2253454d505f555345525f504f4c494359222c22757365725f6964223a22616c696365406578616d706c652e636f6d222c2276657273696f6e223a22312e302e30227d",
+        "signature_hex": "184d371860bb65dde6a292304d9b95830a1e505df39ec9eceabcc4e593f46dd92187bbd70d0df6860280d2f117a51323064b9a11008189def1c11887eef3ad02"
+      },
+      "expected": {
+        "signed_update_json": {
+          "type": "SEMP_USER_POLICY",
+          "step": "update",
+          "version": "1.0.0",
+          "user_id": "alice@example.com",
+          "device_id": "01JDEVICE000000000000000000",
+          "policy_version": 42,
+          "timestamp": "2026-05-08T10:00:00Z",
+          "operations": [
+            {
+              "op": "add",
+              "kind": "semp.dev/block",
+              "entry": {
+                "id": "01JBLOCK0000000000000000000",
+                "address": "spam@bad.example"
+              }
+            },
+            {
+              "op": "modify",
+              "kind": "semp.dev/first_contact",
+              "entry": {
+                "mode": "challenge"
+              }
+            }
+          ],
+          "signature": {
+            "algorithm": "ed25519",
+            "key_id": "eeec86207f875ff654d070a8179f86becb1fda1395b3312be417542c99c6ba53",
+            "value": "GE03GGC7Zd3mopIwTZuVgwoeUF3znsns6rzE5ZP0bdkhh7vXDQ32hgKA0vEXpRMjBkuaEQCBid7xwRiH7vOtAg=="
+          }
+        },
+        "signature_b64": "GE03GGC7Zd3mopIwTZuVgwoeUF3znsns6rzE5ZP0bdkhh7vXDQ32hgKA0vEXpRMjBkuaEQCBid7xwRiH7vOtAg==",
+        "signature_verifies": true
+      }
+    }
+  ]
+}

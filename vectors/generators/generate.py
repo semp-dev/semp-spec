@@ -3755,6 +3755,364 @@ def build_forwarding_json() -> dict:
     }
 
 
+# ---- Account closure / user policy / migration (Layer 4 Ed25519 patterns) --
+
+
+def _sign_doc(doc: dict, priv: bytes, prefix: bytes, signature_path: list[str]) -> tuple[dict, dict]:
+    """Generic Ed25519 signed-document helper. signature_path is the list of
+    keys to descend to reach the signature object (e.g. ['signature'] for a
+    top-level signature, or ['old_identity_signature'] for nested ones).
+    Blanks .value at that path, canonicalises, prefixes with the given
+    domain-separation prefix, signs, base64-encodes, replaces."""
+    import base64
+
+    d = copy.deepcopy(doc)
+    cur = d
+    for k in signature_path[:-1]:
+        cur = cur[k]
+    cur[signature_path[-1]]["value"] = ""
+    canonical = canonical_json(d)
+    prefixed = prefix + canonical
+    sig = ed25519_sign(priv, prefixed)
+    cur[signature_path[-1]]["value"] = base64.b64encode(sig).decode("ascii")
+    return d, {
+        "canonical_with_blanked_signature_utf8": canonical.decode("utf-8"),
+        "signing_input_prefix_utf8": prefix.decode("utf-8"),
+        "signing_input_hex": prefixed.hex(),
+        "signature_hex": sig.hex(),
+    }
+
+
+def _verify_doc(doc: dict, pub: bytes, prefix: bytes, signature_path: list[str]) -> bool:
+    import base64
+
+    cur = doc
+    for k in signature_path[:-1]:
+        cur = cur[k]
+    sig_b64 = cur[signature_path[-1]]["value"]
+    sig = base64.b64decode(sig_b64)
+    d = copy.deepcopy(doc)
+    cur2 = d
+    for k in signature_path[:-1]:
+        cur2 = cur2[k]
+    cur2[signature_path[-1]]["value"] = ""
+    canonical = canonical_json(d)
+    return ed25519_verify(pub, sig, prefix + canonical)
+
+
+ACCOUNT_CLOSURE_PREFIX = b"SEMP-ACCOUNT-CLOSURE:"
+USER_POLICY_PREFIX = b"SEMP-USER-POLICY:"
+MIGRATION_RECORD_PREFIX = b"SEMP-MIGRATION-RECORD:"
+
+
+def build_account_closure_json() -> dict:
+    """CLOSURE.md §2: account closure request signed by a full-access device."""
+    primary_seed = bytes([0x31] * 32)
+    primary_pub = ed25519_pubkey_from_priv(primary_seed)
+    primary_fp = fingerprint_hex(primary_pub)
+
+    request_pre_sign = {
+        "type": "SEMP_ACCOUNT_CLOSURE",
+        "step": "request",
+        "version": "1.0.0",
+        "user_id": "alice@example.com",
+        "requested_at": "2026-04-19T12:00:00Z",
+        "grace_period_seconds": 2592000,
+        "issued_by": "01JPRIMARY00000000000000000",
+        "signature": {
+            "algorithm": "ed25519",
+            "key_id": primary_fp,
+            "value": "",
+        },
+    }
+    signed, inter = _sign_doc(
+        request_pre_sign, primary_seed, ACCOUNT_CLOSURE_PREFIX, ["signature"]
+    )
+    assert _verify_doc(signed, primary_pub, ACCOUNT_CLOSURE_PREFIX, ["signature"])
+
+    return {
+        "version": "1.0.0",
+        "category": "account-closure",
+        "description": (
+            "CLOSURE.md §2: account closure requests are signed by a "
+            "full-access device's identity key with the "
+            "SEMP-ACCOUNT-CLOSURE: domain-separation prefix over the "
+            "canonical document with signature.value blanked."
+        ),
+        "spec_reference": "VECTORS.md §17.9; CLOSURE.md §2",
+        "construction": {
+            "domain_separation_prefix_utf8": "SEMP-ACCOUNT-CLOSURE:",
+            "signing_key": "full-access device identity key",
+            "canonical_form": "ENVELOPE.md §4.3 with signature.value blanked",
+        },
+        "vectors": [
+            {
+                "id": "account-closure-request-valid",
+                "description": (
+                    "Pinned full-access device key signs a closure request "
+                    "for alice@example.com with a 30-day grace period. "
+                    "Signature MUST verify under the device's public key."
+                ),
+                "spec_reference": "VECTORS.md §17.9; CLOSURE.md §2.3",
+                "inputs": {
+                    "primary_device_seed_hex": primary_seed.hex(),
+                    "primary_device_pub_hex": primary_pub.hex(),
+                    "primary_device_key_id": primary_fp,
+                    "request_pre_sign_json": request_pre_sign,
+                },
+                "intermediates": inter,
+                "expected": {
+                    "signed_request_json": signed,
+                    "signature_b64": signed["signature"]["value"],
+                    "signature_verifies": True,
+                },
+            },
+        ],
+    }
+
+
+def build_user_policy_json() -> dict:
+    """DELIVERY.md §7: SEMP_USER_POLICY signed by originating device."""
+    device_seed = bytes([0x32] * 32)
+    device_pub = ed25519_pubkey_from_priv(device_seed)
+    device_fp = fingerprint_hex(device_pub)
+
+    update_pre_sign = {
+        "type": "SEMP_USER_POLICY",
+        "step": "update",
+        "version": "1.0.0",
+        "user_id": "alice@example.com",
+        "device_id": "01JDEVICE000000000000000000",
+        "policy_version": 42,
+        "timestamp": "2026-05-08T10:00:00Z",
+        "operations": [
+            {
+                "op": "add",
+                "kind": "semp.dev/block",
+                "entry": {
+                    "id": "01JBLOCK0000000000000000000",
+                    "address": "spam@bad.example",
+                },
+            },
+            {
+                "op": "modify",
+                "kind": "semp.dev/first_contact",
+                "entry": {"mode": "challenge"},
+            },
+        ],
+        "signature": {
+            "algorithm": "ed25519",
+            "key_id": device_fp,
+            "value": "",
+        },
+    }
+    signed, inter = _sign_doc(
+        update_pre_sign, device_seed, USER_POLICY_PREFIX, ["signature"]
+    )
+    assert _verify_doc(signed, device_pub, USER_POLICY_PREFIX, ["signature"])
+
+    return {
+        "version": "1.0.0",
+        "category": "user-policy",
+        "description": (
+            "DELIVERY.md §7.1: SEMP_USER_POLICY messages are signed by the "
+            "originating device with the SEMP-USER-POLICY: prefix. The "
+            "home server verifies the signature, checks policy_version "
+            "monotonicity, and propagates accepted updates to other "
+            "registered devices."
+        ),
+        "spec_reference": "VECTORS.md §17.9; DELIVERY.md §7",
+        "construction": {
+            "domain_separation_prefix_utf8": "SEMP-USER-POLICY:",
+            "signing_key": "originating device identity key",
+            "canonical_form": "ENVELOPE.md §4.3 with signature.value blanked",
+        },
+        "vectors": [
+            {
+                "id": "user-policy-update-valid",
+                "description": (
+                    "Pinned device key signs a SEMP_USER_POLICY update "
+                    "carrying two operations across distinct kinds (an "
+                    "add to semp.dev/block and a modify to "
+                    "semp.dev/first_contact). All operations apply "
+                    "atomically per §7.2 with respect to policy_version "
+                    "advancement."
+                ),
+                "spec_reference": "VECTORS.md §17.9; DELIVERY.md §7.2",
+                "inputs": {
+                    "device_seed_hex": device_seed.hex(),
+                    "device_pub_hex": device_pub.hex(),
+                    "device_key_id": device_fp,
+                    "update_pre_sign_json": update_pre_sign,
+                },
+                "intermediates": inter,
+                "expected": {
+                    "signed_update_json": signed,
+                    "signature_b64": signed["signature"]["value"],
+                    "signature_verifies": True,
+                },
+            },
+        ],
+    }
+
+
+def build_migration_json() -> dict:
+    """MIGRATION.md §3: four-signature chain (cooperative) over the
+    canonical migration record. Signatures land in the §3.3 order:
+    old_identity, new_identity, new_domain, old_domain."""
+    import base64
+
+    old_id_seed = bytes([0x33] * 32)
+    old_id_pub = ed25519_pubkey_from_priv(old_id_seed)
+    old_id_fp = fingerprint_hex(old_id_pub)
+
+    new_id_seed = bytes([0x34] * 32)
+    new_id_pub = ed25519_pubkey_from_priv(new_id_seed)
+    new_id_fp = fingerprint_hex(new_id_pub)
+
+    old_dom_seed = bytes([0x35] * 32)
+    old_dom_pub = ed25519_pubkey_from_priv(old_dom_seed)
+    old_dom_fp = fingerprint_hex(old_dom_pub)
+
+    new_dom_seed = bytes([0x36] * 32)
+    new_dom_pub = ed25519_pubkey_from_priv(new_dom_seed)
+    new_dom_fp = fingerprint_hex(new_dom_pub)
+
+    record = {
+        "type": "SEMP_MIGRATION",
+        "version": "1.0.0",
+        "record_id": "01JMIGRATION0000000000000000",
+        "old_address": "alice@old.example",
+        "new_address": "alice@new.example",
+        "old_identity_key_id": old_id_fp,
+        "new_identity_key_id": new_id_fp,
+        "new_identity_public_key": base64.b64encode(new_id_pub).decode("ascii"),
+        "migrated_at": "2026-04-18T12:00:00Z",
+        "forwarding_window_until": "2026-10-15T12:00:00Z",
+        "mode": "cooperative",
+        "old_identity_signature": {"algorithm": "ed25519", "key_id": old_id_fp, "value": ""},
+        "new_identity_signature": {"algorithm": "ed25519", "key_id": new_id_fp, "value": ""},
+        "old_domain_signature": {"algorithm": "ed25519", "key_id": old_dom_fp, "value": ""},
+        "new_domain_signature": {"algorithm": "ed25519", "key_id": new_dom_fp, "value": ""},
+        "extensions": {},
+    }
+
+    # §3.3 sign order: old_identity -> new_identity -> new_domain -> old_domain.
+    intermediates_chain = []
+    after_old_id, inter1 = _sign_doc(
+        record, old_id_seed, MIGRATION_RECORD_PREFIX, ["old_identity_signature"]
+    )
+    intermediates_chain.append({"step": "1: old_identity_signature", **inter1})
+    after_new_id, inter2 = _sign_doc(
+        after_old_id, new_id_seed, MIGRATION_RECORD_PREFIX, ["new_identity_signature"]
+    )
+    intermediates_chain.append({"step": "2: new_identity_signature", **inter2})
+    after_new_dom, inter3 = _sign_doc(
+        after_new_id, new_dom_seed, MIGRATION_RECORD_PREFIX, ["new_domain_signature"]
+    )
+    intermediates_chain.append({"step": "3: new_domain_signature", **inter3})
+    final, inter4 = _sign_doc(
+        after_new_dom, old_dom_seed, MIGRATION_RECORD_PREFIX, ["old_domain_signature"]
+    )
+    intermediates_chain.append({"step": "4: old_domain_signature", **inter4})
+
+    # Verify all four signatures: each verifies against the canonical bytes
+    # WITH THE SIGNATURES BELOW IT BLANKED. We test this by re-blanking
+    # each signature in turn and verifying it independently.
+    def verify_chain(rec):
+        # Build a "signing-time" doc for each signature in chain order:
+        # at step N, signatures 1..N-1 are at their final values and
+        # signatures N..4 are blank.
+        steps = [
+            ("old_identity_signature", old_id_pub),
+            ("new_identity_signature", new_id_pub),
+            ("new_domain_signature", new_dom_pub),
+            ("old_domain_signature", old_dom_pub),
+        ]
+        results = []
+        for i, (field, pub) in enumerate(steps):
+            doc = copy.deepcopy(rec)
+            for j, (later_field, _) in enumerate(steps):
+                if j > i:
+                    doc[later_field]["value"] = ""
+            ok = _verify_doc(doc, pub, MIGRATION_RECORD_PREFIX, [field])
+            results.append((field, ok))
+        return results
+
+    chain_results = verify_chain(final)
+    for field, ok in chain_results:
+        assert ok, f"signature in chain failed: {field}"
+
+    return {
+        "version": "1.0.0",
+        "category": "migration",
+        "description": (
+            "MIGRATION.md §3: provider-migration record. Cooperative "
+            "migrations carry four Ed25519 signatures applied in §3.3 "
+            "order: old_identity, new_identity, new_domain, old_domain. "
+            "Each signature is computed over the canonical record with "
+            "ALL prior signatures at their final values and the signing "
+            "signature's value blanked, prefixed with "
+            "SEMP-MIGRATION-RECORD:."
+        ),
+        "spec_reference": "VECTORS.md §17.9; MIGRATION.md §3",
+        "construction": {
+            "domain_separation_prefix_utf8": "SEMP-MIGRATION-RECORD:",
+            "signature_order": [
+                "1. old_identity_signature (proves old user authorised migration)",
+                "2. new_identity_signature (proves new user accepted migration)",
+                "3. new_domain_signature  (new provider commits to host alice@new.example)",
+                "4. old_domain_signature  (cooperative only: old provider commits to forwarding)",
+            ],
+            "canonical_form": (
+                "Sorted keys, no whitespace, UTF-8. At signature N, "
+                "signatures 1..N-1 are at final values; signature N is "
+                "blanked; signatures N+1..4 are blanked."
+            ),
+        },
+        "vectors": [
+            {
+                "id": "migration-cooperative-four-signature-chain",
+                "description": (
+                    "Cooperative migration record signed by all four "
+                    "parties in §3.3 order. Verification of any single "
+                    "signature reproduces the canonical bytes that were "
+                    "signed by re-blanking all signatures that come "
+                    "AFTER it in the chain and keeping the ones BEFORE "
+                    "it at their final values. The verify_chain assertion "
+                    "in the generator runs all four checks before any "
+                    "JSON is written."
+                ),
+                "spec_reference": "VECTORS.md §17.9; MIGRATION.md §3.3",
+                "inputs": {
+                    "old_identity_seed_hex": old_id_seed.hex(),
+                    "new_identity_seed_hex": new_id_seed.hex(),
+                    "old_domain_seed_hex": old_dom_seed.hex(),
+                    "new_domain_seed_hex": new_dom_seed.hex(),
+                    "old_identity_pub_hex": old_id_pub.hex(),
+                    "new_identity_pub_hex": new_id_pub.hex(),
+                    "old_domain_pub_hex": old_dom_pub.hex(),
+                    "new_domain_pub_hex": new_dom_pub.hex(),
+                    "record_pre_sign_json": record,
+                },
+                "intermediates": {
+                    "signature_chain": intermediates_chain,
+                },
+                "expected": {
+                    "signed_record_json": final,
+                    "all_four_signatures_verify": all(
+                        ok for _, ok in chain_results
+                    ),
+                    "verification_results": [
+                        {"field": field, "verifies": ok}
+                        for field, ok in chain_results
+                    ],
+                },
+            },
+        ],
+    }
+
+
 # ---- Handshake message vectors (Layer 4) ------------------------------------
 
 
@@ -4470,6 +4828,9 @@ def main() -> int:
         (OUTDIR / "large-attachment.json", build_large_attachment_json()),
         (OUTDIR / "negative-envelope-rejection.json", build_negative_envelope_rejection_json()),
         (OUTDIR / "handshake-messages.json", build_handshake_messages_json()),
+        (OUTDIR / "account-closure.json", build_account_closure_json()),
+        (OUTDIR / "user-policy.json", build_user_policy_json()),
+        (OUTDIR / "migration.json", build_migration_json()),
     ]
 
     ok = True

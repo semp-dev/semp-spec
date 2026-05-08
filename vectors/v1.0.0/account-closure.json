@@ -1,0 +1,61 @@
+{
+  "version": "1.0.0",
+  "category": "account-closure",
+  "description": "CLOSURE.md §2: account closure requests are signed by a full-access device's identity key with the SEMP-ACCOUNT-CLOSURE: domain-separation prefix over the canonical document with signature.value blanked.",
+  "spec_reference": "VECTORS.md §17.9; CLOSURE.md §2",
+  "construction": {
+    "domain_separation_prefix_utf8": "SEMP-ACCOUNT-CLOSURE:",
+    "signing_key": "full-access device identity key",
+    "canonical_form": "ENVELOPE.md §4.3 with signature.value blanked"
+  },
+  "vectors": [
+    {
+      "id": "account-closure-request-valid",
+      "description": "Pinned full-access device key signs a closure request for alice@example.com with a 30-day grace period. Signature MUST verify under the device's public key.",
+      "spec_reference": "VECTORS.md §17.9; CLOSURE.md §2.3",
+      "inputs": {
+        "primary_device_seed_hex": "3131313131313131313131313131313131313131313131313131313131313131",
+        "primary_device_pub_hex": "48075a597e721a156e2e0799de5cc0c5324dc6e7eaf1cdd46250868ec53215dd",
+        "primary_device_key_id": "24aa2a5589edcb57fea0be3552f065de6d3a837feaccf60f8bde018fa4926b6a",
+        "request_pre_sign_json": {
+          "type": "SEMP_ACCOUNT_CLOSURE",
+          "step": "request",
+          "version": "1.0.0",
+          "user_id": "alice@example.com",
+          "requested_at": "2026-04-19T12:00:00Z",
+          "grace_period_seconds": 2592000,
+          "issued_by": "01JPRIMARY00000000000000000",
+          "signature": {
+            "algorithm": "ed25519",
+            "key_id": "24aa2a5589edcb57fea0be3552f065de6d3a837feaccf60f8bde018fa4926b6a",
+            "value": ""
+          }
+        }
+      },
+      "intermediates": {
+        "canonical_with_blanked_signature_utf8": "{\"grace_period_seconds\":2592000,\"issued_by\":\"01JPRIMARY00000000000000000\",\"requested_at\":\"2026-04-19T12:00:00Z\",\"signature\":{\"algorithm\":\"ed25519\",\"key_id\":\"24aa2a5589edcb57fea0be3552f065de6d3a837feaccf60f8bde018fa4926b6a\",\"value\":\"\"},\"step\":\"request\",\"type\":\"SEMP_ACCOUNT_CLOSURE\",\"user_id\":\"alice@example.com\",\"version\":\"1.0.0\"}",
+        "signing_input_prefix_utf8": "SEMP-ACCOUNT-CLOSURE:",
+        "signing_input_hex": "53454d502d4143434f554e542d434c4f535552453a7b2267726163655f706572696f645f7365636f6e6473223a323539323030302c226973737565645f6279223a2230314a5052494d4152593030303030303030303030303030303030222c227265717565737465645f6174223a22323032362d30342d31395431323a30303a30305a222c227369676e6174757265223a7b22616c676f726974686d223a2265643235353139222c226b65795f6964223a2232346161326135353839656463623537666561306265333535326630363564653664336138333766656163636636306638626465303138666134393236623661222c2276616c7565223a22227d2c2273746570223a2272657175657374222c2274797065223a2253454d505f4143434f554e545f434c4f53555245222c22757365725f6964223a22616c696365406578616d706c652e636f6d222c2276657273696f6e223a22312e302e30227d",
+        "signature_hex": "3000cd4a918359c8b257bed4c84034e169b6b3da6a96ea067bba291229f0a20a9a599322e1122542ca8722fb8e043cde29bd26243246e052f9949a3cbd4a6e0a"
+      },
+      "expected": {
+        "signed_request_json": {
+          "type": "SEMP_ACCOUNT_CLOSURE",
+          "step": "request",
+          "version": "1.0.0",
+          "user_id": "alice@example.com",
+          "requested_at": "2026-04-19T12:00:00Z",
+          "grace_period_seconds": 2592000,
+          "issued_by": "01JPRIMARY00000000000000000",
+          "signature": {
+            "algorithm": "ed25519",
+            "key_id": "24aa2a5589edcb57fea0be3552f065de6d3a837feaccf60f8bde018fa4926b6a",
+            "value": "MADNSpGDWciyV77UyEA04Wm2s9pqluoGe7opEinwogqaWZMi4RIlQsqHIvuOBDzeKb0mJDJG4FL5lJo8vUpuCg=="
+          }
+        },
+        "signature_b64": "MADNSpGDWciyV77UyEA04Wm2s9pqluoGe7opEinwogqaWZMi4RIlQsqHIvuOBDzeKb0mJDJG4FL5lJo8vUpuCg==",
+        "signature_verifies": true
+      }
+    }
+  ]
+}

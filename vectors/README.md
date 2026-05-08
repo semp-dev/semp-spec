@@ -126,8 +126,9 @@ A runner is a small, language-idiomatic test harness — typically a few hundred
 | 5     | Configuration versioning + STH  | `configuration-update.json`| TODO          |
 | 5     | Key transparency proofs         | `key-transparency.json`    | TODO          |
 | 5     | Account recovery bundle         | `account-recovery.json`    | TODO          |
-| 5     | Provider migration              | `provider-migration.json`  | TODO          |
-| 5     | Account closure                 | `account-closure.json`     | TODO          |
+| 5     | Provider migration              | `migration.json`           | seeded        |
+| 5     | Account closure                 | `account-closure.json`     | seeded        |
+| 5     | User policy update              | `user-policy.json`         | seeded        |
 | 6     | Envelope rejection (must-reject) | `negative-envelope-rejection.json` | seeded |
 | 6     | Other must-reject cases          | `negative-*.json`          | partial (tampered cases live in their own categories) |
 
