@@ -1,0 +1,58 @@
+{
+  "version": "1.0.0",
+  "category": "first-contact-token",
+  "description": "HANDSHAKE.md §2.2a.4: first-contact tokens bind a solved PoW challenge to a specific postmark_id, preventing token replay across envelopes. The recipient server checks both that H(prefix || nonce) satisfies the difficulty and that token.postmark_id equals the carrying envelope's postmark.id.",
+  "spec_reference": "VECTORS.md §17.12; HANDSHAKE.md §2.2a.3, §2.2a.4",
+  "construction": {
+    "pow_hash": "SHA-256(prefix || nonce)",
+    "difficulty_check": "leading zero bits >= token.difficulty",
+    "binding_check": "token.postmark_id == carrying_envelope.postmark.id"
+  },
+  "vectors": [
+    {
+      "id": "first-contact-token-valid",
+      "description": "Pinned challenge_id and prefix; nonce was searched to satisfy the difficulty. The token is presented inside an envelope whose postmark.id matches the bound postmark_id; both verification predicates succeed.",
+      "spec_reference": "VECTORS.md §17.12; HANDSHAKE.md §2.2a.4",
+      "inputs": {
+        "token_json": {
+          "challenge_id": "01J7CHALLENGE0000000000000000",
+          "algorithm": "sha256",
+          "prefix": "cXFxcXFxcXFxcXFxcXFxcQ==",
+          "difficulty": 16,
+          "postmark_id": "01J7FIRSTCONTACTPOSTMARKXXXX",
+          "nonce": "AAAAAAAAOyc=",
+          "issued_by": "recipient.example.com"
+        },
+        "carrying_envelope_postmark_id": "01J7FIRSTCONTACTPOSTMARKXXXX"
+      },
+      "expected": {
+        "pow_satisfies_difficulty": true,
+        "postmark_binding_matches": true,
+        "token_accepted": true
+      }
+    },
+    {
+      "id": "first-contact-token-replay-rejected",
+      "description": "Same valid token presented inside a DIFFERENT envelope (different postmark.id). The PoW difficulty check still passes, but the postmark binding check fails, so the recipient server MUST reject with reason_code policy_forbidden per §2.2a.4. This demonstrates §2.2a.4's per-envelope single-use enforcement.",
+      "spec_reference": "VECTORS.md §17.12; HANDSHAKE.md §2.2a.4",
+      "inputs": {
+        "token_json": {
+          "challenge_id": "01J7CHALLENGE0000000000000000",
+          "algorithm": "sha256",
+          "prefix": "cXFxcXFxcXFxcXFxcXFxcQ==",
+          "difficulty": 16,
+          "postmark_id": "01J7FIRSTCONTACTPOSTMARKXXXX",
+          "nonce": "AAAAAAAAOyc=",
+          "issued_by": "recipient.example.com"
+        },
+        "carrying_envelope_postmark_id": "01J7OTHERPOSTMARKXXXXXXXXXXX"
+      },
+      "expected": {
+        "pow_satisfies_difficulty": true,
+        "postmark_binding_matches": false,
+        "token_accepted": false,
+        "rejection_reason_code": "policy_forbidden"
+      }
+    }
+  ]
+}

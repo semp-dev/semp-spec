@@ -1,0 +1,82 @@
+{
+  "version": "1.0.0",
+  "category": "clock-tolerance",
+  "description": "CONFORMANCE.md §9.3.1 clock-skew tolerance. Future-dated fields and expires_at fields have separate tiered rules; this vector enumerates the boundaries (0, 5, 15 minutes) so implementations can verify they fall in the right tier at the right boundary value.",
+  "spec_reference": "VECTORS.md §17.12; CONFORMANCE.md §9.3.1",
+  "vectors": [
+    {
+      "id": "clock-tolerance-future-dated",
+      "description": "Future-dated timestamp samples. T - now ranges from 0 to 30 minutes. Per §9.3.1: MUST accept at 0-5 min; SHOULD reject at >5 min; MUST reject at >15 min.",
+      "spec_reference": "VECTORS.md §17.12; CONFORMANCE.md §9.3.1",
+      "samples": [
+        {
+          "T_minus_now_seconds": 0,
+          "expected": "accept",
+          "reason": "T == now"
+        },
+        {
+          "T_minus_now_seconds": 60,
+          "expected": "accept",
+          "reason": "1 min ahead, well under 5"
+        },
+        {
+          "T_minus_now_seconds": 300,
+          "expected": "accept_or_reject_at_implementor_choice",
+          "reason": "boundary: SHOULD reject at >5 min, MUST accept at <=5 min"
+        },
+        {
+          "T_minus_now_seconds": 600,
+          "expected": "accept_or_reject_at_implementor_choice",
+          "reason": "between SHOULD-reject (5 min) and MUST-reject (15 min)"
+        },
+        {
+          "T_minus_now_seconds": 900,
+          "expected": "reject",
+          "reason": "boundary: MUST reject when T - now > 15 min; equality is the limit"
+        },
+        {
+          "T_minus_now_seconds": 1800,
+          "expected": "reject",
+          "reason": "30 min ahead, well past 15"
+        }
+      ]
+    },
+    {
+      "id": "clock-tolerance-expires-at",
+      "description": "expires_at samples. now - T ranges from -60 sec to 15+ min. Per §9.3.1: implementations SHOULD reject at now > T; MAY apply up to 5 min grace; MUST reject at now > T + 15 min.",
+      "spec_reference": "VECTORS.md §17.12; CONFORMANCE.md §9.3.1",
+      "samples": [
+        {
+          "now_minus_expiresAt_seconds": -60,
+          "expected": "accept",
+          "reason": "now is 1 min before expires_at"
+        },
+        {
+          "now_minus_expiresAt_seconds": 0,
+          "expected": "accept",
+          "reason": "now == expires_at; SHOULD reject but MAY apply 0-5 min grace"
+        },
+        {
+          "now_minus_expiresAt_seconds": 60,
+          "expected": "accept_or_reject_at_implementor_choice",
+          "reason": "1 min past expires; MAY apply up to 5 min grace"
+        },
+        {
+          "now_minus_expiresAt_seconds": 300,
+          "expected": "accept_or_reject_at_implementor_choice",
+          "reason": "5 min past; boundary of grace window"
+        },
+        {
+          "now_minus_expiresAt_seconds": 600,
+          "expected": "accept_or_reject_at_implementor_choice",
+          "reason": "10 min past; outside grace but inside MUST-reject window"
+        },
+        {
+          "now_minus_expiresAt_seconds": 901,
+          "expected": "reject",
+          "reason": "15 min + 1 sec past: MUST reject"
+        }
+      ]
+    }
+  ]
+}

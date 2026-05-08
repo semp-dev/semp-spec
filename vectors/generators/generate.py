@@ -3755,6 +3755,349 @@ def build_forwarding_json() -> dict:
     }
 
 
+# ---- First-contact token + clock tolerance ---------------------------------
+
+
+def build_first_contact_token_json() -> dict:
+    """HANDSHAKE.md §2.2a.4: first-contact token bound to a postmark.id."""
+    import base64
+
+    challenge_id = "01J7CHALLENGE0000000000000000"
+    prefix = bytes([0x71] * 16)
+    difficulty = 16
+    issued_by = "recipient.example.com"
+    postmark_id = "01J7FIRSTCONTACTPOSTMARKXXXX"
+
+    # Brute-force a nonce that satisfies the difficulty under
+    # H(prefix || nonce) per §2.2a.4 step 3. (The §4 PoW vector binds the
+    # challenge_id; first-contact §2.2a.4 binds postmark_id additionally,
+    # but the difficulty check is over H(prefix || nonce).)
+    nonce_int = 0
+    while True:
+        nonce_bytes = nonce_int.to_bytes(8, "big")
+        digest = hashlib.sha256(prefix + nonce_bytes).digest()
+        if leading_zero_bits(digest) >= difficulty:
+            break
+        nonce_int += 1
+        if nonce_int > 10_000_000:
+            raise RuntimeError("could not find PoW nonce in budget")
+
+    token = {
+        "challenge_id": challenge_id,
+        "algorithm": "sha256",
+        "prefix": base64.b64encode(prefix).decode("ascii"),
+        "difficulty": difficulty,
+        "postmark_id": postmark_id,
+        "nonce": base64.b64encode(nonce_bytes).decode("ascii"),
+        "issued_by": issued_by,
+    }
+
+    # Bind verification: postmark_id MUST equal carrying envelope's
+    # postmark.id. We model that with two cases below.
+
+    # Case 1: token presented inside an envelope whose postmark.id matches.
+    matching_postmark_id = postmark_id
+    case_1_postmark_match = (token["postmark_id"] == matching_postmark_id)
+    case_1_pow_ok = leading_zero_bits(
+        hashlib.sha256(prefix + nonce_bytes).digest()
+    ) >= difficulty
+
+    # Case 2: same token presented inside an envelope whose postmark.id
+    # differs (replay attempt). §2.2a.4 step 4 MUST reject.
+    other_postmark_id = "01J7OTHERPOSTMARKXXXXXXXXXXX"
+    case_2_postmark_match = (token["postmark_id"] == other_postmark_id)
+
+    return {
+        "version": "1.0.0",
+        "category": "first-contact-token",
+        "description": (
+            "HANDSHAKE.md §2.2a.4: first-contact tokens bind a solved PoW "
+            "challenge to a specific postmark_id, preventing token replay "
+            "across envelopes. The recipient server checks both that "
+            "H(prefix || nonce) satisfies the difficulty and that "
+            "token.postmark_id equals the carrying envelope's postmark.id."
+        ),
+        "spec_reference": "VECTORS.md §17.12; HANDSHAKE.md §2.2a.3, §2.2a.4",
+        "construction": {
+            "pow_hash": "SHA-256(prefix || nonce)",
+            "difficulty_check": "leading zero bits >= token.difficulty",
+            "binding_check": "token.postmark_id == carrying_envelope.postmark.id",
+        },
+        "vectors": [
+            {
+                "id": "first-contact-token-valid",
+                "description": (
+                    "Pinned challenge_id and prefix; nonce was searched to "
+                    "satisfy the difficulty. The token is presented inside "
+                    "an envelope whose postmark.id matches the bound "
+                    "postmark_id; both verification predicates succeed."
+                ),
+                "spec_reference": "VECTORS.md §17.12; HANDSHAKE.md §2.2a.4",
+                "inputs": {
+                    "token_json": token,
+                    "carrying_envelope_postmark_id": matching_postmark_id,
+                },
+                "expected": {
+                    "pow_satisfies_difficulty": case_1_pow_ok,
+                    "postmark_binding_matches": case_1_postmark_match,
+                    "token_accepted": case_1_pow_ok and case_1_postmark_match,
+                },
+            },
+            {
+                "id": "first-contact-token-replay-rejected",
+                "description": (
+                    "Same valid token presented inside a DIFFERENT envelope "
+                    "(different postmark.id). The PoW difficulty check "
+                    "still passes, but the postmark binding check fails, "
+                    "so the recipient server MUST reject with "
+                    "reason_code policy_forbidden per §2.2a.4. This "
+                    "demonstrates §2.2a.4's per-envelope single-use "
+                    "enforcement."
+                ),
+                "spec_reference": "VECTORS.md §17.12; HANDSHAKE.md §2.2a.4",
+                "inputs": {
+                    "token_json": token,
+                    "carrying_envelope_postmark_id": other_postmark_id,
+                },
+                "expected": {
+                    "pow_satisfies_difficulty": case_1_pow_ok,
+                    "postmark_binding_matches": case_2_postmark_match,
+                    "token_accepted": case_1_pow_ok and case_2_postmark_match,
+                    "rejection_reason_code": "policy_forbidden",
+                },
+            },
+        ],
+    }
+
+
+def build_clock_tolerance_json() -> dict:
+    """CONFORMANCE.md §9.3.1: clock-skew tolerance for future-dated and
+    expires-at fields."""
+
+    def fut(secs: int):
+        return {"T_minus_now_seconds": secs}
+
+    def exp(secs: int):
+        return {"now_minus_expiresAt_seconds": secs}
+
+    future_samples = [
+        {**fut(0), "expected": "accept", "reason": "T == now"},
+        {**fut(60), "expected": "accept", "reason": "1 min ahead, well under 5"},
+        {**fut(5 * 60), "expected": "accept_or_reject_at_implementor_choice",
+         "reason": "boundary: SHOULD reject at >5 min, MUST accept at <=5 min"},
+        {**fut(10 * 60), "expected": "accept_or_reject_at_implementor_choice",
+         "reason": "between SHOULD-reject (5 min) and MUST-reject (15 min)"},
+        {**fut(15 * 60), "expected": "reject",
+         "reason": "boundary: MUST reject when T - now > 15 min; equality is the limit"},
+        {**fut(30 * 60), "expected": "reject", "reason": "30 min ahead, well past 15"},
+    ]
+
+    expires_samples = [
+        {**exp(-60), "expected": "accept",
+         "reason": "now is 1 min before expires_at"},
+        {**exp(0), "expected": "accept",
+         "reason": "now == expires_at; SHOULD reject but MAY apply 0-5 min grace"},
+        {**exp(60), "expected": "accept_or_reject_at_implementor_choice",
+         "reason": "1 min past expires; MAY apply up to 5 min grace"},
+        {**exp(5 * 60), "expected": "accept_or_reject_at_implementor_choice",
+         "reason": "5 min past; boundary of grace window"},
+        {**exp(10 * 60), "expected": "accept_or_reject_at_implementor_choice",
+         "reason": "10 min past; outside grace but inside MUST-reject window"},
+        {**exp(15 * 60 + 1), "expected": "reject",
+         "reason": "15 min + 1 sec past: MUST reject"},
+    ]
+
+    return {
+        "version": "1.0.0",
+        "category": "clock-tolerance",
+        "description": (
+            "CONFORMANCE.md §9.3.1 clock-skew tolerance. Future-dated "
+            "fields and expires_at fields have separate tiered rules; "
+            "this vector enumerates the boundaries (0, 5, 15 minutes) so "
+            "implementations can verify they fall in the right tier at "
+            "the right boundary value."
+        ),
+        "spec_reference": "VECTORS.md §17.12; CONFORMANCE.md §9.3.1",
+        "vectors": [
+            {
+                "id": "clock-tolerance-future-dated",
+                "description": (
+                    "Future-dated timestamp samples. T - now ranges from 0 "
+                    "to 30 minutes. Per §9.3.1: MUST accept at 0-5 min; "
+                    "SHOULD reject at >5 min; MUST reject at >15 min."
+                ),
+                "spec_reference": "VECTORS.md §17.12; CONFORMANCE.md §9.3.1",
+                "samples": future_samples,
+            },
+            {
+                "id": "clock-tolerance-expires-at",
+                "description": (
+                    "expires_at samples. now - T ranges from -60 sec to "
+                    "15+ min. Per §9.3.1: implementations SHOULD reject "
+                    "at now > T; MAY apply up to 5 min grace; MUST "
+                    "reject at now > T + 15 min."
+                ),
+                "spec_reference": "VECTORS.md §17.12; CONFORMANCE.md §9.3.1",
+                "samples": expires_samples,
+            },
+        ],
+    }
+
+
+# ---- Session resumption (Layer 4) -------------------------------------------
+
+
+def build_session_resumption_json() -> dict:
+    """HANDSHAKE.md §2.8: resume-request + resume-accepted vectors plus the
+    §2.8.3 key-derivation vector that mixes K_resumption with a fresh
+    ephemeral shared secret."""
+    server_domain_seed = bytes([0x51] * 32)
+    server_domain_pub = ed25519_pubkey_from_priv(server_domain_seed)
+    server_domain_fp = fingerprint_hex(server_domain_pub)
+
+    resume_request = {
+        "type": "SEMP_HANDSHAKE",
+        "step": "resume",
+        "party": "client",
+        "version": "1.0.0",
+        "nonce": "cmVzdW1lLW5vbmNlLWNsaWVudC1iYXNlNjQtMzItYnl0ZXM=",
+        "resumption_ticket": "PINNED-OPAQUE-TICKET-BYTES",
+        "client_ephemeral_key": {
+            "algorithm": "x25519-chacha20-poly1305",
+            "key": "Y2xpZW50LWVwaGVtZXJhbC1rZXk=",
+            "key_id": "client-eph-fp",
+        },
+        "transport": "ws",
+        "extensions": {},
+    }
+    resume_request_canonical = canonical_json(resume_request)
+
+    resume_accepted_pre_sign = {
+        "type": "SEMP_HANDSHAKE",
+        "step": "accepted",
+        "party": "server",
+        "version": "1.0.0",
+        "session_id": "01J7RESUMESESSIONXXXXXXXXXXX",
+        "session_ttl": 300,
+        "server_nonce": "cmVzdW1lLW5vbmNlLXNlcnZlci1iYXNlNjQtMzItYnl0ZXM=",
+        "server_ephemeral_key": {
+            "algorithm": "x25519-chacha20-poly1305",
+            "key": "c2VydmVyLWVwaGVtZXJhbC1rZXk=",
+            "key_id": "server-eph-fp",
+        },
+        "resumption_ticket": {
+            "value": "PINNED-FRESH-OPAQUE-TICKET-BYTES",
+            "expires_at": "2026-05-15T09:00:00Z",
+        },
+        "server_signature": "",
+        "extensions": {},
+    }
+    resume_accepted_signed, resume_accepted_inter = handshake_sign(
+        resume_accepted_pre_sign, server_domain_seed
+    )
+    assert handshake_verify(resume_accepted_signed, server_domain_pub)
+
+    # Resumption key derivation per §2.8.3.
+    ephemeral_ss = bytes([0x53] * 32)
+    K_resumption = bytes([0x54] * 32)
+    client_nonce = bytes([0xAA] * 32)
+    server_nonce = bytes([0xBB] * 32)
+    ikm_resume = ephemeral_ss + K_resumption
+    salt = client_nonce + server_nonce
+    prk_resume = hkdf_extract(salt, ikm_resume)
+    keys = {
+        name: hkdf_expand(prk_resume, label.encode("utf-8"), 32)
+        for name, label in INFO_LABELS_UTF8.items()
+    }
+    K_resumption_next = hkdf_expand(prk_resume, b"SEMP-v1-resumption-next", 32)
+
+    return {
+        "version": "1.0.0",
+        "category": "session-resumption",
+        "description": (
+            "HANDSHAKE.md §2.8 resumption vectors: the two-message resume "
+            "exchange and the §2.8.3 key derivation that mixes K_resumption "
+            "with a fresh ephemeral shared secret."
+        ),
+        "spec_reference": "VECTORS.md §17.11; HANDSHAKE.md §2.8",
+        "vectors": [
+            {
+                "id": "resume-request-canonical",
+                "description": (
+                    "ClientResume request. The outer message is unsigned "
+                    "by design (the resumption_ticket alone authenticates "
+                    "the holder, and a fresh ephemeral DH provides forward "
+                    "secrecy for the resumed session). Pinned canonical "
+                    "bytes match what an implementation MUST produce on "
+                    "the wire."
+                ),
+                "spec_reference": "VECTORS.md §17.11; HANDSHAKE.md §2.8.2",
+                "inputs": {"message_json": resume_request},
+                "expected": {
+                    "canonical_utf8": resume_request_canonical.decode("utf-8"),
+                    "is_signed": False,
+                },
+            },
+            {
+                "id": "resume-accepted-signed",
+                "description": (
+                    "ServerResume accepted response. Same construction as "
+                    "the four-step handshake's accepted message: "
+                    "SEMP-HANDSHAKE: prefix over canonical(message) with "
+                    "server_signature blanked. Carries a fresh session_id, "
+                    "a fresh server_ephemeral_key, and a fresh "
+                    "resumption_ticket replacing the one consumed in the "
+                    "request."
+                ),
+                "spec_reference": "VECTORS.md §17.11; HANDSHAKE.md §2.8.2",
+                "inputs": {
+                    "server_domain_seed_hex": server_domain_seed.hex(),
+                    "server_domain_pub_hex": server_domain_pub.hex(),
+                    "server_domain_key_id": server_domain_fp,
+                    "message_pre_sign_json": resume_accepted_pre_sign,
+                },
+                "intermediates": resume_accepted_inter,
+                "expected": {
+                    "signed_message_json": resume_accepted_signed,
+                    "server_signature_b64": resume_accepted_signed["server_signature"],
+                    "signature_verifies": True,
+                },
+            },
+            {
+                "id": "resume-key-derivation",
+                "description": (
+                    "Resumed-session key derivation per §2.8.3. The HKDF "
+                    "input keying material is the concatenation of the "
+                    "fresh ephemeral shared secret and K_resumption "
+                    "recovered from the ticket. The salt and per-key "
+                    "info labels match the initial-handshake schedule "
+                    "(§2.1), so a fresh ephemeral DH is what preserves "
+                    "forward secrecy: an attacker holding the ticket "
+                    "alone cannot derive session keys."
+                ),
+                "spec_reference": "VECTORS.md §17.11; HANDSHAKE.md §2.8.3; SESSION.md §2.1",
+                "inputs": {
+                    "ephemeral_shared_secret_hex": ephemeral_ss.hex(),
+                    "K_resumption_hex": K_resumption.hex(),
+                    "client_nonce_hex": client_nonce.hex(),
+                    "server_nonce_hex": server_nonce.hex(),
+                    "ikm_construction": "ephemeral_shared_secret || K_resumption",
+                    "salt_construction": "client_nonce || server_nonce",
+                    "info_labels_utf8": dict(INFO_LABELS_UTF8),
+                    "K_resumption_next_info_utf8": "SEMP-v1-resumption-next",
+                },
+                "expected": {
+                    "ikm_resume_hex": ikm_resume.hex(),
+                    "salt_hex": salt.hex(),
+                    "prk_resume_hex": prk_resume.hex(),
+                    "keys": {f"{k}_hex": v.hex() for k, v in keys.items()},
+                    "K_resumption_next_hex": K_resumption_next.hex(),
+                },
+            },
+        ],
+    }
+
+
 # ---- Discovery-signed + Transparency STH (Layer 5) -------------------------
 
 
@@ -5119,6 +5462,9 @@ def main() -> int:
         (OUTDIR / "migration.json", build_migration_json()),
         (OUTDIR / "discovery-signed.json", build_discovery_signed_json()),
         (OUTDIR / "transparency.json", build_transparency_json()),
+        (OUTDIR / "session-resumption.json", build_session_resumption_json()),
+        (OUTDIR / "first-contact-token.json", build_first_contact_token_json()),
+        (OUTDIR / "clock-tolerance.json", build_clock_tolerance_json()),
     ]
 
     ok = True

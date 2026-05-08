@@ -1178,6 +1178,51 @@ and the §4 augmented key-fetch path are TODO.
 **Bytes:** see [`vectors/v1.0.0/discovery-signed.json`](vectors/v1.0.0/discovery-signed.json),
 [`vectors/v1.0.0/transparency.json`](vectors/v1.0.0/transparency.json).
 
+### 17.11 Session Resumption
+
+Reference: `HANDSHAKE.md` §2.8.
+
+Three vectors covering the resume exchange and the §2.8.3 key derivation.
+
+- `resume-request-canonical`: ClientResume request canonical bytes. The
+  outer message is unsigned; the resumption_ticket alone authenticates
+  the holder, and the fresh ephemeral DH provides forward secrecy.
+- `resume-accepted-signed`: ServerResume accepted with a fresh
+  session_id, server_ephemeral_key, and replacement resumption_ticket.
+  Signed under `SEMP-HANDSHAKE:` like other server-signed handshake
+  messages.
+- `resume-key-derivation`: HKDF derivation that mixes the ephemeral
+  shared secret with K_resumption from the ticket per §2.8.3. The salt
+  and per-key info labels match the initial-handshake schedule (§2.1);
+  the only change is the IKM construction.
+
+**Bytes:** see [`vectors/v1.0.0/session-resumption.json`](vectors/v1.0.0/session-resumption.json).
+
+### 17.12 First-Contact Token and Clock Tolerance
+
+References: `HANDSHAKE.md` §2.2a.4; `CONFORMANCE.md` §9.3.1.
+
+`first-contact-token.json` covers the postmark-binding semantics that
+prevent first-contact PoW tokens from being replayed across envelopes.
+
+- `first-contact-token-valid`: token presented inside an envelope whose
+  postmark.id matches the token's bound `postmark_id`. Both the
+  difficulty check (`H(prefix || nonce)` has at least
+  `token.difficulty` leading zero bits) and the binding check
+  (`token.postmark_id == envelope.postmark.id`) succeed.
+- `first-contact-token-replay-rejected`: same valid token presented
+  inside a different envelope. PoW still passes; binding fails;
+  recipient server MUST reject with `policy_forbidden`.
+
+`clock-tolerance.json` enumerates the §9.3.1 boundary samples for
+future-dated and `expires_at` fields. Boundaries: 0, 5 minutes, 10
+minutes, 15 minutes. The expected verdicts use three labels — `accept`,
+`reject`, `accept_or_reject_at_implementor_choice` — to capture cases
+where the spec uses MUST vs SHOULD vs MAY differently.
+
+**Bytes:** see [`vectors/v1.0.0/first-contact-token.json`](vectors/v1.0.0/first-contact-token.json),
+[`vectors/v1.0.0/clock-tolerance.json`](vectors/v1.0.0/clock-tolerance.json).
+
 ---
 
 ## 18. Relationship to Other Specifications

@@ -1,0 +1,128 @@
+{
+  "version": "1.0.0",
+  "category": "session-resumption",
+  "description": "HANDSHAKE.md §2.8 resumption vectors: the two-message resume exchange and the §2.8.3 key derivation that mixes K_resumption with a fresh ephemeral shared secret.",
+  "spec_reference": "VECTORS.md §17.11; HANDSHAKE.md §2.8",
+  "vectors": [
+    {
+      "id": "resume-request-canonical",
+      "description": "ClientResume request. The outer message is unsigned by design (the resumption_ticket alone authenticates the holder, and a fresh ephemeral DH provides forward secrecy for the resumed session). Pinned canonical bytes match what an implementation MUST produce on the wire.",
+      "spec_reference": "VECTORS.md §17.11; HANDSHAKE.md §2.8.2",
+      "inputs": {
+        "message_json": {
+          "type": "SEMP_HANDSHAKE",
+          "step": "resume",
+          "party": "client",
+          "version": "1.0.0",
+          "nonce": "cmVzdW1lLW5vbmNlLWNsaWVudC1iYXNlNjQtMzItYnl0ZXM=",
+          "resumption_ticket": "PINNED-OPAQUE-TICKET-BYTES",
+          "client_ephemeral_key": {
+            "algorithm": "x25519-chacha20-poly1305",
+            "key": "Y2xpZW50LWVwaGVtZXJhbC1rZXk=",
+            "key_id": "client-eph-fp"
+          },
+          "transport": "ws",
+          "extensions": {}
+        }
+      },
+      "expected": {
+        "canonical_utf8": "{\"client_ephemeral_key\":{\"algorithm\":\"x25519-chacha20-poly1305\",\"key\":\"Y2xpZW50LWVwaGVtZXJhbC1rZXk=\",\"key_id\":\"client-eph-fp\"},\"extensions\":{},\"nonce\":\"cmVzdW1lLW5vbmNlLWNsaWVudC1iYXNlNjQtMzItYnl0ZXM=\",\"party\":\"client\",\"resumption_ticket\":\"PINNED-OPAQUE-TICKET-BYTES\",\"step\":\"resume\",\"transport\":\"ws\",\"type\":\"SEMP_HANDSHAKE\",\"version\":\"1.0.0\"}",
+        "is_signed": false
+      }
+    },
+    {
+      "id": "resume-accepted-signed",
+      "description": "ServerResume accepted response. Same construction as the four-step handshake's accepted message: SEMP-HANDSHAKE: prefix over canonical(message) with server_signature blanked. Carries a fresh session_id, a fresh server_ephemeral_key, and a fresh resumption_ticket replacing the one consumed in the request.",
+      "spec_reference": "VECTORS.md §17.11; HANDSHAKE.md §2.8.2",
+      "inputs": {
+        "server_domain_seed_hex": "5151515151515151515151515151515151515151515151515151515151515151",
+        "server_domain_pub_hex": "c050c5637a44fa8629fff3cccce2300cb362a63d99d95fc54145266f4332445a",
+        "server_domain_key_id": "4b735ac174e40636507716ed5c9a8a75fbf6f462357fabb71ac42b7bd502c64a",
+        "message_pre_sign_json": {
+          "type": "SEMP_HANDSHAKE",
+          "step": "accepted",
+          "party": "server",
+          "version": "1.0.0",
+          "session_id": "01J7RESUMESESSIONXXXXXXXXXXX",
+          "session_ttl": 300,
+          "server_nonce": "cmVzdW1lLW5vbmNlLXNlcnZlci1iYXNlNjQtMzItYnl0ZXM=",
+          "server_ephemeral_key": {
+            "algorithm": "x25519-chacha20-poly1305",
+            "key": "c2VydmVyLWVwaGVtZXJhbC1rZXk=",
+            "key_id": "server-eph-fp"
+          },
+          "resumption_ticket": {
+            "value": "PINNED-FRESH-OPAQUE-TICKET-BYTES",
+            "expires_at": "2026-05-15T09:00:00Z"
+          },
+          "server_signature": "",
+          "extensions": {}
+        }
+      },
+      "intermediates": {
+        "canonical_with_blanked_signature_utf8": "{\"extensions\":{},\"party\":\"server\",\"resumption_ticket\":{\"expires_at\":\"2026-05-15T09:00:00Z\",\"value\":\"PINNED-FRESH-OPAQUE-TICKET-BYTES\"},\"server_ephemeral_key\":{\"algorithm\":\"x25519-chacha20-poly1305\",\"key\":\"c2VydmVyLWVwaGVtZXJhbC1rZXk=\",\"key_id\":\"server-eph-fp\"},\"server_nonce\":\"cmVzdW1lLW5vbmNlLXNlcnZlci1iYXNlNjQtMzItYnl0ZXM=\",\"server_signature\":\"\",\"session_id\":\"01J7RESUMESESSIONXXXXXXXXXXX\",\"session_ttl\":300,\"step\":\"accepted\",\"type\":\"SEMP_HANDSHAKE\",\"version\":\"1.0.0\"}",
+        "signing_input_prefix_utf8": "SEMP-HANDSHAKE:",
+        "signing_input_hex": "53454d502d48414e445348414b453a7b22657874656e73696f6e73223a7b7d2c227061727479223a22736572766572222c22726573756d7074696f6e5f7469636b6574223a7b22657870697265735f6174223a22323032362d30352d31355430393a30303a30305a222c2276616c7565223a2250494e4e45442d46524553482d4f50415155452d5449434b45542d4259544553227d2c227365727665725f657068656d6572616c5f6b6579223a7b22616c676f726974686d223a227832353531392d63686163686132302d706f6c7931333035222c226b6579223a2263325679646d56794c575677614756745a584a68624331725a586b3d222c226b65795f6964223a227365727665722d6570682d6670227d2c227365727665725f6e6f6e6365223a22636d567a6457316c4c573576626d4e6c4c584e6c636e5a6c6369316959584e6c4e6a51744d7a4974596e6c305a584d3d222c227365727665725f7369676e6174757265223a22222c2273657373696f6e5f6964223a2230314a37524553554d4553455353494f4e5858585858585858585858222c2273657373696f6e5f74746c223a3330302c2273746570223a226163636570746564222c2274797065223a2253454d505f48414e445348414b45222c2276657273696f6e223a22312e302e30227d",
+        "signature_hex": "ca97b446dbbeee0db471817c486a03f921ad935d1ca33441fd402770725b0141c5b1402c9664328b4f70643e5a4e1c77779330d3156641303fd478747030bf01"
+      },
+      "expected": {
+        "signed_message_json": {
+          "type": "SEMP_HANDSHAKE",
+          "step": "accepted",
+          "party": "server",
+          "version": "1.0.0",
+          "session_id": "01J7RESUMESESSIONXXXXXXXXXXX",
+          "session_ttl": 300,
+          "server_nonce": "cmVzdW1lLW5vbmNlLXNlcnZlci1iYXNlNjQtMzItYnl0ZXM=",
+          "server_ephemeral_key": {
+            "algorithm": "x25519-chacha20-poly1305",
+            "key": "c2VydmVyLWVwaGVtZXJhbC1rZXk=",
+            "key_id": "server-eph-fp"
+          },
+          "resumption_ticket": {
+            "value": "PINNED-FRESH-OPAQUE-TICKET-BYTES",
+            "expires_at": "2026-05-15T09:00:00Z"
+          },
+          "server_signature": "ype0Rtu+7g20cYF8SGoD+SGtk10cozRB/UAncHJbAUHFsUAslmQyi09wZD5aThx3d5Mw0xVmQTA/1Hh0cDC/AQ==",
+          "extensions": {}
+        },
+        "server_signature_b64": "ype0Rtu+7g20cYF8SGoD+SGtk10cozRB/UAncHJbAUHFsUAslmQyi09wZD5aThx3d5Mw0xVmQTA/1Hh0cDC/AQ==",
+        "signature_verifies": true
+      }
+    },
+    {
+      "id": "resume-key-derivation",
+      "description": "Resumed-session key derivation per §2.8.3. The HKDF input keying material is the concatenation of the fresh ephemeral shared secret and K_resumption recovered from the ticket. The salt and per-key info labels match the initial-handshake schedule (§2.1), so a fresh ephemeral DH is what preserves forward secrecy: an attacker holding the ticket alone cannot derive session keys.",
+      "spec_reference": "VECTORS.md §17.11; HANDSHAKE.md §2.8.3; SESSION.md §2.1",
+      "inputs": {
+        "ephemeral_shared_secret_hex": "5353535353535353535353535353535353535353535353535353535353535353",
+        "K_resumption_hex": "5454545454545454545454545454545454545454545454545454545454545454",
+        "client_nonce_hex": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "server_nonce_hex": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+        "ikm_construction": "ephemeral_shared_secret || K_resumption",
+        "salt_construction": "client_nonce || server_nonce",
+        "info_labels_utf8": {
+          "K_enc_c2s": "SEMP-v1-session-enc-c2s",
+          "K_enc_s2c": "SEMP-v1-session-enc-s2c",
+          "K_mac_c2s": "SEMP-v1-session-mac-c2s",
+          "K_mac_s2c": "SEMP-v1-session-mac-s2c",
+          "K_env_mac": "SEMP-v1-session-env-mac"
+        },
+        "K_resumption_next_info_utf8": "SEMP-v1-resumption-next"
+      },
+      "expected": {
+        "ikm_resume_hex": "53535353535353535353535353535353535353535353535353535353535353535454545454545454545454545454545454545454545454545454545454545454",
+        "salt_hex": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaabbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+        "prk_resume_hex": "b8f72841b8f70996d742480990c3d22cbc4a5f56c0874ce1ce35607888218e25aaed1797e77d0b9d69876c8b533420be826a9f8ec343a8cdaa40e17d85eee82e",
+        "keys": {
+          "K_enc_c2s_hex": "d8480096f7b1b916b9322642f8c103b77d364bacf7641d8f6d0c1eb3557cfe90",
+          "K_enc_s2c_hex": "55f3915ce591bf421ec9bfd14a586ac27175881b9d28ec55164b4ed85113cad6",
+          "K_mac_c2s_hex": "7403dd014f248895d25951d02be136d0494af95389cf3d786edc881dc5934bc0",
+          "K_mac_s2c_hex": "c36dea4857b26e39859e29e587cc1780d7f51040e1649af3e216698d4b4203e2",
+          "K_env_mac_hex": "1fb7fbde6927379ea717067fd4c6a48f75af931ac7bbb571bb98b317aa45832a"
+        },
+        "K_resumption_next_hex": "aaf4ebb9218035177e67cb750aece456a9f9dfdad52b48fefcf0f94668d4aea4"
+      }
+    }
+  ]
+}

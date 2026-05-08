@@ -121,7 +121,9 @@ A runner is a small, language-idiomatic test harness — typically a few hundred
 | 3     | Signed delivery receipt         | `delivery-receipt.json`    | seeded        |
 | 3     | Large-attachment AEAD           | `large-attachment.json`    | seeded (baseline + PQ) |
 | 4     | Handshake message bytes         | `handshake-messages.json`  | seeded (baseline; PQ similar) |
-| 4     | Session resumption ticket       | `session-resumption.json`  | TODO          |
+| 4     | Session resumption ticket       | `session-resumption.json`  | seeded        |
+| 4     | First-contact token              | `first-contact-token.json`| seeded        |
+| 9     | Clock tolerance boundaries      | `clock-tolerance.json`     | seeded        |
 | 5     | Discovery signature verification | `discovery-signed.json`   | seeded        |
 | 5     | Configuration versioning + STH  | `configuration-update.json`| TODO          |
 | 5     | Key transparency proofs         | `transparency.json`        | seeded (STH + inclusion; consistency TODO) |
