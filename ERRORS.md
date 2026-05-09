@@ -129,20 +129,22 @@ the home server to the submitting client device. Defined in
 ## 6. Submission Status Values
 
 These values appear in `SEMP_SUBMISSION` response messages from the home
-server to the client. They describe per-recipient delivery outcomes. Defined
-in `CLIENT.md` section 6.3.
+server to the client. They are sender-side classifications of per-recipient
+delivery outcomes; they are not wire acknowledgments returned by the recipient
+server. The wire-level acknowledgments are listed in section 11. Defined in
+`CLIENT.md` section 6.3.
 
 | Status                | Terminal | Meaning                                                                     |
 |-----------------------|----------|-----------------------------------------------------------------------------|
-| `delivered`           | Yes      | Envelope accepted and delivered to the recipient server.                    |
-| `rejected`            | Yes      | Recipient server explicitly refused. `reason_code` is present.              |
-| `silent`              | Yes      | No response from recipient server within the timeout window.                |
+| `delivered`           | Yes      | Envelope accepted and delivered to the recipient server (wire `delivered`). |
+| `rejected`            | Yes      | Recipient server explicitly refused (wire `rejected`). `reason_code` is present. |
+| `silent`              | Yes      | No wire acknowledgment received from the recipient server within the timeout window. Sender-side classification; no `silent` value appears on the wire. See `DELIVERY.md` section 1.3. |
 | `legacy_required`     | Yes      | Recipient domain does not support SEMP. SMTP fallback is possible.          |
 | `recipient_not_found` | Yes      | No SEMP support and no MX records. Domain cannot receive mail.              |
 | `queued`              | No       | Server accepted the envelope and will attempt delivery asynchronously.      |
 
 `queued` is the only non-terminal status. The server MUST follow up with a
-delivery event notification when the outcome is resolved to `delivered`,
+delivery event notification when the outcome resolves to `delivered`,
 `rejected`, or `silent`.
 
 `legacy_required` triggers the client's SMTP fallback flow per `CLIENT.md`
@@ -218,20 +220,25 @@ of the reported abuse. Defined in `REPUTATION.md` section 3.4.
 
 ---
 
-## 11. Delivery Acknowledgment Types
+## 11. Wire Delivery Acknowledgments
 
-These are protocol-level wire outcomes for envelope delivery between servers.
-They are not error codes but form the foundation on which submission statuses
-are built. Defined in `DELIVERY.md` section 1.
+These are the wire-level values a recipient server may return for an envelope
+delivery attempt. They are not error codes but form the foundation on which
+submission statuses are built. Defined in `DELIVERY.md` section 1.
 
-| Acknowledgment | Description                                                                 |
-|----------------|-----------------------------------------------------------------------------|
-| `delivered`    | Recipient server accepted the envelope and will deliver it to the client.   |
-| `rejected`     | Recipient server explicitly refused the envelope with a reason code.        |
-| `silent`       | Recipient server did not respond within the sender's timeout window.        |
+| Wire Acknowledgment | Description                                                                 |
+|---------------------|-----------------------------------------------------------------------------|
+| `delivered`         | Recipient server accepted the envelope and will deliver it to the client.   |
+| `rejected`          | Recipient server explicitly refused the envelope with a reason code.        |
+
+There is no third wire value. A recipient server that wishes to refuse delivery
+without disclosing the refusal operates in silent mode (`DELIVERY.md` section
+1.3): it withholds any wire response. The sender's timeout then produces a
+sender-side `silent` classification (section 6 above), which is not a wire
+value.
 
 `rejected` is the RECOMMENDED default for any envelope the server will not
-deliver. `silent` is permitted for deliberate privacy or anti-harassment
+deliver. Silent mode is permitted for deliberate privacy or anti-harassment
 policy. A server MUST NOT return `delivered` for an envelope it does not intend
 to deliver.
 

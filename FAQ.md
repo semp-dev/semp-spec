@@ -148,13 +148,17 @@ want automated processing.
 
 ### 1.6 Where are delivery status notifications (DSN) and read receipts (MDN)?
 
-DSN functionality is core to SEMP. Every delivery attempt produces an explicit
-acknowledgment: `delivered`, `rejected`, or `silent`. The sender knows the
-outcome immediately with a machine-readable reason code, rather than waiting
-for a bounce message that may or may not arrive. `DELIVERY.md` section 2
-extends this with sender-side queuing state visible to the submitting client
-(attempt counts, next attempt time, effective deadline, terminal state).
-This is strictly better than SMTP's DSN mechanism.
+DSN functionality is core to SEMP. Every delivery attempt resolves to one of
+two wire acknowledgments from the recipient server (`delivered` or `rejected`)
+or, when the recipient operates in silent mode for privacy or anti-harassment
+reasons, no wire response at all. The sender's home server classifies the
+outcome accordingly (`delivered`, `rejected`, or `silent` — the last of which
+is a sender-side label for "no wire response within timeout," never a wire
+value) and reports it to the submitting client with a machine-readable reason
+code where applicable. `DELIVERY.md` section 2 extends this with sender-side
+queuing state visible to the submitting client (attempt counts, next attempt
+time, effective deadline, terminal state). The result is strictly more
+informative than SMTP's DSN mechanism, which often arrives late or not at all.
 
 Read receipts (MDN) are not defined by SEMP. They are privacy-hostile by
 design, because they compel the recipient's device to reveal that the
@@ -481,11 +485,15 @@ failure modes: the sender believes a message was delivered when it was silently
 dropped. The recipient never knows the message existed. Neither party can
 diagnose the problem.
 
-SEMP requires explicit rejection with reason codes for all delivery failures.
-The one exception is the `silent` acknowledgment type, which is permitted for
-deliberate privacy or anti-harassment reasons (e.g., a blocked sender should not
-learn they are blocked). Even `silent` is a documented, intentional behavior --
-not an accidental failure mode.
+SEMP requires an explicit `rejected` wire acknowledgment with a reason code
+for all delivery failures the recipient is willing to disclose. The one
+exception is silent mode, which permits a recipient server to withhold any
+wire acknowledgment for deliberate privacy or anti-harassment reasons (for
+example, a blocked sender should not learn they are blocked). Silent mode is
+a documented, intentional recipient behavior. The sender's home server
+classifies the resulting timeout as `silent` for sender-side bookkeeping;
+the recipient itself never emits a `silent` value on the wire. See
+`DELIVERY.md` section 1.3.
 
 ### 5.4 Why is the subject in the enclosure instead of the brief?
 

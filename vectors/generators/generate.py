@@ -1196,23 +1196,32 @@ def build_delivery_status_json() -> dict:
         "version": "1.0.0",
         "category": "delivery-status",
         "description": (
-            "Mapping from server acknowledgments and discovery outcomes to "
-            "client UI state and submission status, including multi-recipient "
-            "mixed outcomes. Source of truth: VECTORS.md §10 and §11."
+            "Mapping from per-recipient submission status (sender-side "
+            "classification carried in the SEMP_SUBMISSION response) and "
+            "discovery outcomes to client UI state, including "
+            "multi-recipient mixed outcomes. Source of truth: VECTORS.md "
+            "§10 and §11."
         ),
-        "spec_reference": "VECTORS.md §10, §11; DELIVERY.md §1.4; CLIENT.md §6.3, §7.1; DISCOVERY.md §7.1",
+        "spec_reference": "VECTORS.md §10, §11; DELIVERY.md §1; CLIENT.md §6.3, §7.1; DISCOVERY.md §7.1",
         "vectors": [
             {
-                "id": "acknowledgment-to-ui-state",
+                "id": "submission-status-to-ui-state",
                 "description": (
-                    "Maps the server acknowledgment status carried in a "
-                    "submission response to the client UI state and any "
-                    "additional behavior the client MUST drive."
+                    "Maps the per-recipient submission status carried in a "
+                    "SEMP_SUBMISSION response (sender-side classification, "
+                    "defined in CLIENT.md §6.3 and ERRORS.md §6) to the "
+                    "client UI state and any additional behavior the client "
+                    "MUST drive. The submission status is a sender-side "
+                    "label; only `delivered` and `rejected` correspond to "
+                    "wire acknowledgments from the recipient server. "
+                    "`silent` is the sender-side classification when no "
+                    "wire response was received within the timeout window "
+                    "(DELIVERY.md §1.3) and never appears as a wire value."
                 ),
-                "spec_reference": "VECTORS.md §10.1; CLIENT.md §7.1",
+                "spec_reference": "VECTORS.md §10.1; CLIENT.md §7.1; DELIVERY.md §1",
                 "samples": [
                     {
-                        "server_acknowledgment": ack,
+                        "submission_status": ack,
                         "client_ui_state": ui,
                         "additional_behavior": extra,
                     }

@@ -5,37 +5,37 @@
   "spec_reference": "VECTORS.md §10, §11; DELIVERY.md §1.4; CLIENT.md §6.3, §7.1; DISCOVERY.md §7.1",
   "vectors": [
     {
-      "id": "acknowledgment-to-ui-state",
-      "description": "Maps the server acknowledgment status carried in a submission response to the client UI state and any additional behavior the client MUST drive.",
-      "spec_reference": "VECTORS.md §10.1; CLIENT.md §7.1",
+      "id": "submission-status-to-ui-state",
+      "description": "Maps the per-recipient submission status carried in a SEMP_SUBMISSION response (sender-side classification, defined in CLIENT.md §6.3 and ERRORS.md §6) to the client UI state and any additional behavior the client MUST drive. The submission status is a sender-side label; only `delivered` and `rejected` correspond to wire acknowledgments from the recipient server. `silent` is the sender-side classification when no wire response was received within the timeout window (DELIVERY.md §1.3) and never appears as a wire value.",
+      "spec_reference": "VECTORS.md §10.1; CLIENT.md §7.1; DELIVERY.md §1",
       "samples": [
         {
-          "server_acknowledgment": "delivered",
+          "submission_status": "delivered",
           "client_ui_state": "Confirmed delivery indicator",
           "additional_behavior": ""
         },
         {
-          "server_acknowledgment": "rejected",
+          "submission_status": "rejected",
           "client_ui_state": "Failure indicator + reason",
           "additional_behavior": "Reason accessible to user"
         },
         {
-          "server_acknowledgment": "silent",
+          "submission_status": "silent",
           "client_ui_state": "Unacknowledged (distinct)",
           "additional_behavior": "MUST be visually distinct from above"
         },
         {
-          "server_acknowledgment": "legacy_required",
+          "submission_status": "legacy_required",
           "client_ui_state": "Degradation warning",
           "additional_behavior": "Await user confirmation before SMTP send"
         },
         {
-          "server_acknowledgment": "recipient_not_found",
+          "submission_status": "recipient_not_found",
           "client_ui_state": "Undeliverable indicator",
           "additional_behavior": "No fallback available"
         },
         {
-          "server_acknowledgment": "queued",
+          "submission_status": "queued",
           "client_ui_state": "Pending indicator",
           "additional_behavior": "Update when delivery event received"
         }

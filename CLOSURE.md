@@ -230,9 +230,9 @@ correspondents' business.
 An envelope arriving for the closed account during the retention
 window (section 6.1) receives `reason_code: "policy_forbidden"`, the
 same response non-existent addresses receive per `DELIVERY.md`
-section 6.4. The home server MAY alternatively apply a `silent`
-acknowledgment per `DELIVERY.md` section 1.3. Both preserve existence
-indistinguishability per `DESIGN.md` section 2.7.
+section 6.4. The home server MAY alternatively apply silent-mode
+disposition (no wire response) per `DELIVERY.md` section 1.3. Both
+preserve existence indistinguishability per `DESIGN.md` section 2.7.
 
 The home server MUST NOT return any reason code or body field that
 specifically identifies closure. A sender cannot cryptographically
@@ -437,9 +437,10 @@ A server claiming closure support MUST:
 - Not publish a closure record, a closure reason code, or a
   closure-specific discovery artifact.
 - Delete the recovery bundle at finalization.
-- Reject ingress for the closed account during the retention window
-  with `reason_code: "policy_forbidden"` or `silent`, matching the
-  response given to non-existent addresses.
+- Refuse ingress for the closed account during the retention window
+  with `reason_code: "policy_forbidden"` on the wire, or apply silent-mode
+  disposition (no wire response) per `DELIVERY.md` section 1.3, matching
+  the response given to non-existent addresses.
 - Not reassign the local-part before the retention window ends.
 - Treat reassignment as a fresh registration with no inherited trust.
 

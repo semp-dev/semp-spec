@@ -507,9 +507,9 @@ A conformant server MUST:
   from policy rejection. Use `policy_forbidden` for both.
   (`ENVELOPE.md` §9.3, `DESIGN.md` §2.7)
 - Apply per-sender-domain rate limits on submissions to
-  non-known-correspondent recipients and switch to `silent`
-  acknowledgment when the threshold is exceeded.
-  (`DELIVERY.md` §6.5)
+  non-known-correspondent recipients and switch to silent-mode
+  disposition (withhold any wire response) when the threshold is exceeded.
+  (`DELIVERY.md` §1.3, §6.5)
 - Count submissions to non-existent and existent recipient addresses
   identically for rate-limit purposes. (`DELIVERY.md` §6.5.1)
 
@@ -527,8 +527,9 @@ A conformant server that receives an envelope via `SEMP_INTERNAL_ROUTE` MUST:
 
 - Execute the full delivery pipeline defined in `DELIVERY.md` §3 before
   returning an acknowledgment. (`DELIVERY.md` §6.3, `DISCOVERY.md` §5.4.1)
-- Return an acknowledgment using one of the three standard acknowledgment
-  types: `delivered`, `rejected`, or `silent`. (`DISCOVERY.md` §5.4.1)
+- Return one of the two wire acknowledgments (`delivered` or `rejected`) or
+  apply silent-mode disposition by withholding any wire response.
+  (`DELIVERY.md` §1, §1.3, `DISCOVERY.md` §5.4.1)
 - Enforce the recipient's block list. Block enforcement is the responsibility
   of the partition server that holds the recipient's block list.
   (`DELIVERY.md` §6.3, `DISCOVERY.md` §5.4.2)
@@ -540,8 +541,8 @@ A conformant server that sends an envelope via `SEMP_INTERNAL_ROUTE` MUST:
 - Forward the receiving server's acknowledgment to the client in the
   submission response without override or suppression.
   (`DISCOVERY.md` §5.4.1)
-- Enforce a timeout on internally routed deliveries and treat expiry as
-  `silent`. (`DELIVERY.md` §1.5, `DISCOVERY.md` §5.4.1)
+- Enforce a timeout on internally routed deliveries and classify expiry as
+  `silent` for sender-side bookkeeping. (`DELIVERY.md` §1.5, `DISCOVERY.md` §5.4.1)
 
 A conformant server MUST NOT:
 

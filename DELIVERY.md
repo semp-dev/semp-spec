@@ -9,30 +9,56 @@ Related: `DESIGN.md`, `HANDSHAKE.md`, `ENVELOPE.md`
 
 ## Abstract
 
-The SEMP delivery specification defines the three acknowledgment types a
-recipient server may return for any envelope delivery attempt, the obligations
-of the sending server in tracking and surfacing delivery outcomes, queuing and
-retry behavior for non-terminal outcomes, the block list structure and
-enforcement, and multi-device synchronization of user policy state.
+The SEMP delivery specification defines the wire-level acknowledgments a
+recipient server may return for any envelope delivery attempt, the sender-side
+classification of delivery outcomes (including the timeout-derived `silent`
+classification), the obligations of the sending server in tracking and
+surfacing those outcomes, queuing and retry behavior for non-terminal
+outcomes, the block list structure and enforcement, and multi-device
+synchronization of user policy state.
 
 ---
 
-## 1. Acknowledgment Types
+## 1. Delivery Outcomes
 
-Every envelope delivery attempt produces exactly one of three acknowledgment
-types. These are protocol-level outcomes, observable on the wire between
-servers.
+Every envelope delivery attempt resolves to exactly one outcome at the sending
+server. The outcome is either communicated by the recipient server on the wire
+(an explicit acknowledgment) or inferred by the sending server from the
+absence of any wire response within a timeout window.
 
-| Acknowledgment | Description                                                                 |
-|----------------|-----------------------------------------------------------------------------|
-| `delivered`    | The recipient server accepted the envelope and has committed to making it available to the recipient client.|
-| `rejected`     | The recipient server explicitly refused the envelope with a reason code.    |
-| `silent`       | The recipient server did not respond within the sender's timeout window.    |
+**Wire acknowledgments.** The recipient server may return one of two wire
+acknowledgments. These are the only protocol-level values observable on the
+wire between servers:
 
-These are the only outcomes the protocol models. What the recipient server or
-client does internally with an accepted envelope (deliver to inbox, filter to
-a folder, suppress notifications, hold for review) is an application concern.
-The protocol does not observe or regulate internal inbox management.
+| Wire Acknowledgment | Description                                                                  |
+|---------------------|------------------------------------------------------------------------------|
+| `delivered`         | The recipient server accepted the envelope and has committed to making it available to the recipient client. |
+| `rejected`          | The recipient server explicitly refused the envelope with a reason code.     |
+
+There is no third wire value. A recipient server that wishes to refuse delivery
+without disclosing the refusal MUST simply withhold any wire response. This is
+silent mode and is described in section 1.3.
+
+**Sender-side classification.** After a wire acknowledgment is received, or
+the timeout window elapses without one, the sending server records the result
+under one of three labels. These labels are sender-side bookkeeping; only
+`delivered` and `rejected` correspond to wire values:
+
+| Classification | Source                                                                  |
+|----------------|-------------------------------------------------------------------------|
+| `delivered`    | Wire acknowledgment of `delivered` received from the recipient server.  |
+| `rejected`     | Wire acknowledgment of `rejected` received from the recipient server.   |
+| `silent`       | No wire acknowledgment received within the timeout window.              |
+
+`silent` is the sender-side label for the absence of a wire response. The
+protocol does not encode `silent` as a wire value. A recipient server never
+returns `silent` over the wire; the sending server synthesizes the
+classification from the timeout.
+
+What a recipient server or client does internally with an accepted envelope
+(deliver to inbox, filter to a folder, suppress notifications, hold for review)
+is an application concern. The protocol does not observe or regulate internal
+inbox management.
 
 ### 1.1 Delivered
 
@@ -221,14 +247,23 @@ will not deliver. Explicit rejection is consistent with DESIGN.md principle
 2.3. It allows sending servers to handle failures correctly and inform their
 users accurately.
 
-### 1.3 Silent
+### 1.3 Silent Mode and the `silent` Classification
 
-The recipient server does not respond. After a timeout window the sending server
-marks the delivery as unacknowledged and informs the sending user.
+`silent` describes two related concepts:
 
-Silent is a permitted acknowledgment type for deliberate operator or user
-policy reasons, typically privacy or anti-harassment situations where revealing
-that a delivery was refused would itself be harmful. It is not the recommended
+- **Silent mode** (recipient-side policy). A recipient server operates in
+  silent mode for a particular sender, domain, or class of envelopes when its
+  policy is to withhold any wire acknowledgment for matching envelopes. The
+  recipient sends nothing; there is no `silent` wire value to send.
+- **`silent` classification** (sender-side bookkeeping). After the timeout
+  window elapses with no wire acknowledgment received, the sending server
+  records the outcome as `silent` and informs the sending user. This label
+  is internal to the sending server and its client; the recipient never
+  emits it.
+
+Silent mode is a permitted recipient policy for deliberate operator or user
+reasons, typically privacy or anti-harassment situations where revealing that a
+delivery was refused would itself be harmful. It is not the recommended
 default.
 
 Silence and network failure are indistinguishable to the sending server. A
@@ -236,30 +271,30 @@ sender cannot determine whether silence means blocking, the recipient is
 offline, or the message was lost in transit.
 
 A server operating in silent mode MUST still explicitly reject envelopes with
-invalid seals. Silent mode applies only to envelopes that pass all verification
-checks. An invalid envelope MUST always be rejected explicitly regardless of
-delivery policy.
+invalid seals on the wire. Silent mode applies only to envelopes that pass all
+verification checks. An invalid envelope MUST always be rejected explicitly
+regardless of delivery policy.
 
 ### 1.4 Sending Server Obligations
 
-The sending server MUST track the acknowledgment type of every delivery attempt
-and surface it to the sending user. The three states map directly:
+The sending server MUST track the classification of every delivery attempt and
+surface it to the sending user. The three sender-side labels map directly:
 
-| Acknowledgment | What the sending user sees                                      |
+| Classification | What the sending user sees                                      |
 |----------------|-----------------------------------------------------------------|
 | `delivered`    | Delivery confirmed.                                             |
 | `rejected`     | Delivery rejected. Reason available.                            |
 | `silent`       | Delivery unacknowledged. No response received within timeout.   |
 
-The sending server MUST NOT misrepresent the acknowledgment type to its user.
-If a `rejected` response is received, the user MUST be told delivery failed,
-not that it succeeded or is pending.
+The sending server MUST NOT misrepresent the classification to its user. If a
+`rejected` wire acknowledgment was received, the user MUST be told delivery
+failed; the sending server MUST NOT relabel it as pending or successful.
 
 ### 1.5 Timeout
 
 The sending server MUST enforce a timeout on each individual delivery attempt.
-After the timeout elapses with no response, the attempt is classified as
-`silent`. A timeout of 30 seconds is RECOMMENDED for an individual attempt.
+After the timeout elapses with no wire acknowledgment, the attempt is classified
+as `silent`. A timeout of 30 seconds is RECOMMENDED for an individual attempt.
 Retry scheduling and overall deadlines are defined in section 2.
 
 ### 1.6 Recipient Status
@@ -831,14 +866,16 @@ advances to the next stage immediately.
 
 ## 4. Sender Policy and Blocking
 
-The acknowledgment type a server returns for a given sender is determined by
-its delivery policy for that sender. One common policy mechanism is a block
-list. A block list maps sender entities to acknowledgment types.
+The wire acknowledgment a server returns for a given sender, or whether it
+withholds any wire response (silent mode, section 1.3), is determined by its
+delivery policy for that sender. One common policy mechanism is a block list.
+A block list maps sender entities to a policy disposition: explicit rejection
+on the wire, or silent withholding.
 
 The block list is one implementation of delivery policy. Servers MAY implement
 other policy mechanisms (rate limiting, reputation thresholds, federation
-rules) that also determine acknowledgment type. The protocol does not mandate
-the policy mechanism, only the acknowledgment type that results from it.
+rules) that also determine the disposition. The protocol does not mandate the
+policy mechanism, only the wire-level behavior that results from it.
 
 ---
 
@@ -869,7 +906,7 @@ the policy mechanism, only the acknowledgment type that results from it.
 |------------------------|----------------|----------|--------------------------------------------------------------------|
 | `id`                   | `string`       | Yes      | Unique identifier for this entry. ULID RECOMMENDED.                |
 | `entity`               | `object`       | Yes      | The entity whose delivery is being controlled. See section 5.3.    |
-| `acknowledgment`       | `string`       | Yes      | Acknowledgment type to return. One of: `rejected`, `silent`.       |
+| `acknowledgment`       | `string`       | Yes      | Disposition to apply. One of: `rejected` (return an explicit rejection on the wire) or `silent` (withhold any wire response, producing a sender-side `silent` classification at the sender after timeout). See section 1.3.       |
 | `reason`               | `string`       | No       | User or operator defined reason label. Never transmitted externally.|
 | `scope`                | `string`       | Yes      | One of: `all`, `direct`, `group`. See section 5.4.                 |
 | `created_at`           | `string`       | Yes      | ISO 8601 UTC creation timestamp.                                   |
@@ -945,8 +982,9 @@ If a match is found:
 
 - `acknowledgment: "rejected"`: reject the handshake at `step: "rejected"`
   with `reason_code: "blocked"`. No session is established.
-- `acknowledgment: "silent"`: do not complete the handshake. No response
-  is sent after the init message.
+- `acknowledgment: "silent"`: do not complete the handshake. No wire response
+  is sent after the init message; the sender's timeout will produce a
+  sender-side `silent` classification.
 
 ### 6.2 Post-Handshake Envelope Enforcement
 
@@ -954,16 +992,18 @@ After a session is established, block entries are checked at envelope receipt
 following the delivery pipeline in section 3. Domain and server entries are
 checked before `brief` decryption. User entries are checked after.
 
-If a match is found, the server applies the acknowledgment type from the block
-entry, returning an explicit rejection or going silent.
+If a match is found, the server applies the disposition from the block entry,
+returning an explicit `rejected` wire acknowledgment or withholding any wire
+response (silent mode, section 1.3).
 
 ### 6.3 Internal Route Enforcement
 
 When an envelope arrives via `SEMP_INTERNAL_ROUTE` from another partition
 server within the same domain (`DISCOVERY.md` section 5.4), the receiving
 partition server MUST execute the full delivery pipeline defined in section 3
-and return an acknowledgment. The three acknowledgment types defined in
-section 1 (`delivered`, `rejected`, `silent`) apply without modification.
+and return an acknowledgment (or, for silent mode, withhold one). The two
+wire acknowledgments defined in section 1 (`delivered`, `rejected`) and the
+silent-mode policy defined in section 1.3 apply without modification.
 Internal routing is not a bypass.
 
 The receiving partition server enforces block list entries because it holds the
@@ -971,10 +1011,11 @@ recipient's block list. The sending partition server cannot perform this check
 and MUST NOT attempt to access or infer the recipient's block list.
 
 All privacy constraints from section 8 apply across partition boundaries. A
-`silent` acknowledgment on an internal route MUST maintain consistent timing
-per section 8.2. The sending partition server MUST NOT disclose to the sending
+silent-mode disposition on an internal route MUST maintain consistent timing
+per section 8.2 so that the absence of a response is indistinguishable from
+network failure. The sending partition server MUST NOT disclose to the sending
 client whether an envelope was blocked versus undeliverable for other reasons,
-beyond what the acknowledgment type and reason code convey.
+beyond what the wire acknowledgment and reason code convey.
 
 ### 6.4 First-Contact Enforcement
 
@@ -1062,9 +1103,9 @@ submissions to non-known-correspondent recipients on its domain.
 When a sender domain exceeds the rate threshold (operator-configured;
 RECOMMENDED default 100 unknown-correspondent envelope submissions per
 hour), the recipient server MUST switch all subsequent rejections to
-that sender domain to `silent` acknowledgment per section 1.3, for the
-duration of the throttling window. Throttling windows SHOULD be at
-least 1 hour and SHOULD NOT exceed 24 hours.
+that sender domain to silent-mode disposition per section 1.3 (no wire
+response), for the duration of the throttling window. Throttling
+windows SHOULD be at least 1 hour and SHOULD NOT exceed 24 hours.
 
 The threshold MUST count submissions to non-existent and existent
 recipient addresses identically. A counter that distinguished them
@@ -1270,16 +1311,18 @@ devices.
 
 ### 8.2 Acknowledgment Type and Block Detection
 
-With `rejected` acknowledgment, the sender learns delivery was refused and
-receives a reason code. Whether the sender learns they are specifically
-blocked, as opposed to rejected for another reason, depends on the reason
-code returned. Servers MAY return a generic reason code rather than `blocked`
-if revealing the specific reason would itself be harmful.
+When the recipient returns a `rejected` wire acknowledgment, the sender learns
+delivery was refused and receives a reason code. Whether the sender learns
+they are specifically blocked, as opposed to rejected for another reason,
+depends on the reason code returned. Servers MAY return a generic reason code
+rather than `blocked` if revealing the specific reason would itself be harmful.
 
-With `silent` acknowledgment, the sender cannot determine whether silence
-means a delivery policy decision, the recipient is offline, or network failure.
-Implementations MUST maintain consistent timing in silent mode; timing
-variations that correlate with delivery policy would leak information.
+When the recipient applies silent-mode disposition (no wire response), the
+sender's home server classifies the timeout as `silent` and the sender cannot
+determine whether silence means a delivery policy decision, the recipient is
+offline, or network failure. Implementations MUST maintain consistent timing
+in silent mode; timing variations that correlate with delivery policy would
+leak information.
 
 ### 8.3 User Policy as an Attack Surface
 
