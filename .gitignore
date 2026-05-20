@@ -1,1 +1,12 @@
 .claude/settings.local.json
+
+# Built Internet-Draft artifacts.
+drafts/build/
+
+# kramdown-rfc bibliography cache (downloads referenced RFCs at build time).
+drafts/.refcache/
+
+# In-place revision-stamping backups (kept just in case sed -i.bak slips through).
+drafts/*.bak
+drafts/bibxml/
+scripts/

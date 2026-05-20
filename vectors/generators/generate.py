@@ -638,6 +638,85 @@ def build_pow_json() -> dict:
                     "valid": failed_zb >= 16,
                 },
             },
+            {
+                "id": "pow-difficulty-calibration-table",
+                "description": (
+                    "Per-difficulty hash-cost expectations from the "
+                    "REPUTATION.md/PoW difficulty calibration table. "
+                    "Each row is informational: it tells implementers "
+                    "what the protocol assumes about brute-force cost "
+                    "at each cap level. Implementations MUST NOT issue "
+                    "challenges above difficulty 28; initiators MUST "
+                    "abort with challenge_invalid on receipt of any "
+                    "challenge whose difficulty exceeds 28."
+                ),
+                "spec_reference": (
+                    "draft-gokce-semp-delivery §9.4.1; "
+                    "draft-gokce-semp-handshake §6.6"
+                ),
+                "inputs": {
+                    "calibration_table": [
+                        {
+                            "difficulty_bits": 16,
+                            "expected_hashes": 65536,
+                        },
+                        {
+                            "difficulty_bits": 20,
+                            "expected_hashes": 1048576,
+                        },
+                        {
+                            "difficulty_bits": 24,
+                            "expected_hashes": 16777216,
+                        },
+                        {
+                            "difficulty_bits": 28,
+                            "expected_hashes": 268435456,
+                        },
+                    ],
+                    "condition_table": [
+                        {
+                            "condition":
+                                "zero-reputation, domain age below threshold",
+                            "suggested_difficulty": 20,
+                        },
+                        {
+                            "condition":
+                                "zero-reputation, domain age above threshold",
+                            "suggested_difficulty": 16,
+                        },
+                        {
+                            "condition":
+                                "established domain, suspicious assessment",
+                            "suggested_difficulty_range": "20 to 24",
+                        },
+                        {
+                            "condition":
+                                "established domain, hostile assessment",
+                            "suggested_difficulty_range": "24 to 28",
+                        },
+                        {
+                            "condition": "operator policy (any domain)",
+                            "note":
+                                "Operator-configured, MUST be capped at 28",
+                        },
+                    ],
+                },
+                "expected": {
+                    "protocol_difficulty_cap_bits": 28,
+                    "issuer_rule": (
+                        "Servers MUST NOT issue proof_of_work "
+                        "challenges with difficulty greater than 28."
+                    ),
+                    "initiator_rule": (
+                        "Initiators receiving difficulty > 28 MUST "
+                        "abort with reason_code: challenge_invalid."
+                    ),
+                    "doubling_rule": (
+                        "Each additional bit doubles the expected "
+                        "number of SHA-256 evaluations."
+                    ),
+                },
+            },
         ],
     }
 
@@ -786,6 +865,400 @@ def build_discovery_json() -> dict:
                 },
                 "expected": {
                     "parsed": parsed,
+                },
+            },
+            {
+                "id": "discovery-srv-quic-udp-target",
+                "description": (
+                    "QUIC transport selection when both _semp._tcp and "
+                    "_semp._udp SRV records are published. The default for "
+                    "QUIC is the _semp._tcp target's host:port over UDP. "
+                    "Operators that require a distinct UDP target MAY "
+                    "publish _semp._udp; when both are present, clients "
+                    "selecting QUIC MUST prefer the _semp._udp target."
+                ),
+                "spec_reference": (
+                    "DISCOVERY.md §2.1; draft-gokce-semp-handshake §14.3.3"
+                ),
+                "inputs": {
+                    "scenario_a_zone": {
+                        "_semp._tcp.example.com.": {
+                            "rrtype": "SRV",
+                            "value": "10 10 443 semp.example.com.",
+                        },
+                        "comment": (
+                            "No _semp._udp record. QUIC uses the same "
+                            "host:port as TCP over UDP."
+                        ),
+                    },
+                    "scenario_b_zone": {
+                        "_semp._tcp.example.com.": {
+                            "rrtype": "SRV",
+                            "value": "10 10 443 semp.example.com.",
+                        },
+                        "_semp._udp.example.com.": {
+                            "rrtype": "SRV",
+                            "value": "10 10 443 semp.example.com.",
+                        },
+                        "comment": (
+                            "Both records present. Clients selecting QUIC "
+                            "MUST prefer the _semp._udp target."
+                        ),
+                    },
+                },
+                "expected": {
+                    "scenario_a_quic_target": {
+                        "host": "semp.example.com.",
+                        "port": 443,
+                        "source": "_semp._tcp (UDP datagrams to TCP target)",
+                    },
+                    "scenario_b_quic_target": {
+                        "host": "semp.example.com.",
+                        "port": 443,
+                        "source": "_semp._udp (preferred over _semp._tcp)",
+                    },
+                },
+            },
+            {
+                "id": "discovery-config-reciprocity-policy",
+                "description": (
+                    "A peer that enforces trust-gossip reciprocity MUST "
+                    "disclose its policy in the configuration document so "
+                    "that prospective consumers can determine eligibility "
+                    "before fetching. The protocol does not mandate the "
+                    "exact field shape; this vector illustrates one "
+                    "conformant disclosure shape that consumers can rely "
+                    "on for capability negotiation."
+                ),
+                "spec_reference": (
+                    "draft-gokce-semp-delivery §12.1; "
+                    "draft-gokce-semp-discovery §6"
+                ),
+                "inputs": {
+                    "configuration_fragment": {
+                        "reciprocity": {
+                            "mode": "strict",
+                            "minimum_publish_volume": 100,
+                            "evaluation_window_days": 30,
+                        }
+                    }
+                },
+                "expected": {
+                    "modes": ["strict", "lenient", "none"],
+                    "consumer_action_under_strict": (
+                        "Before fetching trust gossip, verify that the "
+                        "consumer publishes its own observations and "
+                        "meets the minimum_publish_volume; otherwise "
+                        "expect the peer to refuse to serve."
+                    ),
+                },
+            },
+            {
+                "id": "key-fetch-status-dispatch",
+                "description": (
+                    "SEMP_KEYS response classifies each requested "
+                    "recipient with one of found / not_found / "
+                    "legacy_required / recipient_not_found / error. The "
+                    "client dispatches on the per-recipient status "
+                    "before encrypting under any recipient key. The "
+                    "status set mirrors the submission-time status "
+                    "vocabulary so the client can share dispatch logic "
+                    "between key fetch and submission. legacy_required "
+                    "and recipient_not_found are surfaced at the key "
+                    "fetch step (rather than only at envelope "
+                    "submission) so the client learns the delivery "
+                    "classification before composing an envelope."
+                ),
+                "spec_reference": (
+                    "draft-gokce-semp-client §6.4.6 Key Response Status "
+                    "Values; draft-gokce-semp-discovery §4.3"
+                ),
+                "inputs": {
+                    "key_response_json": {
+                        "type": "SEMP_KEYS",
+                        "step": "response",
+                        "version": "1.0.0",
+                        "id": "01JTEST55555555555555555555",
+                        "timestamp": "2026-05-19T20:30:00Z",
+                        "results": [
+                            {
+                                "address": "alice@example.com",
+                                "status": "found",
+                                "domain": "example.com",
+                                "domain_key": {
+                                    "algorithm": "ed25519",
+                                    "public_key": "<base64-domain-key>",
+                                    "key_id": "<domain-key-fp>",
+                                    "created": "2026-01-01T00:00:00Z",
+                                    "expires": "2027-01-01T00:00:00Z",
+                                },
+                                "user_keys": [
+                                    {
+                                        "address": "alice@example.com",
+                                        "key_type": "encryption",
+                                        "algorithm": "pq-kyber768-x25519",
+                                        "public_key": "<base64-encryption-key>",
+                                        "key_id": "<key-fp>",
+                                        "created": "2026-01-01T00:00:00Z",
+                                        "expires": "2027-01-01T00:00:00Z",
+                                        "signatures": [],
+                                        "revocation": None,
+                                    }
+                                ],
+                                "origin_signature": {
+                                    "algorithm": "ed25519",
+                                    "key_id": "<domain-key-fp>",
+                                    "value": "<base64-domain-signature>",
+                                },
+                            },
+                            {
+                                "address": "private@semp.example",
+                                "status": "not_found",
+                                "domain": "semp.example",
+                                "domain_key": None,
+                                "user_keys": [],
+                                "origin_signature": None,
+                            },
+                            {
+                                "address": "user@legacymail.example",
+                                "status": "legacy_required",
+                                "domain": "legacymail.example",
+                                "domain_key": None,
+                                "user_keys": [],
+                                "origin_signature": None,
+                            },
+                            {
+                                "address": "ghost@nowhere.invalid",
+                                "status": "recipient_not_found",
+                                "domain": "nowhere.invalid",
+                                "domain_key": None,
+                                "user_keys": [],
+                                "origin_signature": None,
+                            },
+                            {
+                                "address": "transient@example.org",
+                                "status": "error",
+                                "domain": "example.org",
+                                "domain_key": None,
+                                "user_keys": [],
+                                "origin_signature": None,
+                                "reason": "upstream_timeout",
+                            },
+                        ],
+                    }
+                },
+                "expected": {
+                    "per_address_actions": {
+                        "alice@example.com": {
+                            "status": "found",
+                            "action": "encrypt_and_submit_semp_envelope",
+                        },
+                        "private@semp.example": {
+                            "status": "not_found",
+                            "action": (
+                                "surface_undeliverable_to_user; "
+                                "MAY_retry_after_ttl"
+                            ),
+                        },
+                        "user@legacymail.example": {
+                            "status": "legacy_required",
+                            "action": (
+                                "branch_to_legacy_fallback; "
+                                "trigger_mixed_recipient_consent_if_"
+                                "in_a_compose_with_found_recipients"
+                            ),
+                        },
+                        "ghost@nowhere.invalid": {
+                            "status": "recipient_not_found",
+                            "action": (
+                                "surface_undeliverable_to_user; "
+                                "remove_from_send"
+                            ),
+                        },
+                        "transient@example.org": {
+                            "status": "error",
+                            "action": "MAY_retry_with_backoff",
+                        },
+                    },
+                    "mixed_recipient_rule": (
+                        "When a single compose action mixes found and "
+                        "legacy_required recipients, the client MUST "
+                        "gate the entire send on the legacy consent "
+                        "prompt before submitting the SEMP envelope to "
+                        "any found recipient."
+                    ),
+                },
+            },
+            {
+                "id": "http2-url-templates",
+                "description": (
+                    "The HTTP/2 transport binding splits SEMP "
+                    "operations across HTTP methods following REST "
+                    "conventions: read-only lookups use GET with the "
+                    "address in the path, state-changing operations "
+                    "use POST. Servers MUST also accept POST on the "
+                    "lookup paths so callers requiring a signed "
+                    "request body can use them. The vector pins the "
+                    "URL templates and method choices that an HTTP/2 "
+                    "client and server are expected to implement, in "
+                    "place of the legacy single-POST-path convention."
+                ),
+                "spec_reference": (
+                    "draft-gokce-semp-handshake §14.3.2 HTTP/2; "
+                    "draft-gokce-semp-client §6.4 Recipient Key "
+                    "Request Protocol; TRANSPORT.md §4.2"
+                ),
+                "inputs": {
+                    "base_url": "https://semp.example.com",
+                    "addresses": {
+                        "alice": "alice@example.com",
+                        "bob": "bob@partitioned.example.com",
+                    },
+                },
+                "expected": {
+                    "operations": [
+                        {
+                            "operation": "discovery_lookup",
+                            "method": "GET",
+                            "path_template": "/v1/discovery/{address}",
+                            "example_url": (
+                                "https://semp.example.com/v1/"
+                                "discovery/alice@example.com"
+                            ),
+                            "alternate_method": "POST",
+                            "alternate_rationale": (
+                                "Servers MUST also accept POST on the "
+                                "same path so callers requiring a "
+                                "signed request body can use it."
+                            ),
+                        },
+                        {
+                            "operation": "key_request",
+                            "method": "GET",
+                            "path_template": "/v1/keys/{address}",
+                            "example_url": (
+                                "https://semp.example.com/v1/keys/"
+                                "alice@example.com"
+                            ),
+                            "alternate_method": "POST",
+                            "alternate_rationale": (
+                                "Servers MUST also accept POST on the "
+                                "same path so callers requiring a "
+                                "signed request body can use it."
+                            ),
+                        },
+                        {
+                            "operation": "handshake",
+                            "method": "POST",
+                            "path_template": "/v1/handshake",
+                            "example_url": (
+                                "https://semp.example.com/v1/handshake"
+                            ),
+                        },
+                        {
+                            "operation": "envelope_submit",
+                            "method": "POST",
+                            "path_template": "/v1/envelope",
+                            "example_url": (
+                                "https://semp.example.com/v1/envelope"
+                            ),
+                        },
+                        {
+                            "operation": "session_stream",
+                            "method": "GET",
+                            "path_template": "/v1/session/{id}",
+                            "example_url": (
+                                "https://semp.example.com/v1/session/"
+                                "01JTEST88888888888888888888"
+                            ),
+                            "notes": (
+                                "Long-lived server-initiated stream "
+                                "carrying Server-Sent Events."
+                            ),
+                        },
+                    ],
+                    "rejected_legacy_form": {
+                        "operation": "discovery_lookup",
+                        "method": "POST",
+                        "path": "/v1/discovery",
+                        "body_field": "address",
+                        "rationale": (
+                            "The legacy POST-only single-path "
+                            "convention is no longer the default. A "
+                            "server MAY still accept this form on "
+                            "/v1/discovery/{address} via POST per the "
+                            "alternate-method rule above, and clients "
+                            "MUST NOT rely on /v1/discovery without "
+                            "the trailing address segment."
+                        ),
+                    },
+                },
+            },
+            {
+                "id": "migration-key-fetch-redirect",
+                "description": (
+                    "When a key fetch targets an address whose home "
+                    "provider has published a migration record, the "
+                    "key response carries a migration_to field naming "
+                    "the new address and the migration record id. The "
+                    "client uses this signal to resolve the new "
+                    "address before composing an envelope. The "
+                    "redirect field is a discovery-time signal that "
+                    "complements the envelope-submission-time "
+                    "migration_notice rejection body."
+                ),
+                "spec_reference": (
+                    "draft-gokce-semp-recovery §4.4 Migration Notice "
+                    "Window; MIGRATION.md §5; "
+                    "draft-gokce-semp-client §6.4 Recipient Key "
+                    "Request Protocol"
+                ),
+                "inputs": {
+                    "key_response_json": {
+                        "type": "SEMP_KEYS",
+                        "step": "response",
+                        "version": "1.0.0",
+                        "id": "01JTEST77777777777777777777",
+                        "timestamp": "2026-05-19T20:30:00Z",
+                        "results": [
+                            {
+                                "address":
+                                    "alice@oldprovider.example",
+                                "status": "not_found",
+                                "domain": "oldprovider.example",
+                                "domain_key": None,
+                                "user_keys": [],
+                                "origin_signature": None,
+                                "migration_to": {
+                                    "new_address":
+                                        "alice@newprovider.example",
+                                    "record_id":
+                                        "01JMIGRATE000000000000000000",
+                                    "notice_window_until":
+                                        "2026-08-19T00:00:00Z",
+                                },
+                            }
+                        ],
+                    }
+                },
+                "expected": {
+                    "client_action": (
+                        "Surface migration notice to user with the new "
+                        "address and migration record id. Offer the "
+                        "user an action to update the local address "
+                        "book entry; MUST NOT silently rewrite the "
+                        "entry. Resend to new_address only after "
+                        "explicit user confirmation. MUST NOT "
+                        "auto-forward."
+                    ),
+                    "after_notice_window": (
+                        "Once notice_window_until has elapsed, the old "
+                        "provider stops returning migration_to and the "
+                        "key fetch resolves to a plain not_found, "
+                        "indistinguishable from any other non-existent "
+                        "address. The client surfaces the address as "
+                        "undeliverable."
+                    ),
                 },
             },
         ],
@@ -1023,6 +1496,72 @@ def build_extension_entries_json() -> dict:
                     "reason_code": "extension_unsupported",
                     "offending_keys": ["vendor.example.com/unknown-feature"],
                     "ignored_keys": ["semp.dev/priority"],
+                },
+            },
+            {
+                "id": "extension-definition-document-url",
+                "description": (
+                    "Extension definition documents are served at the canonical "
+                    "well-known URL form per RFC 8615. Given an extension "
+                    "identifier <host>/<name>, the definition document URL is "
+                    "derived as https://<host>/.well-known/semp-extensions/"
+                    "<name>.json. The vector pins URL derivation for both "
+                    "core (semp.dev) and vendor namespaces, and rejects the "
+                    "legacy /extensions/<name>.json shape."
+                ),
+                "spec_reference": (
+                    "draft-gokce-semp-extensions §6 (definition documents) "
+                    "and §IANA; EXTENSIONS.md §6"
+                ),
+                "samples": [
+                    {
+                        "extension_id": "semp.dev/large-attachment",
+                        "canonical_url": (
+                            "https://semp.dev/.well-known/semp-extensions/"
+                            "large-attachment.json"
+                        ),
+                        "legacy_form_rejected": (
+                            "https://semp.dev/extensions/large-attachment.json"
+                        ),
+                    },
+                    {
+                        "extension_id": "semp.dev/device-sync",
+                        "canonical_url": (
+                            "https://semp.dev/.well-known/semp-extensions/"
+                            "device-sync.json"
+                        ),
+                        "legacy_form_rejected": (
+                            "https://semp.dev/extensions/device-sync.json"
+                        ),
+                    },
+                    {
+                        "extension_id": (
+                            "vendor.example.com/custom-feature"
+                        ),
+                        "canonical_url": (
+                            "https://vendor.example.com/.well-known/"
+                            "semp-extensions/custom-feature.json"
+                        ),
+                        "legacy_form_rejected": (
+                            "https://vendor.example.com/extensions/"
+                            "custom-feature.json"
+                        ),
+                    },
+                ],
+                "expected": {
+                    "derivation_rule": (
+                        "Given extension_id = <host>/<name>, the canonical "
+                        "definition document URL is "
+                        "https://<host>/.well-known/semp-extensions/"
+                        "<name>.json. Implementations consulting an "
+                        "extension definition MUST request the canonical "
+                        "form. Servers MAY redirect legacy /extensions/ "
+                        "requests to the canonical .well-known form but "
+                        "MUST NOT publish definition documents only at the "
+                        "legacy URL."
+                    ),
+                    "fetch_method": "GET",
+                    "expected_content_type": "application/json",
                 },
             },
         ],
@@ -1286,6 +1825,127 @@ def build_delivery_status_json() -> dict:
                         "aggregate per-recipient outcomes into a single status",
                         "perform SMTP fallback for legacy_required without user confirmation",
                     ],
+                },
+            },
+            {
+                "id": "persistent-silent-counter-behavior",
+                "description": (
+                    "Behavioral scenario for the persistent silent "
+                    "counter defined in draft-gokce-semp-delivery §2.5. "
+                    "The counter is sender-side state and has no wire "
+                    "artifact. The vector enumerates how the counter "
+                    "transitions under a sequence of delivery outcomes "
+                    "and the effect on the effective delivery deadline "
+                    "for subsequent envelopes addressed to the same "
+                    "recipient. Recommended threshold is 5 consecutive "
+                    "silent outcomes observed over at least 24 hours; "
+                    "shortened deadline is 4 hours; counter MUST reset "
+                    "on any non-silent acknowledgment; counter MAY "
+                    "expire after 30 days idle."
+                ),
+                "spec_reference": (
+                    "draft-gokce-semp-delivery §2.5 Persistent Silent "
+                    "Recipients; DELIVERY.md §2.5; CONFORMANCE.md §4.6"
+                ),
+                "inputs": {
+                    "recipient_address": (
+                        "unreachable@silent.example"
+                    ),
+                    "default_effective_deadline_hours": 72,
+                    "threshold": 5,
+                    "minimum_observation_window_hours": 24,
+                    "shortened_deadline_hours": 4,
+                    "idle_expiry_days": 30,
+                },
+                "expected": {
+                    "scenario_normal_accrual": {
+                        "outcomes_observed": [
+                            "silent", "silent", "silent",
+                            "silent", "silent",
+                        ],
+                        "observation_window_hours": 30,
+                        "counter_after": 5,
+                        "threshold_reached": True,
+                        "effective_deadline_hours_for_next_send": 4,
+                        "comment": (
+                            "Threshold reached, deadline shortened "
+                            "from 72h to 4h. Counter remains at 5 for "
+                            "subsequent envelopes."
+                        ),
+                    },
+                    "scenario_window_not_satisfied": {
+                        "outcomes_observed": [
+                            "silent", "silent", "silent",
+                            "silent", "silent",
+                        ],
+                        "observation_window_hours": 2,
+                        "counter_after": 5,
+                        "threshold_reached": False,
+                        "effective_deadline_hours_for_next_send": 72,
+                        "comment": (
+                            "Five silents in only 2 hours does not "
+                            "satisfy the 24h minimum observation "
+                            "window. Deadline remains the default."
+                        ),
+                    },
+                    "scenario_reset_on_delivered": {
+                        "outcomes_observed": [
+                            "silent", "silent", "silent",
+                            "delivered",
+                        ],
+                        "counter_after": 0,
+                        "effective_deadline_hours_for_next_send": 72,
+                        "comment": (
+                            "Any non-silent acknowledgment "
+                            "(delivered or rejected) resets the "
+                            "counter to zero."
+                        ),
+                    },
+                    "scenario_reset_on_rejected": {
+                        "outcomes_observed": [
+                            "silent", "silent", "silent",
+                            "silent", "silent", "rejected",
+                        ],
+                        "counter_after": 0,
+                        "effective_deadline_hours_for_next_send": 72,
+                        "comment": (
+                            "rejected counts as non-silent for reset "
+                            "purposes. The counter resets even if "
+                            "the threshold was previously reached."
+                        ),
+                    },
+                    "scenario_idle_expiry": {
+                        "outcomes_observed": [
+                            "silent", "silent", "silent",
+                            "silent", "silent",
+                        ],
+                        "days_since_last_send": 31,
+                        "counter_after": 0,
+                        "effective_deadline_hours_for_next_send": 72,
+                        "comment": (
+                            "Counter MAY expire after the operator-"
+                            "configured idle period (RECOMMENDED 30 "
+                            "days). After expiry, the recipient "
+                            "receives the default deadline again, so "
+                            "a recipient who later changes policy "
+                            "receives unbiased retry handling."
+                        ),
+                    },
+                    "client_must_not": [
+                        "publish the counter on the wire",
+                        (
+                            "publish the counter as a trust gossip "
+                            "observation"
+                        ),
+                        "share the counter outside the sending server",
+                    ],
+                    "wire_artifact": None,
+                    "wire_artifact_note": (
+                        "Counter is sender-side state only. The only "
+                        "client-observable signal is the shortened "
+                        "effective deadline in the queue state record "
+                        "for an envelope to the same recipient."
+                    ),
                 },
             },
         ],
@@ -5454,6 +6114,9 @@ def _verify_doc(doc: dict, pub: bytes, prefix: bytes, signature_path: list[str])
 ACCOUNT_CLOSURE_PREFIX = b"SEMP-ACCOUNT-CLOSURE:"
 USER_POLICY_PREFIX = b"SEMP-USER-POLICY:"
 MIGRATION_RECORD_PREFIX = b"SEMP-MIGRATION-RECORD:"
+STATUS_PREFIX = b"SEMP-STATUS:"
+REPUTATION_REFERENCES_PREFIX = b"SEMP-REPUTATION-REFERENCES:"
+TRUST_OBSERVATION_PREFIX = b"SEMP-TRUST-OBSERVATION:"
 
 
 def build_account_closure_json() -> dict:
@@ -5539,15 +6202,23 @@ def build_user_policy_json() -> dict:
         "operations": [
             {
                 "op": "add",
-                "kind": "semp.dev/block",
+                "kind": "block",
                 "entry": {
                     "id": "01JBLOCK0000000000000000000",
                     "address": "spam@bad.example",
                 },
             },
             {
+                "op": "add",
+                "kind": "accepted_sender",
+                "entry": {
+                    "id": "01JACCEPT00000000000000000A",
+                    "address": "trusted@correspondent.example",
+                },
+            },
+            {
                 "op": "modify",
-                "kind": "semp.dev/first_contact",
+                "kind": "first_contact",
                 "entry": {"mode": "challenge"},
             },
         ],
@@ -5583,11 +6254,12 @@ def build_user_policy_json() -> dict:
                 "id": "user-policy-update-valid",
                 "description": (
                     "Pinned device key signs a SEMP_USER_POLICY update "
-                    "carrying two operations across distinct kinds (an "
-                    "add to semp.dev/block and a modify to "
-                    "semp.dev/first_contact). All operations apply "
-                    "atomically per §7.2 with respect to policy_version "
-                    "advancement."
+                    "carrying three operations across distinct core "
+                    "kinds (add to block, add to accepted_sender, "
+                    "modify to first_contact). Core kinds are "
+                    "unprefixed; only vendor-namespaced kinds carry a "
+                    "prefix. All operations apply atomically per §7.2 "
+                    "with respect to policy_version advancement."
                 ),
                 "spec_reference": "VECTORS.md §17.9; DELIVERY.md §7.2",
                 "inputs": {
@@ -5601,6 +6273,602 @@ def build_user_policy_json() -> dict:
                     "signed_update_json": signed,
                     "signature_b64": signed["signature"]["value"],
                     "signature_verifies": True,
+                },
+            },
+        ],
+    }
+
+
+def build_status_config_json() -> dict:
+    """DELIVERY.md §1.6: SEMP_STATUS configuration message signed by the
+    originating device's identity key with the SEMP-STATUS: prefix."""
+    device_seed = bytes([0x37] * 32)
+    device_pub = ed25519_pubkey_from_priv(device_seed)
+    device_fp = fingerprint_hex(device_pub)
+
+    update_pre_sign = {
+        "type": "SEMP_STATUS",
+        "version": "1.0.0",
+        "user_id": "alice@example.com",
+        "state": "away",
+        "message": "On leave until July.",
+        "until": "2026-07-01T00:00:00Z",
+        "visibility": {
+            "mode": "users",
+            "allow": [
+                {"type": "domain", "domain": "work.example.com"},
+                {"type": "user", "address": "friend@personal.example"},
+            ],
+        },
+        "updated_at": "2026-06-15T10:00:00Z",
+        "device_id": "01JDEVICE000000000000000000",
+        "signature": {
+            "algorithm": "ed25519",
+            "key_id": device_fp,
+            "value": "",
+        },
+    }
+    signed, inter = _sign_doc(
+        update_pre_sign, device_seed, STATUS_PREFIX, ["signature"]
+    )
+    assert _verify_doc(signed, device_pub, STATUS_PREFIX, ["signature"])
+
+    return {
+        "version": "1.0.0",
+        "category": "status-config",
+        "description": (
+            "DELIVERY.md §1.6.5: SEMP_STATUS configuration messages are "
+            "signed by the originating device's identity key with the "
+            "SEMP-STATUS: prefix. The home server verifies the signature, "
+            "checks that device_id is a registered device of the account, "
+            "applies the latest update by updated_at, and applies the "
+            "visibility rule at delivery time."
+        ),
+        "spec_reference": (
+            "VECTORS.md §17.9; DELIVERY.md §1.6.4-1.6.5"
+        ),
+        "construction": {
+            "domain_separation_prefix_utf8": "SEMP-STATUS:",
+            "signing_key": "originating device identity key",
+            "canonical_form": "ENVELOPE.md §4.3 with signature.value blanked",
+        },
+        "vectors": [
+            {
+                "id": "status-config-valid",
+                "description": (
+                    "Pinned device key signs a SEMP_STATUS update with "
+                    "visibility mode 'users' listing two specific peers. "
+                    "Signature MUST verify under the device's public key."
+                ),
+                "spec_reference": (
+                    "VECTORS.md §17.9; DELIVERY.md §1.6.5"
+                ),
+                "inputs": {
+                    "device_seed_hex": device_seed.hex(),
+                    "device_pub_hex": device_pub.hex(),
+                    "device_key_id": device_fp,
+                    "update_pre_sign_json": update_pre_sign,
+                },
+                "intermediates": inter,
+                "expected": {
+                    "signed_update_json": signed,
+                    "signature_b64": signed["signature"]["value"],
+                    "signature_verifies": True,
+                },
+            },
+        ],
+    }
+
+
+def build_reputation_references_json() -> dict:
+    """DELIVERY.md §12.2: SEMP_REPUTATION_REFERENCES is a domain-signed
+    index of third-party observations about this domain. The document is
+    a convenience pointer; each linked observation remains independently
+    signed by its observer and MUST be verified directly by consumers."""
+    domain_seed = bytes([0x38] * 32)
+    domain_pub = ed25519_pubkey_from_priv(domain_seed)
+    domain_fp = fingerprint_hex(domain_pub)
+
+    references_pre_sign = {
+        "type": "SEMP_REPUTATION_REFERENCES",
+        "version": "1.0.0",
+        "domain": "example.com",
+        "references": [
+            {
+                "observer": "trusted-server-1.com",
+                "uri": "https://trusted-server-1.com/v1/reputation/example.com",
+                "fetched_at": "2026-06-10T12:00:00Z",
+                "assessment": "trusted",
+            },
+            {
+                "observer": "large-provider.net",
+                "uri": "https://large-provider.net/reputation/example.com",
+                "fetched_at": "2026-06-10T11:30:00Z",
+                "assessment": "trusted",
+            },
+        ],
+        "timestamp": "2026-06-10T20:00:00Z",
+        "signature": {
+            "algorithm": "ed25519",
+            "key_id": domain_fp,
+            "value": "",
+        },
+    }
+    signed, inter = _sign_doc(
+        references_pre_sign, domain_seed, REPUTATION_REFERENCES_PREFIX, ["signature"]
+    )
+    assert _verify_doc(signed, domain_pub, REPUTATION_REFERENCES_PREFIX, ["signature"])
+
+    return {
+        "version": "1.0.0",
+        "category": "reputation-references",
+        "description": (
+            "DELIVERY.md §12.2: SEMP_REPUTATION_REFERENCES is the "
+            "subject domain's curated index of third-party observation "
+            "URIs. The document is signed by the subject domain key with "
+            "the SEMP-REPUTATION-REFERENCES: prefix, but the document is "
+            "NOT a reputation claim. A consumer MUST fetch each referenced "
+            "observation and verify its observer-domain signature "
+            "independently. The subject's signature only authenticates "
+            "the index, not the observations it points at."
+        ),
+        "spec_reference": (
+            "VECTORS.md §17.9; DELIVERY.md §12.2"
+        ),
+        "construction": {
+            "domain_separation_prefix_utf8": "SEMP-REPUTATION-REFERENCES:",
+            "signing_key": "subject domain signing key",
+            "canonical_form": "ENVELOPE.md §4.3 with signature.value blanked",
+            "trust_model": (
+                "Subject signs the index. Each referenced URI points at "
+                "an observation that is signed by its observer's own "
+                "domain key; consumers verify those signatures directly. "
+                "The subject cannot forge an observation's content."
+            ),
+        },
+        "vectors": [
+            {
+                "id": "reputation-references-valid",
+                "description": (
+                    "Pinned subject domain key signs a SEMP_REPUTATION_"
+                    "REFERENCES document listing two third-party observer "
+                    "URIs with cached assessment hints. Signature MUST "
+                    "verify under the subject's domain public key."
+                ),
+                "spec_reference": (
+                    "VECTORS.md §17.9; DELIVERY.md §12.2"
+                ),
+                "inputs": {
+                    "domain_seed_hex": domain_seed.hex(),
+                    "domain_pub_hex": domain_pub.hex(),
+                    "domain_key_id": domain_fp,
+                    "references_pre_sign_json": references_pre_sign,
+                },
+                "intermediates": inter,
+                "expected": {
+                    "signed_references_json": signed,
+                    "signature_b64": signed["signature"]["value"],
+                    "signature_verifies": True,
+                },
+            },
+        ],
+    }
+
+
+def build_trust_observation_json() -> dict:
+    """DELIVERY.md §11: SEMP_TRUST_OBSERVATION carrying evidence_hash that
+    binds fetched evidence bytes to the signed observation."""
+    observer_seed = bytes([0x39] * 32)
+    observer_pub = ed25519_pubkey_from_priv(observer_seed)
+    observer_fp = fingerprint_hex(observer_pub)
+
+    # The evidence bytes the observer's evidence_uri serves. The
+    # observation carries SHA-256 of these bytes in evidence_hash.
+    evidence_bytes = (
+        b'{"type":"SEMP_ABUSE_EVIDENCE","version":"1.0.0",'
+        b'"subject":"observed-domain.com","observation_id":'
+        b'"observation-ulid","evidence_records":[]}'
+    )
+    evidence_digest = hashlib.sha256(evidence_bytes).digest()
+    evidence_digest_b64 = base64.b64encode(evidence_digest).decode("ascii")
+
+    observation_pre_sign = {
+        "type": "SEMP_TRUST_OBSERVATION",
+        "version": "1.0.0",
+        "id": "01JOBSERVATION0000000000000",
+        "observer": "reporting-server.com",
+        "subject": "observed-domain.com",
+        "kind": "abuse_rate",
+        "window": {
+            "start": "2026-05-01T00:00:00Z",
+            "end": "2026-06-01T00:00:00Z",
+        },
+        "metrics": {
+            "envelopes_received": 16384,
+            "envelopes_rejected": 32,
+            "abuse_reports": 8,
+            "abuse_categories": ["spam", "phishing"],
+            "unique_senders_observed": 512,
+            "handshakes_completed": 1024,
+            "handshakes_rejected": 16,
+        },
+        "assessment": "neutral",
+        "evidence_available": True,
+        "evidence_uri":
+            "https://reporting-server.com/v1/reputation/evidence/observed-domain.com",
+        "evidence_hash": {
+            "algorithm": "sha-256",
+            "value": evidence_digest_b64,
+        },
+        "timestamp": "2026-06-01T12:00:00Z",
+        "expires": "2026-07-01T12:00:00Z",
+        "signature": {
+            "algorithm": "ed25519",
+            "key_id": observer_fp,
+            "value": "",
+        },
+        "extensions": {},
+    }
+    signed, inter = _sign_doc(
+        observation_pre_sign, observer_seed, TRUST_OBSERVATION_PREFIX, ["signature"]
+    )
+    assert _verify_doc(signed, observer_pub, TRUST_OBSERVATION_PREFIX, ["signature"])
+
+    # Demonstrate the evidence-hash binding: fetched bytes that hash to
+    # the published evidence_hash.value pass; tampered bytes fail.
+    tampered_bytes = evidence_bytes + b"X"
+    tampered_digest = hashlib.sha256(tampered_bytes).digest()
+    tampered_digest_b64 = base64.b64encode(tampered_digest).decode("ascii")
+
+    return {
+        "version": "1.0.0",
+        "category": "trust-observation",
+        "description": (
+            "DELIVERY.md §11: SEMP_TRUST_OBSERVATION records are signed "
+            "by the publishing observer's domain key with the "
+            "SEMP-TRUST-OBSERVATION: prefix. When evidence_available is "
+            "true, the observation MUST carry evidence_hash. A consumer "
+            "fetching evidence_uri MUST compute the digest of the "
+            "returned bytes under evidence_hash.algorithm and treat a "
+            "mismatch as a verification failure equivalent to a "
+            "signature failure."
+        ),
+        "spec_reference": (
+            "VECTORS.md §17.9; DELIVERY.md §11.1-11.2"
+        ),
+        "construction": {
+            "domain_separation_prefix_utf8": "SEMP-TRUST-OBSERVATION:",
+            "signing_key": "publishing observer's domain signing key",
+            "canonical_form": "ENVELOPE.md §4.3 with signature.value blanked",
+            "evidence_binding": (
+                "evidence_hash.value is the base64-encoded digest of the "
+                "exact bytes served at evidence_uri. The hash is covered "
+                "by the observation's signature, so the observer commits "
+                "to a specific evidence payload at sign time."
+            ),
+        },
+        "vectors": [
+            {
+                "id": "trust-observation-with-evidence-hash",
+                "description": (
+                    "Pinned observer domain key signs a SEMP_TRUST_"
+                    "OBSERVATION carrying an evidence_uri and an "
+                    "evidence_hash over a pinned evidence payload. The "
+                    "observation signature MUST verify. The fetched "
+                    "evidence bytes MUST hash to the observation's "
+                    "evidence_hash.value."
+                ),
+                "spec_reference": (
+                    "VECTORS.md §17.9; DELIVERY.md §11.2"
+                ),
+                "inputs": {
+                    "observer_seed_hex": observer_seed.hex(),
+                    "observer_pub_hex": observer_pub.hex(),
+                    "observer_key_id": observer_fp,
+                    "evidence_bytes_hex": evidence_bytes.hex(),
+                    "observation_pre_sign_json": observation_pre_sign,
+                },
+                "intermediates": inter,
+                "expected": {
+                    "signed_observation_json": signed,
+                    "signature_b64": signed["signature"]["value"],
+                    "signature_verifies": True,
+                    "evidence_digest_b64": evidence_digest_b64,
+                    "fetched_bytes_hash_matches": True,
+                },
+            },
+            {
+                "id": "trust-observation-evidence-hash-mismatch",
+                "description": (
+                    "Negative case: same observation as above, but the "
+                    "fetched evidence bytes are tampered (one byte "
+                    "appended). The consumer's recomputed digest differs "
+                    "from evidence_hash.value. The observation MUST be "
+                    "treated as a verification failure equivalent to a "
+                    "signature failure."
+                ),
+                "spec_reference": (
+                    "VECTORS.md §17.9; DELIVERY.md §11.2"
+                ),
+                "inputs": {
+                    "observer_key_id": observer_fp,
+                    "published_evidence_hash_value_b64": evidence_digest_b64,
+                    "tampered_bytes_hex": tampered_bytes.hex(),
+                },
+                "expected": {
+                    "tampered_digest_b64": tampered_digest_b64,
+                    "fetched_bytes_hash_matches": False,
+                    "consumer_action": (
+                        "Treat the observation as unverified; do not "
+                        "use it in delivery decisions. The consumer MAY "
+                        "publish an observation_record_abuse report "
+                        "against the observer per DELIVERY.md §10."
+                    ),
+                },
+            },
+            {
+                "id": "trust-observation-size-cap-rejection",
+                "description": (
+                    "Schema-limit negative case. An observation record "
+                    "on the wire MUST NOT exceed 16384 bytes (16 KiB) "
+                    "in canonical UTF-8 JSON form. Servers MUST reject "
+                    "larger records as malformed and MUST NOT propagate "
+                    "them. Senders MAY publish an "
+                    "observation_record_abuse report against publishers "
+                    "that systematically violate the cap."
+                ),
+                "spec_reference": (
+                    "draft-gokce-semp-delivery §11.2"
+                ),
+                "inputs": {
+                    "byte_cap": 16384,
+                    "scenario_summary": (
+                        "Publisher submits an observation whose canonical "
+                        "UTF-8 JSON encoding exceeds 16384 bytes (for "
+                        "example, by inflating extensions or padding "
+                        "abuse_categories)."
+                    ),
+                },
+                "expected": {
+                    "consumer_action": (
+                        "Reject the record as malformed. Do not "
+                        "propagate to peers. Do not count toward any "
+                        "reputation calculation. Optionally publish an "
+                        "observation_record_abuse report against the "
+                        "publisher per DELIVERY.md §10 if the violation "
+                        "is systematic."
+                    ),
+                    "abuse_report_category": "observation_record_abuse",
+                },
+            },
+        ],
+    }
+
+
+def build_validation_failures_json() -> dict:
+    """draft-gokce-semp-extensions §3.9.3: extension_unsupported
+    rejection with the multi-error `errors` array form."""
+    # Two distinct extensions, each failing for a different reason.
+    rejection = {
+        "type": "SEMP_ENVELOPE",
+        "step": "rejected",
+        "version": "1.0.0",
+        "reason_code": "extension_unsupported",
+        "reason": "Extension validation failed",
+        "errors": [
+            {
+                "extension": "vendor.example.com/feature1",
+                "validation_failure": "data_schema_mismatch",
+            },
+            {
+                "extension": "vendor.example.com/feature2",
+                "validation_failure": "placement_violation",
+            },
+        ],
+    }
+
+    return {
+        "version": "1.0.0",
+        "category": "validation-failures",
+        "description": (
+            "Extension validation failures are reported via the "
+            "extension_unsupported reason code with an `errors` array, "
+            "one entry per failing extension. Each entry carries the "
+            "failing extension identifier and a validation_failure "
+            "diagnostic. Implementations MAY stop validation at the "
+            "first failure and report a single-entry array, or "
+            "continue and report all failures."
+        ),
+        "spec_reference": (
+            "VECTORS.md §13; draft-gokce-semp-extensions §3.9.3"
+        ),
+        "vectors": [
+            {
+                "id": "validation-failures-errors-array-multi",
+                "description": (
+                    "Rejection of an envelope carrying two extensions "
+                    "that each fail validation for a different reason. "
+                    "The diagnostic is structured as an array so that "
+                    "multiple failures with different validation_failure "
+                    "values can be reported together."
+                ),
+                "spec_reference": (
+                    "draft-gokce-semp-extensions §3.9.3"
+                ),
+                "inputs": {
+                    "envelope_summary": (
+                        "Envelope contains two extensions, both invalid: "
+                        "feature1 carries a data shape that does not "
+                        "match its data_schema; feature2 appears in a "
+                        "layer not listed in its placement.allowed_layers."
+                    )
+                },
+                "expected": {
+                    "rejection_json": rejection,
+                    "errors_count": 2,
+                    "errors_per_extension": {
+                        "vendor.example.com/feature1":
+                            "data_schema_mismatch",
+                        "vendor.example.com/feature2":
+                            "placement_violation",
+                    },
+                    "must_reject": True,
+                },
+            },
+            {
+                "id": "validation-failures-errors-array-single",
+                "description": (
+                    "Single-entry array form, demonstrating that "
+                    "stop-at-first-failure implementations are also "
+                    "conformant. The array form is used uniformly; the "
+                    "array length is the only thing that varies."
+                ),
+                "spec_reference": (
+                    "draft-gokce-semp-extensions §3.9.3"
+                ),
+                "inputs": {
+                    "envelope_summary": (
+                        "Envelope contains an extension whose definition "
+                        "document signature failed to verify; the "
+                        "implementation reports a single error and stops."
+                    )
+                },
+                "expected": {
+                    "rejection_json": {
+                        "type": "SEMP_ENVELOPE",
+                        "step": "rejected",
+                        "version": "1.0.0",
+                        "reason_code": "extension_unsupported",
+                        "reason": "Extension validation failed",
+                        "errors": [
+                            {
+                                "extension":
+                                    "vendor.example.com/forged",
+                                "validation_failure":
+                                    "definition_signature_invalid",
+                            }
+                        ],
+                    },
+                    "errors_count": 1,
+                    "must_reject": True,
+                },
+            },
+        ],
+    }
+
+
+def build_migration_notice_json() -> dict:
+    """draft-gokce-semp-delivery §6.6: in-window migration_notice
+    rejection body served by the old provider during the migration
+    notice window."""
+    in_window_rejection = {
+        "type": "SEMP_ENVELOPE",
+        "step": "rejected",
+        "version": "1.0.0",
+        "reason_code": "policy_forbidden",
+        "reason": "Recipient has migrated.",
+        "migration_notice": {
+            "new_address": "alice@new.example",
+            "migration_record_id": "01JMIGRATION0000000000000000",
+            "migration_record_url":
+                "https://new.example/.well-known/semp/migration/"
+                "01JMIGRATION0000000000000000",
+        },
+    }
+
+    post_window_rejection = {
+        "type": "SEMP_ENVELOPE",
+        "step": "rejected",
+        "version": "1.0.0",
+        "reason_code": "policy_forbidden",
+        "reason": "Address not found.",
+    }
+
+    return {
+        "version": "1.0.0",
+        "category": "migration-notice",
+        "description": (
+            "During the cooperative migration notice window (from "
+            "migrated_at to notice_window_until), the old provider "
+            "MUST reject envelopes addressed to the old address with "
+            "policy_forbidden and include a migration_notice body. "
+            "After notice_window_until, the old provider MUST stop "
+            "returning the migration notice; envelopes are handled "
+            "the same way non-existent addresses are handled, with no "
+            "migration-specific body. The two rejections are "
+            "indistinguishable in shape and reason_code; only the "
+            "presence of the migration_notice body separates them."
+        ),
+        "spec_reference": (
+            "draft-gokce-semp-delivery §6.6; "
+            "draft-gokce-semp-recovery §4.4"
+        ),
+        "vectors": [
+            {
+                "id": "migration-notice-during-window",
+                "description": (
+                    "In-window rejection. The sender receives "
+                    "policy_forbidden plus a migration_notice body "
+                    "containing the new address, the migration record "
+                    "ID, and a URL where the full migration record "
+                    "can be fetched for verification. The sender MUST "
+                    "verify the migration record (four-signature chain "
+                    "per MIGRATION.md §3.3) before re-sending to the "
+                    "new address."
+                ),
+                "spec_reference": (
+                    "draft-gokce-semp-recovery §4.4"
+                ),
+                "inputs": {
+                    "old_provider_state": "within notice_window_until",
+                    "migrated_at": "2026-04-18T12:00:00Z",
+                    "notice_window_until": "2026-10-15T12:00:00Z",
+                },
+                "expected": {
+                    "rejection_json": in_window_rejection,
+                    "sender_action": (
+                        "Verify the migration record (fetch from "
+                        "migration_record_url, run the four-signature "
+                        "chain verification). Update the addressbook. "
+                        "Compose a fresh envelope sealed to "
+                        "alice@new.example using that domain's "
+                        "current keys. Do NOT re-submit the original "
+                        "envelope unchanged."
+                    ),
+                },
+            },
+            {
+                "id": "migration-notice-after-window",
+                "description": (
+                    "Post-window rejection. The old provider has "
+                    "stopped offering the migration notice. The "
+                    "envelope receives the same policy_forbidden "
+                    "response that any non-existent address receives, "
+                    "with no migration-specific body. This preserves "
+                    "address-enumeration resistance after the notice "
+                    "window closes."
+                ),
+                "spec_reference": (
+                    "draft-gokce-semp-recovery §4.4"
+                ),
+                "inputs": {
+                    "old_provider_state": (
+                        "after notice_window_until"
+                    ),
+                    "notice_window_until": "2026-10-15T12:00:00Z",
+                    "current_time": "2026-12-01T00:00:00Z",
+                },
+                "expected": {
+                    "rejection_json": post_window_rejection,
+                    "migration_notice_absent": True,
+                    "sender_action": (
+                        "Treat as non-existent address. Senders that "
+                        "still wish to discover the new address can "
+                        "fetch the migration_to field from the old "
+                        "provider's key endpoint while the migration "
+                        "record is still published (minimum 2 years "
+                        "from migrated_at)."
+                    ),
                 },
             },
         ],
@@ -5639,7 +6907,7 @@ def build_migration_json() -> dict:
         "new_identity_key_id": new_id_fp,
         "new_identity_public_key": base64.b64encode(new_id_pub).decode("ascii"),
         "migrated_at": "2026-04-18T12:00:00Z",
-        "forwarding_window_until": "2026-10-15T12:00:00Z",
+        "notice_window_until": "2026-10-15T12:00:00Z",
         "mode": "cooperative",
         "old_identity_signature": {"algorithm": "ed25519", "key_id": old_id_fp, "value": ""},
         "new_identity_signature": {"algorithm": "ed25519", "key_id": new_id_fp, "value": ""},
@@ -6558,6 +7826,11 @@ def main() -> int:
         (OUTDIR / "handshake-messages.json", build_handshake_messages_json()),
         (OUTDIR / "account-closure.json", build_account_closure_json()),
         (OUTDIR / "user-policy.json", build_user_policy_json()),
+        (OUTDIR / "status-config.json", build_status_config_json()),
+        (OUTDIR / "reputation-references.json", build_reputation_references_json()),
+        (OUTDIR / "trust-observation.json", build_trust_observation_json()),
+        (OUTDIR / "validation-failures.json", build_validation_failures_json()),
+        (OUTDIR / "migration-notice.json", build_migration_notice_json()),
         (OUTDIR / "migration.json", build_migration_json()),
         (OUTDIR / "discovery-signed.json", build_discovery_signed_json()),
         (OUTDIR / "transparency.json", build_transparency_json()),

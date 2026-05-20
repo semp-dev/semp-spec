@@ -1,0 +1,143 @@
+{
+  "version": "1.0.0",
+  "category": "trust-observation",
+  "description": "DELIVERY.md §11: SEMP_TRUST_OBSERVATION records are signed by the publishing observer's domain key with the SEMP-TRUST-OBSERVATION: prefix. When evidence_available is true, the observation MUST carry evidence_hash. A consumer fetching evidence_uri MUST compute the digest of the returned bytes under evidence_hash.algorithm and treat a mismatch as a verification failure equivalent to a signature failure.",
+  "spec_reference": "VECTORS.md §17.9; DELIVERY.md §11.1-11.2",
+  "construction": {
+    "domain_separation_prefix_utf8": "SEMP-TRUST-OBSERVATION:",
+    "signing_key": "publishing observer's domain signing key",
+    "canonical_form": "ENVELOPE.md §4.3 with signature.value blanked",
+    "evidence_binding": "evidence_hash.value is the base64-encoded digest of the exact bytes served at evidence_uri. The hash is covered by the observation's signature, so the observer commits to a specific evidence payload at sign time."
+  },
+  "vectors": [
+    {
+      "id": "trust-observation-with-evidence-hash",
+      "description": "Pinned observer domain key signs a SEMP_TRUST_OBSERVATION carrying an evidence_uri and an evidence_hash over a pinned evidence payload. The observation signature MUST verify. The fetched evidence bytes MUST hash to the observation's evidence_hash.value.",
+      "spec_reference": "VECTORS.md §17.9; DELIVERY.md §11.2",
+      "inputs": {
+        "observer_seed_hex": "3939393939393939393939393939393939393939393939393939393939393939",
+        "observer_pub_hex": "2f0a7b29f53652005cd4720a3fe7acd08c85a4e29cd6f48d1905e276dac6ffef",
+        "observer_key_id": "0429a26ab56dacbe3a4aae55330c64cf0a04b4c4c1a0bdc3838aa59220ca7c87",
+        "evidence_bytes_hex": "7b2274797065223a2253454d505f41425553455f45564944454e4345222c2276657273696f6e223a22312e302e30222c227375626a656374223a226f627365727665642d646f6d61696e2e636f6d222c226f62736572766174696f6e5f6964223a226f62736572766174696f6e2d756c6964222c2265766964656e63655f7265636f726473223a5b5d7d",
+        "observation_pre_sign_json": {
+          "type": "SEMP_TRUST_OBSERVATION",
+          "version": "1.0.0",
+          "id": "01JOBSERVATION0000000000000",
+          "observer": "reporting-server.com",
+          "subject": "observed-domain.com",
+          "kind": "abuse_rate",
+          "window": {
+            "start": "2026-05-01T00:00:00Z",
+            "end": "2026-06-01T00:00:00Z"
+          },
+          "metrics": {
+            "envelopes_received": 16384,
+            "envelopes_rejected": 32,
+            "abuse_reports": 8,
+            "abuse_categories": [
+              "spam",
+              "phishing"
+            ],
+            "unique_senders_observed": 512,
+            "handshakes_completed": 1024,
+            "handshakes_rejected": 16
+          },
+          "assessment": "neutral",
+          "evidence_available": true,
+          "evidence_uri": "https://reporting-server.com/v1/reputation/evidence/observed-domain.com",
+          "evidence_hash": {
+            "algorithm": "sha-256",
+            "value": "uJaUny6lMGETavg9U5W249YxIrgsDXw+iHU6/LkRIMg="
+          },
+          "timestamp": "2026-06-01T12:00:00Z",
+          "expires": "2026-07-01T12:00:00Z",
+          "signature": {
+            "algorithm": "ed25519",
+            "key_id": "0429a26ab56dacbe3a4aae55330c64cf0a04b4c4c1a0bdc3838aa59220ca7c87",
+            "value": ""
+          },
+          "extensions": {}
+        }
+      },
+      "intermediates": {
+        "canonical_with_blanked_signature_utf8": "{\"assessment\":\"neutral\",\"evidence_available\":true,\"evidence_hash\":{\"algorithm\":\"sha-256\",\"value\":\"uJaUny6lMGETavg9U5W249YxIrgsDXw+iHU6/LkRIMg=\"},\"evidence_uri\":\"https://reporting-server.com/v1/reputation/evidence/observed-domain.com\",\"expires\":\"2026-07-01T12:00:00Z\",\"extensions\":{},\"id\":\"01JOBSERVATION0000000000000\",\"kind\":\"abuse_rate\",\"metrics\":{\"abuse_categories\":[\"spam\",\"phishing\"],\"abuse_reports\":8,\"envelopes_received\":16384,\"envelopes_rejected\":32,\"handshakes_completed\":1024,\"handshakes_rejected\":16,\"unique_senders_observed\":512},\"observer\":\"reporting-server.com\",\"signature\":{\"algorithm\":\"ed25519\",\"key_id\":\"0429a26ab56dacbe3a4aae55330c64cf0a04b4c4c1a0bdc3838aa59220ca7c87\",\"value\":\"\"},\"subject\":\"observed-domain.com\",\"timestamp\":\"2026-06-01T12:00:00Z\",\"type\":\"SEMP_TRUST_OBSERVATION\",\"version\":\"1.0.0\",\"window\":{\"end\":\"2026-06-01T00:00:00Z\",\"start\":\"2026-05-01T00:00:00Z\"}}",
+        "signing_input_prefix_utf8": "SEMP-TRUST-OBSERVATION:",
+        "signing_input_hex": "53454d502d54525553542d4f42534552564154494f4e3a7b226173736573736d656e74223a226e65757472616c222c2265766964656e63655f617661696c61626c65223a747275652c2265766964656e63655f68617368223a7b22616c676f726974686d223a227368612d323536222c2276616c7565223a22754a61556e79366c4d474554617667395535573234395978497267734458772b694855362f4c6b52494d673d227d2c2265766964656e63655f757269223a2268747470733a2f2f7265706f7274696e672d7365727665722e636f6d2f76312f72657075746174696f6e2f65766964656e63652f6f627365727665642d646f6d61696e2e636f6d222c2265787069726573223a22323032362d30372d30315431323a30303a30305a222c22657874656e73696f6e73223a7b7d2c226964223a2230314a4f42534552564154494f4e30303030303030303030303030222c226b696e64223a2261627573655f72617465222c226d657472696373223a7b2261627573655f63617465676f72696573223a5b227370616d222c227068697368696e67225d2c2261627573655f7265706f727473223a382c22656e76656c6f7065735f7265636569766564223a31363338342c22656e76656c6f7065735f72656a6563746564223a33322c2268616e647368616b65735f636f6d706c65746564223a313032342c2268616e647368616b65735f72656a6563746564223a31362c22756e697175655f73656e646572735f6f62736572766564223a3531327d2c226f62736572766572223a227265706f7274696e672d7365727665722e636f6d222c227369676e6174757265223a7b22616c676f726974686d223a2265643235353139222c226b65795f6964223a2230343239613236616235366461636265336134616165353533333063363463663061303462346334633161306264633338333861613539323230636137633837222c2276616c7565223a22227d2c227375626a656374223a226f627365727665642d646f6d61696e2e636f6d222c2274696d657374616d70223a22323032362d30362d30315431323a30303a30305a222c2274797065223a2253454d505f54525553545f4f42534552564154494f4e222c2276657273696f6e223a22312e302e30222c2277696e646f77223a7b22656e64223a22323032362d30362d30315430303a30303a30305a222c227374617274223a22323032362d30352d30315430303a30303a30305a227d7d",
+        "signature_hex": "9527cd5388f6150ea9028d7fd4f2c75076273e3c0b1e2fe7af25591eea5f9e4de67c8fea064b86f421fec3a687e1da969eb6cf08b3bae0062b947c4b0d96750b"
+      },
+      "expected": {
+        "signed_observation_json": {
+          "type": "SEMP_TRUST_OBSERVATION",
+          "version": "1.0.0",
+          "id": "01JOBSERVATION0000000000000",
+          "observer": "reporting-server.com",
+          "subject": "observed-domain.com",
+          "kind": "abuse_rate",
+          "window": {
+            "start": "2026-05-01T00:00:00Z",
+            "end": "2026-06-01T00:00:00Z"
+          },
+          "metrics": {
+            "envelopes_received": 16384,
+            "envelopes_rejected": 32,
+            "abuse_reports": 8,
+            "abuse_categories": [
+              "spam",
+              "phishing"
+            ],
+            "unique_senders_observed": 512,
+            "handshakes_completed": 1024,
+            "handshakes_rejected": 16
+          },
+          "assessment": "neutral",
+          "evidence_available": true,
+          "evidence_uri": "https://reporting-server.com/v1/reputation/evidence/observed-domain.com",
+          "evidence_hash": {
+            "algorithm": "sha-256",
+            "value": "uJaUny6lMGETavg9U5W249YxIrgsDXw+iHU6/LkRIMg="
+          },
+          "timestamp": "2026-06-01T12:00:00Z",
+          "expires": "2026-07-01T12:00:00Z",
+          "signature": {
+            "algorithm": "ed25519",
+            "key_id": "0429a26ab56dacbe3a4aae55330c64cf0a04b4c4c1a0bdc3838aa59220ca7c87",
+            "value": "lSfNU4j2FQ6pAo1/1PLHUHYnPjwLHi/nryVZHupfnk3mfI/qBkuG9CH+w6aH4dqWnrbPCLO64AYrlHxLDZZ1Cw=="
+          },
+          "extensions": {}
+        },
+        "signature_b64": "lSfNU4j2FQ6pAo1/1PLHUHYnPjwLHi/nryVZHupfnk3mfI/qBkuG9CH+w6aH4dqWnrbPCLO64AYrlHxLDZZ1Cw==",
+        "signature_verifies": true,
+        "evidence_digest_b64": "uJaUny6lMGETavg9U5W249YxIrgsDXw+iHU6/LkRIMg=",
+        "fetched_bytes_hash_matches": true
+      }
+    },
+    {
+      "id": "trust-observation-evidence-hash-mismatch",
+      "description": "Negative case: same observation as above, but the fetched evidence bytes are tampered (one byte appended). The consumer's recomputed digest differs from evidence_hash.value. The observation MUST be treated as a verification failure equivalent to a signature failure.",
+      "spec_reference": "VECTORS.md §17.9; DELIVERY.md §11.2",
+      "inputs": {
+        "observer_key_id": "0429a26ab56dacbe3a4aae55330c64cf0a04b4c4c1a0bdc3838aa59220ca7c87",
+        "published_evidence_hash_value_b64": "uJaUny6lMGETavg9U5W249YxIrgsDXw+iHU6/LkRIMg=",
+        "tampered_bytes_hex": "7b2274797065223a2253454d505f41425553455f45564944454e4345222c2276657273696f6e223a22312e302e30222c227375626a656374223a226f627365727665642d646f6d61696e2e636f6d222c226f62736572766174696f6e5f6964223a226f62736572766174696f6e2d756c6964222c2265766964656e63655f7265636f726473223a5b5d7d58"
+      },
+      "expected": {
+        "tampered_digest_b64": "at0G4Pyo+ql5HIcvj4O9zCmdjUAvdrTyQSvcPlkcxAo=",
+        "fetched_bytes_hash_matches": false,
+        "consumer_action": "Treat the observation as unverified; do not use it in delivery decisions. The consumer MAY publish an observation_record_abuse report against the observer per DELIVERY.md §10."
+      }
+    },
+    {
+      "id": "trust-observation-size-cap-rejection",
+      "description": "Schema-limit negative case. An observation record on the wire MUST NOT exceed 16384 bytes (16 KiB) in canonical UTF-8 JSON form. Servers MUST reject larger records as malformed and MUST NOT propagate them. Senders MAY publish an observation_record_abuse report against publishers that systematically violate the cap.",
+      "spec_reference": "draft-gokce-semp-delivery §11.2",
+      "inputs": {
+        "byte_cap": 16384,
+        "scenario_summary": "Publisher submits an observation whose canonical UTF-8 JSON encoding exceeds 16384 bytes (for example, by inflating extensions or padding abuse_categories)."
+      },
+      "expected": {
+        "consumer_action": "Reject the record as malformed. Do not propagate to peers. Do not count toward any reputation calculation. Optionally publish an observation_record_abuse report against the publisher per DELIVERY.md §10 if the violation is systematic.",
+        "abuse_report_category": "observation_record_abuse"
+      }
+    }
+  ]
+}

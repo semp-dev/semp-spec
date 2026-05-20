@@ -1,0 +1,89 @@
+{
+  "version": "1.0.0",
+  "category": "status-config",
+  "description": "DELIVERY.md §1.6.5: SEMP_STATUS configuration messages are signed by the originating device's identity key with the SEMP-STATUS: prefix. The home server verifies the signature, checks that device_id is a registered device of the account, applies the latest update by updated_at, and applies the visibility rule at delivery time.",
+  "spec_reference": "VECTORS.md §17.9; DELIVERY.md §1.6.4-1.6.5",
+  "construction": {
+    "domain_separation_prefix_utf8": "SEMP-STATUS:",
+    "signing_key": "originating device identity key",
+    "canonical_form": "ENVELOPE.md §4.3 with signature.value blanked"
+  },
+  "vectors": [
+    {
+      "id": "status-config-valid",
+      "description": "Pinned device key signs a SEMP_STATUS update with visibility mode 'users' listing two specific peers. Signature MUST verify under the device's public key.",
+      "spec_reference": "VECTORS.md §17.9; DELIVERY.md §1.6.5",
+      "inputs": {
+        "device_seed_hex": "3737373737373737373737373737373737373737373737373737373737373737",
+        "device_pub_hex": "2c848ad8664ee651e4896c13a84a89a2964aca5eb77a8b881e60ded5c81b4e9d",
+        "device_key_id": "6473da00b0eff640d08de3eacd3d2dd172d9e415814bb882f912eaa8ec770eb1",
+        "update_pre_sign_json": {
+          "type": "SEMP_STATUS",
+          "version": "1.0.0",
+          "user_id": "alice@example.com",
+          "state": "away",
+          "message": "On leave until July.",
+          "until": "2026-07-01T00:00:00Z",
+          "visibility": {
+            "mode": "users",
+            "allow": [
+              {
+                "type": "domain",
+                "domain": "work.example.com"
+              },
+              {
+                "type": "user",
+                "address": "friend@personal.example"
+              }
+            ]
+          },
+          "updated_at": "2026-06-15T10:00:00Z",
+          "device_id": "01JDEVICE000000000000000000",
+          "signature": {
+            "algorithm": "ed25519",
+            "key_id": "6473da00b0eff640d08de3eacd3d2dd172d9e415814bb882f912eaa8ec770eb1",
+            "value": ""
+          }
+        }
+      },
+      "intermediates": {
+        "canonical_with_blanked_signature_utf8": "{\"device_id\":\"01JDEVICE000000000000000000\",\"message\":\"On leave until July.\",\"signature\":{\"algorithm\":\"ed25519\",\"key_id\":\"6473da00b0eff640d08de3eacd3d2dd172d9e415814bb882f912eaa8ec770eb1\",\"value\":\"\"},\"state\":\"away\",\"type\":\"SEMP_STATUS\",\"until\":\"2026-07-01T00:00:00Z\",\"updated_at\":\"2026-06-15T10:00:00Z\",\"user_id\":\"alice@example.com\",\"version\":\"1.0.0\",\"visibility\":{\"allow\":[{\"domain\":\"work.example.com\",\"type\":\"domain\"},{\"address\":\"friend@personal.example\",\"type\":\"user\"}],\"mode\":\"users\"}}",
+        "signing_input_prefix_utf8": "SEMP-STATUS:",
+        "signing_input_hex": "53454d502d5354415455533a7b226465766963655f6964223a2230314a444556494345303030303030303030303030303030303030222c226d657373616765223a224f6e206c6561766520756e74696c204a756c792e222c227369676e6174757265223a7b22616c676f726974686d223a2265643235353139222c226b65795f6964223a2236343733646130306230656666363430643038646533656163643364326464313732643965343135383134626238383266393132656161386563373730656231222c2276616c7565223a22227d2c227374617465223a2261776179222c2274797065223a2253454d505f535441545553222c22756e74696c223a22323032362d30372d30315430303a30303a30305a222c22757064617465645f6174223a22323032362d30362d31355431303a30303a30305a222c22757365725f6964223a22616c696365406578616d706c652e636f6d222c2276657273696f6e223a22312e302e30222c227669736962696c697479223a7b22616c6c6f77223a5b7b22646f6d61696e223a22776f726b2e6578616d706c652e636f6d222c2274797065223a22646f6d61696e227d2c7b2261646472657373223a22667269656e6440706572736f6e616c2e6578616d706c65222c2274797065223a2275736572227d5d2c226d6f6465223a227573657273227d7d",
+        "signature_hex": "a2e1477185dbf4bcf03426a8c992b867eefd483de959129260e191cde38fe1a84fdb301a90bd5304035d8e3b37defbed56eedd8cbcedab26886596b0828fbe03"
+      },
+      "expected": {
+        "signed_update_json": {
+          "type": "SEMP_STATUS",
+          "version": "1.0.0",
+          "user_id": "alice@example.com",
+          "state": "away",
+          "message": "On leave until July.",
+          "until": "2026-07-01T00:00:00Z",
+          "visibility": {
+            "mode": "users",
+            "allow": [
+              {
+                "type": "domain",
+                "domain": "work.example.com"
+              },
+              {
+                "type": "user",
+                "address": "friend@personal.example"
+              }
+            ]
+          },
+          "updated_at": "2026-06-15T10:00:00Z",
+          "device_id": "01JDEVICE000000000000000000",
+          "signature": {
+            "algorithm": "ed25519",
+            "key_id": "6473da00b0eff640d08de3eacd3d2dd172d9e415814bb882f912eaa8ec770eb1",
+            "value": "ouFHcYXb9LzwNCaoyZK4Z+79SD3pWRKSYOGRzeOP4ahP2zAakL1TBANdjjs33vvtVu7djLztqyaIZZawgo++Aw=="
+          }
+        },
+        "signature_b64": "ouFHcYXb9LzwNCaoyZK4Z+79SD3pWRKSYOGRzeOP4ahP2zAakL1TBANdjjs33vvtVu7djLztqyaIZZawgo++Aw==",
+        "signature_verifies": true
+      }
+    }
+  ]
+}

@@ -1,8 +1,8 @@
 {
   "version": "1.0.0",
   "category": "delivery-status",
-  "description": "Mapping from server acknowledgments and discovery outcomes to client UI state and submission status, including multi-recipient mixed outcomes. Source of truth: VECTORS.md §10 and §11.",
-  "spec_reference": "VECTORS.md §10, §11; DELIVERY.md §1.4; CLIENT.md §6.3, §7.1; DISCOVERY.md §7.1",
+  "description": "Mapping from per-recipient submission status (sender-side classification carried in the SEMP_SUBMISSION response) and discovery outcomes to client UI state, including multi-recipient mixed outcomes. Source of truth: VECTORS.md §10 and §11.",
+  "spec_reference": "VECTORS.md §10, §11; DELIVERY.md §1; CLIENT.md §6.3, §7.1; DISCOVERY.md §7.1",
   "vectors": [
     {
       "id": "submission-status-to-ui-state",
@@ -122,6 +122,93 @@
           "aggregate per-recipient outcomes into a single status",
           "perform SMTP fallback for legacy_required without user confirmation"
         ]
+      }
+    },
+    {
+      "id": "persistent-silent-counter-behavior",
+      "description": "Behavioral scenario for the persistent silent counter defined in draft-gokce-semp-delivery §2.5. The counter is sender-side state and has no wire artifact. The vector enumerates how the counter transitions under a sequence of delivery outcomes and the effect on the effective delivery deadline for subsequent envelopes addressed to the same recipient. Recommended threshold is 5 consecutive silent outcomes observed over at least 24 hours; shortened deadline is 4 hours; counter MUST reset on any non-silent acknowledgment; counter MAY expire after 30 days idle.",
+      "spec_reference": "draft-gokce-semp-delivery §2.5 Persistent Silent Recipients; DELIVERY.md §2.5; CONFORMANCE.md §4.6",
+      "inputs": {
+        "recipient_address": "unreachable@silent.example",
+        "default_effective_deadline_hours": 72,
+        "threshold": 5,
+        "minimum_observation_window_hours": 24,
+        "shortened_deadline_hours": 4,
+        "idle_expiry_days": 30
+      },
+      "expected": {
+        "scenario_normal_accrual": {
+          "outcomes_observed": [
+            "silent",
+            "silent",
+            "silent",
+            "silent",
+            "silent"
+          ],
+          "observation_window_hours": 30,
+          "counter_after": 5,
+          "threshold_reached": true,
+          "effective_deadline_hours_for_next_send": 4,
+          "comment": "Threshold reached, deadline shortened from 72h to 4h. Counter remains at 5 for subsequent envelopes."
+        },
+        "scenario_window_not_satisfied": {
+          "outcomes_observed": [
+            "silent",
+            "silent",
+            "silent",
+            "silent",
+            "silent"
+          ],
+          "observation_window_hours": 2,
+          "counter_after": 5,
+          "threshold_reached": false,
+          "effective_deadline_hours_for_next_send": 72,
+          "comment": "Five silents in only 2 hours does not satisfy the 24h minimum observation window. Deadline remains the default."
+        },
+        "scenario_reset_on_delivered": {
+          "outcomes_observed": [
+            "silent",
+            "silent",
+            "silent",
+            "delivered"
+          ],
+          "counter_after": 0,
+          "effective_deadline_hours_for_next_send": 72,
+          "comment": "Any non-silent acknowledgment (delivered or rejected) resets the counter to zero."
+        },
+        "scenario_reset_on_rejected": {
+          "outcomes_observed": [
+            "silent",
+            "silent",
+            "silent",
+            "silent",
+            "silent",
+            "rejected"
+          ],
+          "counter_after": 0,
+          "effective_deadline_hours_for_next_send": 72,
+          "comment": "rejected counts as non-silent for reset purposes. The counter resets even if the threshold was previously reached."
+        },
+        "scenario_idle_expiry": {
+          "outcomes_observed": [
+            "silent",
+            "silent",
+            "silent",
+            "silent",
+            "silent"
+          ],
+          "days_since_last_send": 31,
+          "counter_after": 0,
+          "effective_deadline_hours_for_next_send": 72,
+          "comment": "Counter MAY expire after the operator-configured idle period (RECOMMENDED 30 days). After expiry, the recipient receives the default deadline again, so a recipient who later changes policy receives unbiased retry handling."
+        },
+        "client_must_not": [
+          "publish the counter on the wire",
+          "publish the counter as a trust gossip observation",
+          "share the counter outside the sending server"
+        ],
+        "wire_artifact": null,
+        "wire_artifact_note": "Counter is sender-side state only. The only client-observable signal is the shortened effective deadline in the queue state record for an envelope to the same recipient."
       }
     }
   ]

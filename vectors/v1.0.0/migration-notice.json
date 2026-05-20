@@ -1,0 +1,54 @@
+{
+  "version": "1.0.0",
+  "category": "migration-notice",
+  "description": "During the cooperative migration notice window (from migrated_at to notice_window_until), the old provider MUST reject envelopes addressed to the old address with policy_forbidden and include a migration_notice body. After notice_window_until, the old provider MUST stop returning the migration notice; envelopes are handled the same way non-existent addresses are handled, with no migration-specific body. The two rejections are indistinguishable in shape and reason_code; only the presence of the migration_notice body separates them.",
+  "spec_reference": "draft-gokce-semp-delivery §6.6; draft-gokce-semp-recovery §4.4",
+  "vectors": [
+    {
+      "id": "migration-notice-during-window",
+      "description": "In-window rejection. The sender receives policy_forbidden plus a migration_notice body containing the new address, the migration record ID, and a URL where the full migration record can be fetched for verification. The sender MUST verify the migration record (four-signature chain per MIGRATION.md §3.3) before re-sending to the new address.",
+      "spec_reference": "draft-gokce-semp-recovery §4.4",
+      "inputs": {
+        "old_provider_state": "within notice_window_until",
+        "migrated_at": "2026-04-18T12:00:00Z",
+        "notice_window_until": "2026-10-15T12:00:00Z"
+      },
+      "expected": {
+        "rejection_json": {
+          "type": "SEMP_ENVELOPE",
+          "step": "rejected",
+          "version": "1.0.0",
+          "reason_code": "policy_forbidden",
+          "reason": "Recipient has migrated.",
+          "migration_notice": {
+            "new_address": "alice@new.example",
+            "migration_record_id": "01JMIGRATION0000000000000000",
+            "migration_record_url": "https://new.example/.well-known/semp/migration/01JMIGRATION0000000000000000"
+          }
+        },
+        "sender_action": "Verify the migration record (fetch from migration_record_url, run the four-signature chain verification). Update the addressbook. Compose a fresh envelope sealed to alice@new.example using that domain's current keys. Do NOT re-submit the original envelope unchanged."
+      }
+    },
+    {
+      "id": "migration-notice-after-window",
+      "description": "Post-window rejection. The old provider has stopped offering the migration notice. The envelope receives the same policy_forbidden response that any non-existent address receives, with no migration-specific body. This preserves address-enumeration resistance after the notice window closes.",
+      "spec_reference": "draft-gokce-semp-recovery §4.4",
+      "inputs": {
+        "old_provider_state": "after notice_window_until",
+        "notice_window_until": "2026-10-15T12:00:00Z",
+        "current_time": "2026-12-01T00:00:00Z"
+      },
+      "expected": {
+        "rejection_json": {
+          "type": "SEMP_ENVELOPE",
+          "step": "rejected",
+          "version": "1.0.0",
+          "reason_code": "policy_forbidden",
+          "reason": "Address not found."
+        },
+        "migration_notice_absent": true,
+        "sender_action": "Treat as non-existent address. Senders that still wish to discover the new address can fetch the migration_to field from the old provider's key endpoint while the migration record is still published (minimum 2 years from migrated_at)."
+      }
+    }
+  ]
+}

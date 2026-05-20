@@ -63,6 +63,11 @@ Closes #
 - [ ] Citations are precise (e.g., "DELIVERY.md §3.2.5", not "the delivery doc").
 - [ ] New record schemas include a JSON example.
 
+## Internet-Draft sync
+
+- [ ] Corresponding `drafts/draft-semp-*.md` updated.
+- [ ] N/A: editorial-only change with no normative impact on the I-D series.
+
 ## Checklist
 
 - [ ] PR title is short and descriptive.

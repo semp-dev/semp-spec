@@ -4,7 +4,7 @@ This directory holds machine-readable test vectors that any SEMP implementation,
 
 These vectors are language-neutral by design. They exist for the spec, not for any one implementation. Go, TypeScript, Dart, Rust, Swift, Kotlin, or anything else — every consumer hits the same JSON contract. No SEMP implementation has any privileged status as the "ground truth"; the JSON is the contract, and the JSON is produced by the standalone Python generator under [`generators/`](generators/).
 
-The companion document [`VECTORS.md`](../VECTORS.md) at the repository root is the human-readable normative source. JSON files here MIRROR the inputs and expected outputs from `VECTORS.md` and reference the section that defines them. When the two disagree, `VECTORS.md` wins.
+The JSON files here are the executable contract. Each vector carries a `spec_reference` pointing at the normative section of the relevant draft (under [`../`](../)) that defines the operation under test. When a vector and the spec drafts disagree, the spec drafts win and the JSON is regenerated to match.
 
 ## Layout
 
@@ -30,12 +30,12 @@ Every vectors file has this top-level shape:
   "version": "1.0.0",
   "category": "hkdf",
   "description": "Single-line summary of what this file covers.",
-  "spec_reference": "VECTORS.md §2",
+  "spec_reference": "handshake.md §2",
   "vectors": [
     {
       "id": "hkdf-baseline",
       "description": "Single-line summary of this vector.",
-      "spec_reference": "VECTORS.md §2.1",
+      "spec_reference": "handshake.md §2.1",
       "inputs": { ... },
       "expected": { ... }
     }
@@ -136,10 +136,10 @@ A runner is a small, language-idiomatic test harness — typically a few hundred
 | Envelope-level rejection            | `negative-envelope-rejection.json`| seeded        |
 | Must-reject coverage index          | `must-reject-index.json`          | seeded        |
 
-`seeded` means the file exists with a starter set of vectors. The rich
-human-readable vectors in `VECTORS.md` (PoW solutions, extension entries,
-scoped device certificates, session lifecycle, recipient status, etc.)
-are next on the porting list.
+`seeded` means the file exists with a starter set of vectors. Additional
+detailed cases (PoW solutions, extension entries, scoped device
+certificates, session lifecycle, recipient status, etc.) are next on the
+porting list as the spec drafts settle.
 
 ## Must-reject coverage
 

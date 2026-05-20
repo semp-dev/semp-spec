@@ -1,0 +1,84 @@
+{
+  "version": "1.0.0",
+  "category": "reputation-references",
+  "description": "DELIVERY.md §12.2: SEMP_REPUTATION_REFERENCES is the subject domain's curated index of third-party observation URIs. The document is signed by the subject domain key with the SEMP-REPUTATION-REFERENCES: prefix, but the document is NOT a reputation claim. A consumer MUST fetch each referenced observation and verify its observer-domain signature independently. The subject's signature only authenticates the index, not the observations it points at.",
+  "spec_reference": "VECTORS.md §17.9; DELIVERY.md §12.2",
+  "construction": {
+    "domain_separation_prefix_utf8": "SEMP-REPUTATION-REFERENCES:",
+    "signing_key": "subject domain signing key",
+    "canonical_form": "ENVELOPE.md §4.3 with signature.value blanked",
+    "trust_model": "Subject signs the index. Each referenced URI points at an observation that is signed by its observer's own domain key; consumers verify those signatures directly. The subject cannot forge an observation's content."
+  },
+  "vectors": [
+    {
+      "id": "reputation-references-valid",
+      "description": "Pinned subject domain key signs a SEMP_REPUTATION_REFERENCES document listing two third-party observer URIs with cached assessment hints. Signature MUST verify under the subject's domain public key.",
+      "spec_reference": "VECTORS.md §17.9; DELIVERY.md §12.2",
+      "inputs": {
+        "domain_seed_hex": "3838383838383838383838383838383838383838383838383838383838383838",
+        "domain_pub_hex": "76d81b33ba721df89b8e0b0ef26c34eb72e978951044798cd608a4f6dbf2e6d6",
+        "domain_key_id": "e480c364999500b7b4aaf73c51f51a5271d2cce4476c57fe42cab7368fb20230",
+        "references_pre_sign_json": {
+          "type": "SEMP_REPUTATION_REFERENCES",
+          "version": "1.0.0",
+          "domain": "example.com",
+          "references": [
+            {
+              "observer": "trusted-server-1.com",
+              "uri": "https://trusted-server-1.com/v1/reputation/example.com",
+              "fetched_at": "2026-06-10T12:00:00Z",
+              "assessment": "trusted"
+            },
+            {
+              "observer": "large-provider.net",
+              "uri": "https://large-provider.net/reputation/example.com",
+              "fetched_at": "2026-06-10T11:30:00Z",
+              "assessment": "trusted"
+            }
+          ],
+          "timestamp": "2026-06-10T20:00:00Z",
+          "signature": {
+            "algorithm": "ed25519",
+            "key_id": "e480c364999500b7b4aaf73c51f51a5271d2cce4476c57fe42cab7368fb20230",
+            "value": ""
+          }
+        }
+      },
+      "intermediates": {
+        "canonical_with_blanked_signature_utf8": "{\"domain\":\"example.com\",\"references\":[{\"assessment\":\"trusted\",\"fetched_at\":\"2026-06-10T12:00:00Z\",\"observer\":\"trusted-server-1.com\",\"uri\":\"https://trusted-server-1.com/v1/reputation/example.com\"},{\"assessment\":\"trusted\",\"fetched_at\":\"2026-06-10T11:30:00Z\",\"observer\":\"large-provider.net\",\"uri\":\"https://large-provider.net/reputation/example.com\"}],\"signature\":{\"algorithm\":\"ed25519\",\"key_id\":\"e480c364999500b7b4aaf73c51f51a5271d2cce4476c57fe42cab7368fb20230\",\"value\":\"\"},\"timestamp\":\"2026-06-10T20:00:00Z\",\"type\":\"SEMP_REPUTATION_REFERENCES\",\"version\":\"1.0.0\"}",
+        "signing_input_prefix_utf8": "SEMP-REPUTATION-REFERENCES:",
+        "signing_input_hex": "53454d502d52455055544154494f4e2d5245464552454e4345533a7b22646f6d61696e223a226578616d706c652e636f6d222c227265666572656e636573223a5b7b226173736573736d656e74223a2274727573746564222c22666574636865645f6174223a22323032362d30362d31305431323a30303a30305a222c226f62736572766572223a22747275737465642d7365727665722d312e636f6d222c22757269223a2268747470733a2f2f747275737465642d7365727665722d312e636f6d2f76312f72657075746174696f6e2f6578616d706c652e636f6d227d2c7b226173736573736d656e74223a2274727573746564222c22666574636865645f6174223a22323032362d30362d31305431313a33303a30305a222c226f62736572766572223a226c617267652d70726f76696465722e6e6574222c22757269223a2268747470733a2f2f6c617267652d70726f76696465722e6e65742f72657075746174696f6e2f6578616d706c652e636f6d227d5d2c227369676e6174757265223a7b22616c676f726974686d223a2265643235353139222c226b65795f6964223a2265343830633336343939393530306237623461616637336335316635316135323731643263636534343736633537666534326361623733363866623230323330222c2276616c7565223a22227d2c2274696d657374616d70223a22323032362d30362d31305432303a30303a30305a222c2274797065223a2253454d505f52455055544154494f4e5f5245464552454e434553222c2276657273696f6e223a22312e302e30227d",
+        "signature_hex": "0f442c76df52883fad7f44147d8c55beb28c4d6caf1174fc3252e5a9dc74bfb1736567f755148159e524419508011c070aecf1039e67d4d19ad7488281e02b0e"
+      },
+      "expected": {
+        "signed_references_json": {
+          "type": "SEMP_REPUTATION_REFERENCES",
+          "version": "1.0.0",
+          "domain": "example.com",
+          "references": [
+            {
+              "observer": "trusted-server-1.com",
+              "uri": "https://trusted-server-1.com/v1/reputation/example.com",
+              "fetched_at": "2026-06-10T12:00:00Z",
+              "assessment": "trusted"
+            },
+            {
+              "observer": "large-provider.net",
+              "uri": "https://large-provider.net/reputation/example.com",
+              "fetched_at": "2026-06-10T11:30:00Z",
+              "assessment": "trusted"
+            }
+          ],
+          "timestamp": "2026-06-10T20:00:00Z",
+          "signature": {
+            "algorithm": "ed25519",
+            "key_id": "e480c364999500b7b4aaf73c51f51a5271d2cce4476c57fe42cab7368fb20230",
+            "value": "D0Qsdt9SiD+tf0QUfYxVvrKMTWyvEXT8MlLlqdx0v7FzZWf3VRSBWeUkQZUIARwHCuzxA55n1NGa10iCgeArDg=="
+          }
+        },
+        "signature_b64": "D0Qsdt9SiD+tf0QUfYxVvrKMTWyvEXT8MlLlqdx0v7FzZWf3VRSBWeUkQZUIARwHCuzxA55n1NGa10iCgeArDg==",
+        "signature_verifies": true
+      }
+    }
+  ]
+}

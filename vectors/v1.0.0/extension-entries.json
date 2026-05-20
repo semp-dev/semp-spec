@@ -182,6 +182,33 @@
           "semp.dev/priority"
         ]
       }
+    },
+    {
+      "id": "extension-definition-document-url",
+      "description": "Extension definition documents are served at the canonical well-known URL form per RFC 8615. Given an extension identifier <host>/<name>, the definition document URL is derived as https://<host>/.well-known/semp-extensions/<name>.json. The vector pins URL derivation for both core (semp.dev) and vendor namespaces, and rejects the legacy /extensions/<name>.json shape.",
+      "spec_reference": "draft-gokce-semp-extensions §6 (definition documents) and §IANA; EXTENSIONS.md §6",
+      "samples": [
+        {
+          "extension_id": "semp.dev/large-attachment",
+          "canonical_url": "https://semp.dev/.well-known/semp-extensions/large-attachment.json",
+          "legacy_form_rejected": "https://semp.dev/extensions/large-attachment.json"
+        },
+        {
+          "extension_id": "semp.dev/device-sync",
+          "canonical_url": "https://semp.dev/.well-known/semp-extensions/device-sync.json",
+          "legacy_form_rejected": "https://semp.dev/extensions/device-sync.json"
+        },
+        {
+          "extension_id": "vendor.example.com/custom-feature",
+          "canonical_url": "https://vendor.example.com/.well-known/semp-extensions/custom-feature.json",
+          "legacy_form_rejected": "https://vendor.example.com/extensions/custom-feature.json"
+        }
+      ],
+      "expected": {
+        "derivation_rule": "Given extension_id = <host>/<name>, the canonical definition document URL is https://<host>/.well-known/semp-extensions/<name>.json. Implementations consulting an extension definition MUST request the canonical form. Servers MAY redirect legacy /extensions/ requests to the canonical .well-known form but MUST NOT publish definition documents only at the legacy URL.",
+        "fetch_method": "GET",
+        "expected_content_type": "application/json"
+      }
     }
   ]
 }

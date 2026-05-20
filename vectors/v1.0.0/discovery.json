@@ -107,6 +107,260 @@
           ]
         }
       }
+    },
+    {
+      "id": "discovery-srv-quic-udp-target",
+      "description": "QUIC transport selection when both _semp._tcp and _semp._udp SRV records are published. The default for QUIC is the _semp._tcp target's host:port over UDP. Operators that require a distinct UDP target MAY publish _semp._udp; when both are present, clients selecting QUIC MUST prefer the _semp._udp target.",
+      "spec_reference": "DISCOVERY.md §2.1; draft-gokce-semp-handshake §14.3.3",
+      "inputs": {
+        "scenario_a_zone": {
+          "_semp._tcp.example.com.": {
+            "rrtype": "SRV",
+            "value": "10 10 443 semp.example.com."
+          },
+          "comment": "No _semp._udp record. QUIC uses the same host:port as TCP over UDP."
+        },
+        "scenario_b_zone": {
+          "_semp._tcp.example.com.": {
+            "rrtype": "SRV",
+            "value": "10 10 443 semp.example.com."
+          },
+          "_semp._udp.example.com.": {
+            "rrtype": "SRV",
+            "value": "10 10 443 semp.example.com."
+          },
+          "comment": "Both records present. Clients selecting QUIC MUST prefer the _semp._udp target."
+        }
+      },
+      "expected": {
+        "scenario_a_quic_target": {
+          "host": "semp.example.com.",
+          "port": 443,
+          "source": "_semp._tcp (UDP datagrams to TCP target)"
+        },
+        "scenario_b_quic_target": {
+          "host": "semp.example.com.",
+          "port": 443,
+          "source": "_semp._udp (preferred over _semp._tcp)"
+        }
+      }
+    },
+    {
+      "id": "discovery-config-reciprocity-policy",
+      "description": "A peer that enforces trust-gossip reciprocity MUST disclose its policy in the configuration document so that prospective consumers can determine eligibility before fetching. The protocol does not mandate the exact field shape; this vector illustrates one conformant disclosure shape that consumers can rely on for capability negotiation.",
+      "spec_reference": "draft-gokce-semp-delivery §12.1; draft-gokce-semp-discovery §6",
+      "inputs": {
+        "configuration_fragment": {
+          "reciprocity": {
+            "mode": "strict",
+            "minimum_publish_volume": 100,
+            "evaluation_window_days": 30
+          }
+        }
+      },
+      "expected": {
+        "modes": [
+          "strict",
+          "lenient",
+          "none"
+        ],
+        "consumer_action_under_strict": "Before fetching trust gossip, verify that the consumer publishes its own observations and meets the minimum_publish_volume; otherwise expect the peer to refuse to serve."
+      }
+    },
+    {
+      "id": "key-fetch-status-dispatch",
+      "description": "SEMP_KEYS response classifies each requested recipient with one of found / not_found / legacy_required / recipient_not_found / error. The client dispatches on the per-recipient status before encrypting under any recipient key. The status set mirrors the submission-time status vocabulary so the client can share dispatch logic between key fetch and submission. legacy_required and recipient_not_found are surfaced at the key fetch step (rather than only at envelope submission) so the client learns the delivery classification before composing an envelope.",
+      "spec_reference": "draft-gokce-semp-client §6.4.6 Key Response Status Values; draft-gokce-semp-discovery §4.3",
+      "inputs": {
+        "key_response_json": {
+          "type": "SEMP_KEYS",
+          "step": "response",
+          "version": "1.0.0",
+          "id": "01JTEST55555555555555555555",
+          "timestamp": "2026-05-19T20:30:00Z",
+          "results": [
+            {
+              "address": "alice@example.com",
+              "status": "found",
+              "domain": "example.com",
+              "domain_key": {
+                "algorithm": "ed25519",
+                "public_key": "<base64-domain-key>",
+                "key_id": "<domain-key-fp>",
+                "created": "2026-01-01T00:00:00Z",
+                "expires": "2027-01-01T00:00:00Z"
+              },
+              "user_keys": [
+                {
+                  "address": "alice@example.com",
+                  "key_type": "encryption",
+                  "algorithm": "pq-kyber768-x25519",
+                  "public_key": "<base64-encryption-key>",
+                  "key_id": "<key-fp>",
+                  "created": "2026-01-01T00:00:00Z",
+                  "expires": "2027-01-01T00:00:00Z",
+                  "signatures": [],
+                  "revocation": null
+                }
+              ],
+              "origin_signature": {
+                "algorithm": "ed25519",
+                "key_id": "<domain-key-fp>",
+                "value": "<base64-domain-signature>"
+              }
+            },
+            {
+              "address": "private@semp.example",
+              "status": "not_found",
+              "domain": "semp.example",
+              "domain_key": null,
+              "user_keys": [],
+              "origin_signature": null
+            },
+            {
+              "address": "user@legacymail.example",
+              "status": "legacy_required",
+              "domain": "legacymail.example",
+              "domain_key": null,
+              "user_keys": [],
+              "origin_signature": null
+            },
+            {
+              "address": "ghost@nowhere.invalid",
+              "status": "recipient_not_found",
+              "domain": "nowhere.invalid",
+              "domain_key": null,
+              "user_keys": [],
+              "origin_signature": null
+            },
+            {
+              "address": "transient@example.org",
+              "status": "error",
+              "domain": "example.org",
+              "domain_key": null,
+              "user_keys": [],
+              "origin_signature": null,
+              "reason": "upstream_timeout"
+            }
+          ]
+        }
+      },
+      "expected": {
+        "per_address_actions": {
+          "alice@example.com": {
+            "status": "found",
+            "action": "encrypt_and_submit_semp_envelope"
+          },
+          "private@semp.example": {
+            "status": "not_found",
+            "action": "surface_undeliverable_to_user; MAY_retry_after_ttl"
+          },
+          "user@legacymail.example": {
+            "status": "legacy_required",
+            "action": "branch_to_legacy_fallback; trigger_mixed_recipient_consent_if_in_a_compose_with_found_recipients"
+          },
+          "ghost@nowhere.invalid": {
+            "status": "recipient_not_found",
+            "action": "surface_undeliverable_to_user; remove_from_send"
+          },
+          "transient@example.org": {
+            "status": "error",
+            "action": "MAY_retry_with_backoff"
+          }
+        },
+        "mixed_recipient_rule": "When a single compose action mixes found and legacy_required recipients, the client MUST gate the entire send on the legacy consent prompt before submitting the SEMP envelope to any found recipient."
+      }
+    },
+    {
+      "id": "http2-url-templates",
+      "description": "The HTTP/2 transport binding splits SEMP operations across HTTP methods following REST conventions: read-only lookups use GET with the address in the path, state-changing operations use POST. Servers MUST also accept POST on the lookup paths so callers requiring a signed request body can use them. The vector pins the URL templates and method choices that an HTTP/2 client and server are expected to implement, in place of the legacy single-POST-path convention.",
+      "spec_reference": "draft-gokce-semp-handshake §14.3.2 HTTP/2; draft-gokce-semp-client §6.4 Recipient Key Request Protocol; TRANSPORT.md §4.2",
+      "inputs": {
+        "base_url": "https://semp.example.com",
+        "addresses": {
+          "alice": "alice@example.com",
+          "bob": "bob@partitioned.example.com"
+        }
+      },
+      "expected": {
+        "operations": [
+          {
+            "operation": "discovery_lookup",
+            "method": "GET",
+            "path_template": "/v1/discovery/{address}",
+            "example_url": "https://semp.example.com/v1/discovery/alice@example.com",
+            "alternate_method": "POST",
+            "alternate_rationale": "Servers MUST also accept POST on the same path so callers requiring a signed request body can use it."
+          },
+          {
+            "operation": "key_request",
+            "method": "GET",
+            "path_template": "/v1/keys/{address}",
+            "example_url": "https://semp.example.com/v1/keys/alice@example.com",
+            "alternate_method": "POST",
+            "alternate_rationale": "Servers MUST also accept POST on the same path so callers requiring a signed request body can use it."
+          },
+          {
+            "operation": "handshake",
+            "method": "POST",
+            "path_template": "/v1/handshake",
+            "example_url": "https://semp.example.com/v1/handshake"
+          },
+          {
+            "operation": "envelope_submit",
+            "method": "POST",
+            "path_template": "/v1/envelope",
+            "example_url": "https://semp.example.com/v1/envelope"
+          },
+          {
+            "operation": "session_stream",
+            "method": "GET",
+            "path_template": "/v1/session/{id}",
+            "example_url": "https://semp.example.com/v1/session/01JTEST88888888888888888888",
+            "notes": "Long-lived server-initiated stream carrying Server-Sent Events."
+          }
+        ],
+        "rejected_legacy_form": {
+          "operation": "discovery_lookup",
+          "method": "POST",
+          "path": "/v1/discovery",
+          "body_field": "address",
+          "rationale": "The legacy POST-only single-path convention is no longer the default. A server MAY still accept this form on /v1/discovery/{address} via POST per the alternate-method rule above, and clients MUST NOT rely on /v1/discovery without the trailing address segment."
+        }
+      }
+    },
+    {
+      "id": "migration-key-fetch-redirect",
+      "description": "When a key fetch targets an address whose home provider has published a migration record, the key response carries a migration_to field naming the new address and the migration record id. The client uses this signal to resolve the new address before composing an envelope. The redirect field is a discovery-time signal that complements the envelope-submission-time migration_notice rejection body.",
+      "spec_reference": "draft-gokce-semp-recovery §4.4 Migration Notice Window; MIGRATION.md §5; draft-gokce-semp-client §6.4 Recipient Key Request Protocol",
+      "inputs": {
+        "key_response_json": {
+          "type": "SEMP_KEYS",
+          "step": "response",
+          "version": "1.0.0",
+          "id": "01JTEST77777777777777777777",
+          "timestamp": "2026-05-19T20:30:00Z",
+          "results": [
+            {
+              "address": "alice@oldprovider.example",
+              "status": "not_found",
+              "domain": "oldprovider.example",
+              "domain_key": null,
+              "user_keys": [],
+              "origin_signature": null,
+              "migration_to": {
+                "new_address": "alice@newprovider.example",
+                "record_id": "01JMIGRATE000000000000000000",
+                "notice_window_until": "2026-08-19T00:00:00Z"
+              }
+            }
+          ]
+        }
+      },
+      "expected": {
+        "client_action": "Surface migration notice to user with the new address and migration record id. Offer the user an action to update the local address book entry; MUST NOT silently rewrite the entry. Resend to new_address only after explicit user confirmation. MUST NOT auto-forward.",
+        "after_notice_window": "Once notice_window_until has elapsed, the old provider stops returning migration_to and the key fetch resolves to a plain not_found, indistinguishable from any other non-existent address. The client surfaces the address as undeliverable."
+      }
     }
   ]
 }

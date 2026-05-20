@@ -1,182 +1,178 @@
-# SEMP: Sealed Envelope Messaging Protocol (DRAFT, SUBJECT TO CHANGES)
+# SEMP: Sealed Envelope Messaging Protocol
 
-SEMP is a federated messaging protocol designed to replace SMTP. It addresses
-five structural failures of email that decades of patches have failed to fix:
+Status: Internet-Draft. Subject to change.
 
-1. **Metadata is exposed.** Sender, recipient, and subject are visible in
-   plaintext to every server that handles a message. SEMP seals them inside
-   an encrypted envelope. Routing servers see only the destination domain.
+SEMP is a federated messaging protocol designed to replace SMTP. The specification is split across eight Internet-Drafts. The kramdown-rfc source files live under `../input/`; this folder holds the GitHub-rendered markdown produced by `script/publish.py`. The companion IETF I-D form lives under `../ietf-output/`.
 
-2. **Trust is anchored to IP addresses.** New mail servers are treated as
-   suspicious regardless of their operator's legitimacy. SEMP anchors trust
-   to cryptographic domain identity. New domains start at zero reputation.
+Run `make all` at the project root to regenerate.
 
-3. **Rejection is dishonest.** SMTP servers silently accept messages they
-   intend to discard. SEMP requires explicit rejection with a reason code.
+## Drafts
 
-4. **Messages have no integrity proof.** Content can be altered in transit
-   with no reliable way to detect it. SEMP envelopes carry two independent
-   integrity proofs: a domain signature verifiable by any routing server and
-   a session MAC verifiable by the receiving server.
+### [Architecture](architecture.md)
 
-5. **The protocol cannot evolve.** Adding capabilities to SMTP requires
-   fragile extensions that implementations are free to ignore. SEMP is built
-   for extensibility, since capability negotiation is part of every connection.
+Sealed Envelope Messaging Protocol: Architecture and Threat Model
 
-## The Envelope Model
+- [Introduction](architecture.md#introduction)
+- [Conventions and Definitions](architecture.md#conventions-and-definitions)
+- [Terminology](architecture.md#terminology)
+- [Design Principles](architecture.md#design-principles)
+- [Non-Goals](architecture.md#non-goals)
+- [The Envelope Model](architecture.md#the-envelope-model)
+- [Trust and Reputation Model](architecture.md#trust-and-reputation-model)
+- [Key Management Philosophy](architecture.md#key-management-philosophy)
+- [Blocking and Rejection](architecture.md#blocking-and-rejection)
+- [Legacy Interoperability](architecture.md#legacy-interoperability)
+- [Relationship to Existing Standards](architecture.md#relationship-to-existing-standards)
+- [Comparison with Related Systems](architecture.md#comparison-with-related-systems)
+- [Document Series](architecture.md#document-series)
+- [Threat Model](architecture.md#threat-model)
+- [Security Considerations](architecture.md#security-considerations)
+- [IANA Considerations](architecture.md#iana-considerations)
+- [Acknowledgments](architecture.md#acknowledgments)
 
-SEMP's message unit is the **envelope**, modeled on physical correspondence:
+### [Envelope](envelope.md)
 
-```
-envelope
-  ├── postmark     outer public header, visible to routing servers
-  ├── seal         cryptographic integrity proof, tamper evident
-  ├── brief        inner private header, encrypted, recipient only
-  └── enclosure    message body and attachments, encrypted, recipient only
-```
+Sealed Envelope Messaging Protocol: Envelope Format
 
-The postmark carries only what routing servers need: source and destination
-domains. The brief contains correspondence metadata (full addresses,
-timestamps, threading), encrypted so only the recipient server and client
-can read it. The enclosure holds the message body and attachments, encrypted
-under the recipient's key alone.
+- [Introduction](envelope.md#introduction)
+- [Conventions and Definitions](envelope.md#conventions-and-definitions)
+- [Envelope Structure](envelope.md#envelope-structure)
+- [Postmark](envelope.md#postmark)
+- [Seal](envelope.md#seal)
+- [Brief](envelope.md#brief)
+- [Enclosure](envelope.md#enclosure)
+- [Encryption Model](envelope.md#encryption-model)
+- [Extensibility](envelope.md#extensibility)
+- [Server Responsibilities](envelope.md#server-responsibilities)
+- [Media Types](envelope.md#media-types)
+- [Security Considerations](envelope.md#security-considerations)
+- [Privacy Considerations](envelope.md#privacy-considerations)
+- [IANA Considerations](envelope.md#iana-considerations)
+- [Acknowledgments](envelope.md#acknowledgments)
 
-## Key Properties
+### [Handshake](handshake.md)
 
-**Transport-agnostic.** SEMP runs over WebSocket, HTTP/2, or QUIC on port
-443. No dedicated port, no special firewall rules. A SEMP server can run on
-shared PHP hosting behind a standard web server.
+Sealed Envelope Messaging Protocol: Handshake, Session, and Transport
 
-**Forward secret.** Every session uses ephemeral key exchange. Compromise of
-any long-term key cannot retroactively decrypt past sessions. Session keys are
-derived per-connection and erased after use.
+- [Introduction](handshake.md#introduction)
+- [Conventions and Definitions](handshake.md#conventions-and-definitions)
+- [Connection Model and Privacy Constraint](handshake.md#connection-model-and-privacy-constraint)
+- [Packet Discrimination](handshake.md#packet-discrimination)
+- [Client Handshake](handshake.md#client-handshake)
+- [Federation Handshake](handshake.md#federation-handshake)
+- [Resumption](handshake.md#resumption)
+- [Session Lifecycle](handshake.md#session-lifecycle)
+- [Session Rekeying](handshake.md#rekeying)
+- [Post-Quantum Forward Secrecy](handshake.md#post-quantum-forward-secrecy)
+- [Session Invalidation and Blocking](handshake.md#session-invalidation-and-blocking)
+- [Reason Codes](handshake.md#reason-codes)
+- [Sender Server Retry Responsibility](handshake.md#sender-server-retry-responsibility)
+- [Transport Bindings](handshake.md#transport-bindings)
+- [Security Considerations](handshake.md#security-considerations)
+- [Privacy Considerations](handshake.md#privacy-considerations)
+- [IANA Considerations](handshake.md#iana-considerations)
+- [Acknowledgments](handshake.md#acknowledgments)
 
-**Post-quantum ready.** The recommended cipher suite uses a hybrid Kyber768 +
-X25519 key agreement. Sessions are protected against harvest-now-decrypt-later
-attacks from future quantum computers.
+### [Discovery](discovery.md)
 
-**Incrementally adoptable.** SEMP coexists with SMTP. When a recipient domain
-doesn't support SEMP, the client is notified and can fall back to SMTP with
-explicit user consent. No flag day required.
+Sealed Envelope Messaging Protocol: Discovery and Key Publication
 
-**Tor-compatible.** SEMP operates over Tor without protocol modification. A
-`.onion` address triggers direct well-known URI discovery over Tor via HTTP/2.
+- [Introduction](discovery.md#introduction)
+- [Conventions and Definitions](discovery.md#conventions-and-definitions)
+- [Discovery Responsibility and Privacy](discovery.md#discovery-responsibility-and-privacy)
+- [DNS-Based Discovery](discovery.md#dns-based-discovery)
+- [Tor-Reachable Deployments](discovery.md#tor-reachable-deployments)
+- [Well-Known URI Discovery](discovery.md#well-known-uri-discovery)
+- [Domain Key Publication](discovery.md#domain-key-publication)
+- [User Key Publication](discovery.md#user-key-publication)
+- [Key Request and Response](discovery.md#key-request-and-response)
+- [Key Verification](discovery.md#key-verification)
+- [Key Fetching Mechanisms](discovery.md#key-fetching-mechanisms)
+- [Key Rotation](discovery.md#key-rotation)
+- [Key Revocation](discovery.md#key-revocation)
+- [Multi-Device Support](discovery.md#multi-device-support)
+- [Protocol Lookup](discovery.md#protocol-lookup)
+- [Discovery Flow](discovery.md#discovery-flow)
+- [Caching](discovery.md#caching)
+- [Legacy Integration](discovery.md#legacy-integration)
+- [Security Considerations](discovery.md#security-considerations)
+- [Privacy Considerations](discovery.md#privacy-considerations)
+- [IANA Considerations](discovery.md#iana-considerations)
+- [Acknowledgments](discovery.md#acknowledgments)
 
-## Specification Documents
+### [Delivery](delivery.md)
 
-### Core Specification
+Sealed Envelope Messaging Protocol: Delivery, Reputation, and Errors
 
-Every SEMP implementation must conform to these documents.
+- [Introduction](delivery.md#introduction)
+- [Conventions and Definitions](delivery.md#conventions-and-definitions)
+- [Delivery Outcomes](delivery.md#delivery-outcomes)
+- [Queueing, Retry, and Expiry](delivery.md#queueing-retry-expiry)
+- [Delivery Pipeline](delivery.md#delivery-pipeline)
+- [Block List](delivery.md#block-list)
+- [Enforcement Points](delivery.md#enforcement-points)
+- [User Policy Synchronization](delivery.md#user-policy-synchronization)
+- [Reputation Signals](delivery.md#reputation-signals)
+- [Abuse Reporting](delivery.md#abuse-reporting)
+- [Trust Gossip](delivery.md#trust-gossip)
+- [Trust Gossip Publication and Fetching](delivery.md#trust-gossip-publication-and-fetching)
+- [Trust Transfer](delivery.md#trust-transfer)
+- [Reason Code Registry](delivery.md#reason-codes)
+- [Security Considerations](delivery.md#security-considerations)
+- [Privacy Considerations](delivery.md#privacy-considerations)
+- [IANA Considerations](delivery.md#iana-considerations)
+- [Acknowledgments](delivery.md#acknowledgments)
 
-| Document | Description |
-|---|---|
-| [DESIGN.md](DESIGN.md) | Philosophy, principles, non-goals, and document index. |
-| [ENVELOPE.md](ENVELOPE.md) | Envelope structure, seal, enclosure, sender signature, and forwarding. |
-| [HANDSHAKE.md](HANDSHAKE.md) | Session establishment, federation handshake, resumption, and reason codes. |
-| [SESSION.md](SESSION.md) | Forward secrecy, session key lifecycle, rekeying, and resumption tickets. |
-| [DISCOVERY.md](DISCOVERY.md) | Server discovery, configuration document, and versioning. |
-| [KEY.md](KEY.md) | Key management, publication, rotation, revocation, and scoped device certificates. |
-| [DELIVERY.md](DELIVERY.md) | Acknowledgment types, queuing and retry, staged delivery, block list, and first-contact enforcement. |
-| [CLIENT.md](CLIENT.md) | Client obligations, envelope composition and receipt, device sync, and legacy interop. |
-| [REPUTATION.md](REPUTATION.md) | Trust signals, abuse reporting, gossip observations, and trust transfer. |
-| [TRANSPORT.md](TRANSPORT.md) | Transport requirements and bindings (WebSocket, HTTP/2, QUIC; optional gRPC). |
-| [EXTENSIONS.md](EXTENSIONS.md) | Wire-level extension framework, registry, and anti-fragmentation governance. |
-| [ERRORS.md](ERRORS.md) | Error code registry and status values. |
-| [MIME.md](MIME.md) | Media type and file format registrations for envelopes, delivery receipts, recovery bundles, and migration records. |
-| [CONFORMANCE.md](CONFORMANCE.md) | Conformance requirements for implementations. |
-| [VECTORS.md](VECTORS.md) | Test vectors for implementers. |
+### [Recovery](recovery.md)
 
-### Optional Core Modules
+Sealed Envelope Messaging Protocol: Recovery, Migration, Closure, and Transparency
 
-Recommended optional modules. Implementations that claim a module's functionality must conform; absence is permitted. Advertisement is through discovery endpoints.
+- [Introduction](recovery.md#introduction)
+- [Conventions and Definitions](recovery.md#conventions-and-definitions)
+- [Account Recovery](recovery.md#recovery)
+- [Provider Migration](recovery.md#migration)
+- [Account Closure](recovery.md#closure)
+- [Key Transparency](recovery.md#transparency)
+- [Security Considerations](recovery.md#security-considerations)
+- [Privacy Considerations](recovery.md#privacy-considerations)
+- [IANA Considerations](recovery.md#iana-considerations)
+- [Acknowledgments](recovery.md#acknowledgments)
 
-| Document | Description |
-|---|---|
-| [RECOVERY.md](RECOVERY.md) | Account recovery: server-assisted encrypted backup and Shamir device-split backup. |
-| [MIGRATION.md](MIGRATION.md) | Provider migration across domains with key continuity and forwarding. |
-| [CLOSURE.md](CLOSURE.md) | Account closure with grace period and retention window. |
-| [TRANSPARENCY.md](TRANSPARENCY.md) | Key transparency via Merkle-tree log and observation-based gossip. |
+### [Extensions](extensions.md)
 
-### Wire-Level Extensions
+Sealed Envelope Messaging Protocol: Extensions and Conformance
 
-Defined extensions registered under the `semp.dev/` namespace. Wire-level extensions live inside existing message structures and are governed by [EXTENSIONS.md](EXTENSIONS.md).
+- [Introduction](extensions.md#introduction)
+- [Conventions and Definitions](extensions.md#conventions-and-definitions)
+- [Extension Framework](extensions.md#extension-framework)
+- [Library Extension Enforcement](extensions.md#library-extension-enforcement)
+- [Trust Model](extensions.md#trust-model)
+- [Large-Attachment Extension](extensions.md#large-attachment)
+- [Conformance](extensions.md#conformance)
+- [Security Considerations](extensions.md#security-considerations)
+- [Privacy Considerations](extensions.md#privacy-considerations)
+- [IANA Considerations](extensions.md#iana-considerations)
+- [Acknowledgments](extensions.md#acknowledgments)
 
-| Document | Description |
-|---|---|
-| [ATTACHMENTS.md](ATTACHMENTS.md) | `semp.dev/large-attachment`: external-storage attachments with HKDF-derived per-attachment keys. |
+### [Client](client.md)
 
-### Non-Normative
+Sealed Envelope Messaging Protocol: Client Specification
 
-| Document | Description |
-|---|---|
-| [THREAT.md](THREAT.md) | Consolidated threat model: actors, adversary classes, information visibility, and residual risks. Companion to the security and privacy sections of the core documents. |
-| [FAQ.md](FAQ.md) | Frequently asked questions about SEMP. |
+- [Introduction](client.md#introduction)
+- [Conventions and Definitions](client.md#conventions-and-definitions)
+- [Connection and Trust Model](client.md#connection-and-trust-model)
+- [Authentication](client.md#authentication)
+- [Envelope Composition](client.md#envelope-composition)
+- [Envelope Receipt and Decryption](client.md#envelope-receipt-and-decryption)
+- [Key Management](client.md#key-management)
+- [Envelope Submission Protocol](client.md#envelope-submission-protocol)
+- [Delivery State](client.md#delivery-state)
+- [User Policy](client.md#user-policy)
+- [Notification Content Constraints](client.md#notification-content-constraints)
+- [Security Considerations](client.md#security-considerations)
+- [IANA Considerations](client.md#iana-considerations)
+- [Acknowledgments](client.md#acknowledgments)
 
-## How It Works
+## Test Vectors
 
-**Discovery.** The sender's server queries DNS for the recipient domain's SEMP
-records, then fetches capability information from the domain's well-known URI.
-If the domain doesn't support SEMP, the client is informed and can fall back to
-SMTP.
-
-**Handshake.** The sender's server establishes a session with the recipient's
-server through a four-message handshake. Ephemeral keys are exchanged, a shared
-secret is derived, and both sides authenticate. Client identity never appears
-in plaintext on the wire.
-
-**Envelope delivery.** The client composes the message, encrypts the brief and
-enclosure under fresh symmetric keys, wraps those keys under the recipient's
-public keys, and submits the envelope to its home server. The server computes
-the seal and delivers to the recipient's server over the established session.
-
-**Explicit outcome.** The recipient's server returns one of three responses:
-delivered, rejected with a reason code, or silent (permitted only for deliberate
-privacy policy).
-
-## SMTP vs SEMP
-
-| | SMTP | SEMP |
-|---|---|---|
-| Metadata | Plaintext to every hop | Sealed; only domains visible in postmark |
-| Trust anchor | IP address reputation | Cryptographic domain identity |
-| Rejection | Silent discard common | Explicit with reason code |
-| Integrity | Partial (DKIM on select headers) | Full envelope, two independent proofs |
-| Forward secrecy | None | Per-session ephemeral key exchange |
-| Post-quantum | None | Hybrid Kyber768 + X25519 |
-| Transport | Dedicated port 25 | HTTPS on port 443 |
-| Extensibility | Fragile optional headers | Built-in capability negotiation |
-
-## Running a SEMP Server
-
-A minimal SEMP deployment requires:
-
-1. A domain with two DNS records (SRV + TXT under `_semp._tcp`).
-2. A well-known URI endpoint at `/.well-known/semp/configuration`.
-3. An HTTP/2 endpoint handling SEMP message types.
-4. A domain key pair for signing.
-
-Because SEMP is an application-layer protocol running over standard HTTPS,
-it works on any infrastructure that can serve a web application, including
-shared hosting.
-
-## Project Status
-
-SEMP is in the **draft specification** phase. The protocol design is complete
-and internally consistent. Reference implementations and client/server
-libraries are in development.
-
-## Contributing
-
-SEMP is an open protocol. Contributions to the specification and
-implementations are welcome. If you're interested in contributing:
-
-- Read the specification documents starting with [DESIGN.md](DESIGN.md).
-- Review the [CONFORMANCE.md](CONFORMANCE.md) requirements.
-- Use the [VECTORS.md](VECTORS.md) test vectors to validate your implementation.
-- Open an issue or pull request.
-
-## License
-
-Code is licensed under the [MIT License](LICENSE). Protocol specification and its
-documents are licensed under [Creative Commons Attribution 4.0](https://creativecommons.org/licenses/by/4.0/). See [LICENSE](LICENSE) for
-details.
+Machine-readable test vectors live under [`vectors/`](vectors/README.md). Implementations load these JSON files and assert their outputs match. The Python generator under `vectors/generators/` is the source of byte values; the spec drafts above are the normative source for what is being computed.

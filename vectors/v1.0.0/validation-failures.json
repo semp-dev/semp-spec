@@ -1,0 +1,66 @@
+{
+  "version": "1.0.0",
+  "category": "validation-failures",
+  "description": "Extension validation failures are reported via the extension_unsupported reason code with an `errors` array, one entry per failing extension. Each entry carries the failing extension identifier and a validation_failure diagnostic. Implementations MAY stop validation at the first failure and report a single-entry array, or continue and report all failures.",
+  "spec_reference": "VECTORS.md §13; draft-gokce-semp-extensions §3.9.3",
+  "vectors": [
+    {
+      "id": "validation-failures-errors-array-multi",
+      "description": "Rejection of an envelope carrying two extensions that each fail validation for a different reason. The diagnostic is structured as an array so that multiple failures with different validation_failure values can be reported together.",
+      "spec_reference": "draft-gokce-semp-extensions §3.9.3",
+      "inputs": {
+        "envelope_summary": "Envelope contains two extensions, both invalid: feature1 carries a data shape that does not match its data_schema; feature2 appears in a layer not listed in its placement.allowed_layers."
+      },
+      "expected": {
+        "rejection_json": {
+          "type": "SEMP_ENVELOPE",
+          "step": "rejected",
+          "version": "1.0.0",
+          "reason_code": "extension_unsupported",
+          "reason": "Extension validation failed",
+          "errors": [
+            {
+              "extension": "vendor.example.com/feature1",
+              "validation_failure": "data_schema_mismatch"
+            },
+            {
+              "extension": "vendor.example.com/feature2",
+              "validation_failure": "placement_violation"
+            }
+          ]
+        },
+        "errors_count": 2,
+        "errors_per_extension": {
+          "vendor.example.com/feature1": "data_schema_mismatch",
+          "vendor.example.com/feature2": "placement_violation"
+        },
+        "must_reject": true
+      }
+    },
+    {
+      "id": "validation-failures-errors-array-single",
+      "description": "Single-entry array form, demonstrating that stop-at-first-failure implementations are also conformant. The array form is used uniformly; the array length is the only thing that varies.",
+      "spec_reference": "draft-gokce-semp-extensions §3.9.3",
+      "inputs": {
+        "envelope_summary": "Envelope contains an extension whose definition document signature failed to verify; the implementation reports a single error and stops."
+      },
+      "expected": {
+        "rejection_json": {
+          "type": "SEMP_ENVELOPE",
+          "step": "rejected",
+          "version": "1.0.0",
+          "reason_code": "extension_unsupported",
+          "reason": "Extension validation failed",
+          "errors": [
+            {
+              "extension": "vendor.example.com/forged",
+              "validation_failure": "definition_signature_invalid"
+            }
+          ]
+        },
+        "errors_count": 1,
+        "must_reject": true
+      }
+    }
+  ]
+}

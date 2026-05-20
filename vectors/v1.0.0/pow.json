@@ -43,6 +43,59 @@
         "leading_zero_bits": 7,
         "valid": false
       }
+    },
+    {
+      "id": "pow-difficulty-calibration-table",
+      "description": "Per-difficulty hash-cost expectations from the REPUTATION.md/PoW difficulty calibration table. Each row is informational: it tells implementers what the protocol assumes about brute-force cost at each cap level. Implementations MUST NOT issue challenges above difficulty 28; initiators MUST abort with challenge_invalid on receipt of any challenge whose difficulty exceeds 28.",
+      "spec_reference": "draft-gokce-semp-delivery §9.4.1; draft-gokce-semp-handshake §6.6",
+      "inputs": {
+        "calibration_table": [
+          {
+            "difficulty_bits": 16,
+            "expected_hashes": 65536
+          },
+          {
+            "difficulty_bits": 20,
+            "expected_hashes": 1048576
+          },
+          {
+            "difficulty_bits": 24,
+            "expected_hashes": 16777216
+          },
+          {
+            "difficulty_bits": 28,
+            "expected_hashes": 268435456
+          }
+        ],
+        "condition_table": [
+          {
+            "condition": "zero-reputation, domain age below threshold",
+            "suggested_difficulty": 20
+          },
+          {
+            "condition": "zero-reputation, domain age above threshold",
+            "suggested_difficulty": 16
+          },
+          {
+            "condition": "established domain, suspicious assessment",
+            "suggested_difficulty_range": "20 to 24"
+          },
+          {
+            "condition": "established domain, hostile assessment",
+            "suggested_difficulty_range": "24 to 28"
+          },
+          {
+            "condition": "operator policy (any domain)",
+            "note": "Operator-configured, MUST be capped at 28"
+          }
+        ]
+      },
+      "expected": {
+        "protocol_difficulty_cap_bits": 28,
+        "issuer_rule": "Servers MUST NOT issue proof_of_work challenges with difficulty greater than 28.",
+        "initiator_rule": "Initiators receiving difficulty > 28 MUST abort with reason_code: challenge_invalid.",
+        "doubling_rule": "Each additional bit doubles the expected number of SHA-256 evaluations."
+      }
     }
   ]
 }
