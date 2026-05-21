@@ -3,10 +3,10 @@
 Protocol Specification: Creative Commons Attribution 4.0 International
 ==============================================================================
 
-The SEMP protocol specification documents (DESIGN.md, ENVELOPE.md,
-HANDSHAKE.md, DISCOVERY.md, KEY.md, REPUTATION.md, DELIVERY.md, CLIENT.md,
-SESSION.md, TRANSPORT.md, ERRORS.md, CONFORMANCE.md, and VECTORS.md) are
-licensed under the Creative Commons Attribution 4.0 International License.
+The SEMP protocol specification documents (architecture.md, envelope.md,
+handshake.md, discovery.md, delivery.md, recovery.md, extensions.md, and
+client.md) are licensed under the Creative Commons Attribution 4.0
+International License.
 
 You are free to:
 
