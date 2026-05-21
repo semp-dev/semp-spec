@@ -58,8 +58,8 @@ Cite spec sections precisely: `KEY.md §10.3.5` or `ENVELOPE.md §6.5.3`, with t
 
 ### Punctuation and prose
 
-- Stick to ASCII punctuation. No em-dashes, no en-dashes, no decorative unicode arrows. Use commas, parentheses, or sentence breaks for emphasis.
-- Avoid AI-generated phrasing tells: "delve into", "in essence", "it's worth noting that", "I hope this helps". The spec is a normative document, not marketing copy.
+- Stick to ASCII punctuation. Use commas, parentheses, or sentence breaks for emphasis.
+- Avoid filler and hedging: "delve into", "in essence", "it's worth noting that", "I hope this helps". This is a normative document.
 - Prefer concrete examples and JSON snippets over abstract description.
 - Active voice over passive when describing implementation behavior: "the home server MUST verify" beats "verification MUST be performed".
 

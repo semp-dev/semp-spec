@@ -58,12 +58,11 @@ Closes #
 ## Style
 
 - [ ] Normative keywords (MUST / SHOULD / MAY / RECOMMENDED) used per RFC 2119 / RFC 8174.
-- [ ] No em-dashes, en-dashes, or inline `--`.
+- [ ] ASCII punctuation throughout.
 - [ ] Citations are precise (e.g., "delivery.md §3.2.5", not "the delivery doc").
 - [ ] New record schemas include a JSON example.
 
 ## Checklist
 
 - [ ] PR title is short and descriptive.
-- [ ] Commit messages explain the why, not just the what.
-- [ ] If AI-assisted, commits carry a `Co-Authored-By:` trailer naming the model.
+- [ ] Commit messages explain the motivation behind the change.
