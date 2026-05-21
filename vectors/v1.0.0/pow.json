@@ -27,7 +27,7 @@
     },
     {
       "id": "pow-difficulty-16-insufficient",
-      "description": "Insufficient solution: same prefix and challenge_id as the valid case, but with a nonce that produces only a few leading zero bits — the implementation MUST reject.",
+      "description": "Insufficient solution: same prefix and challenge_id as the valid case, but with a nonce that produces only a few leading zero bits -- the implementation MUST reject.",
       "spec_reference": "VECTORS.md §4.2",
       "inputs": {
         "prefix_hex": "4a8f2c1d3b5e7a9f0d6c8b4e2a1f3d5c",

@@ -20,8 +20,8 @@ If a change requires both, please open the spec PR first and link the library PR
 
 ## Reporting issues
 
-- **Spec ambiguity** (two implementers could read a paragraph differently and produce incompatible wire) — high priority. Use the [Spec ambiguity](https://github.com/semp-dev/semp-spec/issues/new?template=spec_ambiguity.md) template.
-- **Spec error** (a normative statement that contradicts another section, names a non-existent constant, or specifies cryptographically unsound behavior) — high priority. Use the [Spec error](https://github.com/semp-dev/semp-spec/issues/new?template=spec_error.md) template.
+- **Spec ambiguity** (two implementers could read a paragraph differently and produce incompatible wire) -- high priority. Use the [Spec ambiguity](https://github.com/semp-dev/semp-spec/issues/new?template=spec_ambiguity.md) template.
+- **Spec error** (a normative statement that contradicts another section, names a non-existent constant, or specifies cryptographically unsound behavior) -- high priority. Use the [Spec error](https://github.com/semp-dev/semp-spec/issues/new?template=spec_error.md) template.
 - **Spec change proposal** (new feature, change in normative behavior, new section). Use the [Spec change](https://github.com/semp-dev/semp-spec/issues/new?template=spec_change.md) template. Substantial proposals MUST include rationale and a security analysis.
 - **Editorial fix** (typo, broken cross-reference, formatting). Open a small PR directly without an issue.
 
@@ -45,10 +45,10 @@ The spec follows RFC-style prose conventions. The author tends to be picky about
 
 Use the RFC 2119 / RFC 8174 keywords explicitly when stating a normative requirement:
 
-- `MUST` / `MUST NOT` — absolute requirement / prohibition.
-- `SHOULD` / `SHOULD NOT` — strong recommendation; deviation requires careful justification.
-- `MAY` / `OPTIONAL` — implementation discretion.
-- `RECOMMENDED` — equivalent to `SHOULD`; used for default values.
+- `MUST` / `MUST NOT` -- absolute requirement / prohibition.
+- `SHOULD` / `SHOULD NOT` -- strong recommendation; deviation requires careful justification.
+- `MAY` / `OPTIONAL` -- implementation discretion.
+- `RECOMMENDED` -- equivalent to `SHOULD`; used for default values.
 
 Lowercase "must", "should", "may" are NOT normative; use the uppercase forms when you mean them.
 
@@ -58,7 +58,7 @@ Cite spec sections precisely: `KEY.md §10.3.5` or `ENVELOPE.md §6.5.3`, with t
 
 ### Punctuation and prose
 
-- Avoid em-dashes (—), en-dashes (–), and inline `--`. Use commas, parentheses, or sentence breaks.
+- Stick to ASCII punctuation. No em-dashes, no en-dashes, no decorative unicode arrows. Use commas, parentheses, or sentence breaks for emphasis.
 - Avoid AI-generated phrasing tells: "delve into", "in essence", "it's worth noting that", "I hope this helps". The spec is a normative document, not marketing copy.
 - Prefer concrete examples and JSON snippets over abstract description.
 - Active voice over passive when describing implementation behavior: "the home server MUST verify" beats "verification MUST be performed".

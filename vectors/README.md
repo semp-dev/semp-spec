@@ -2,7 +2,7 @@
 
 This directory holds machine-readable test vectors that any SEMP implementation, in any language, can load and assert against. The purpose is to make cross-language conformance testable without re-reading prose: an implementation that produces every expected output in every applicable file is interoperable at that layer; an implementation that does not has a bug.
 
-These vectors are language-neutral by design. They exist for the spec, not for any one implementation. Go, TypeScript, Dart, Rust, Swift, Kotlin, or anything else — every consumer hits the same JSON contract. No SEMP implementation has any privileged status as the "ground truth"; the JSON is the contract, and the JSON is produced by the standalone Python generator under [`generators/`](generators/).
+These vectors are language-neutral by design. They exist for the spec, not for any one implementation. Go, TypeScript, Dart, Rust, Swift, Kotlin, or anything else -- every consumer hits the same JSON contract. No SEMP implementation has any privileged status as the "ground truth"; the JSON is the contract, and the JSON is produced by the standalone Python generator under [`generators/`](generators/).
 
 The JSON files here are the executable contract. Each vector carries a `spec_reference` pointing at the normative section of the relevant draft (under [`../`](../)) that defines the operation under test. When a vector and the spec drafts disagree, the spec drafts win and the JSON is regenerated to match.
 
@@ -10,16 +10,16 @@ The JSON files here are the executable contract. Each vector carries a `spec_ref
 
 ```
 vectors/
-  README.md                        ← this file
-  v1.0.0/                          ← per protocol version
-    hkdf.json                      ← Layer 1: HKDF-SHA-512 derivations
-    session-mac.json               ← Layer 1: HMAC-SHA-256 envelope MAC
-    confirmation-hash.json         ← Layer 1: handshake confirmation hash
-    envelope-canonical.json        ← Layer 3: canonical envelope JSON encoding
+  README.md                        <- this file
+  v1.0.0/                          <- per protocol version
+    hkdf.json                      <- Layer 1: HKDF-SHA-512 derivations
+    session-mac.json               <- Layer 1: HMAC-SHA-256 envelope MAC
+    confirmation-hash.json         <- Layer 1: handshake confirmation hash
+    envelope-canonical.json        <- Layer 3: canonical envelope JSON encoding
     ...
 ```
 
-Each subdirectory `vN.M.P/` corresponds to a frozen protocol version. Vectors are immutable once a version is published — bug-fix-driven changes get a new patch version. Implementations declare which vector versions they support.
+Each subdirectory `vN.M.P/` corresponds to a frozen protocol version. Vectors are immutable once a version is published -- bug-fix-driven changes get a new patch version. Implementations declare which vector versions they support.
 
 ## File schema
 
@@ -43,11 +43,11 @@ Every vectors file has this top-level shape:
 }
 ```
 
-* `version` — the protocol version this file targets.
-* `category` — short identifier for the operation under test.
-* `description` — human-readable summary.
-* `spec_reference` — pointer to the normative spec section.
-* `vectors[]` — one entry per test case. Each carries its own `spec_reference` so a failing test points the implementer at the relevant text.
+* `version` -- the protocol version this file targets.
+* `category` -- short identifier for the operation under test.
+* `description` -- human-readable summary.
+* `spec_reference` -- pointer to the normative spec section.
+* `vectors[]` -- one entry per test case. Each carries its own `spec_reference` so a failing test points the implementer at the relevant text.
 
 Some vectors describe a single operation (one `inputs`, one `expected`); others enumerate a table of related cases. The two supported shapes:
 
@@ -94,7 +94,7 @@ Every implementation SHOULD ship a vectors-runner that:
 3. Asserts every field in `expected` matches byte-for-byte.
 4. Reports `id` plus `spec_reference` on any mismatch.
 
-A runner is a small, language-idiomatic test harness — typically a few hundred lines. The exact shape varies (Go: a `_test.go` driver; TypeScript: a Vitest/Jest suite; Dart: `package:test`; Rust: a `#[test]` module pointing at `vectors/v1.0.0/`). What matters is that running it against a fresh checkout of any SEMP implementation produces the same pass/fail result.
+A runner is a small, language-idiomatic test harness -- typically a few hundred lines. The exact shape varies (Go: a `_test.go` driver; TypeScript: a Vitest/Jest suite; Dart: `package:test`; Rust: a `#[test]` module pointing at `vectors/v1.0.0/`). What matters is that running it against a fresh checkout of any SEMP implementation produces the same pass/fail result.
 
 ## Coverage
 
@@ -176,11 +176,11 @@ the underlying flags change; do not edit it by hand.
 
 ## Round-trip layers
 
-Layers 3+ test operations that include encryption with random keys. They cannot be tested by static input → static output comparison. The convention is:
+Layers 3+ test operations that include encryption with random keys. They cannot be tested by static input -> static output comparison. The convention is:
 
 * Pin every random input (ephemeral keys, nonces, fresh symmetric keys) as part of `inputs`.
 * The implementation MUST expose a "deterministic" compose / handshake path that takes those pinned inputs instead of generating them. Conventionally this is gated behind a test-only build tag, feature flag, or internal API so production code paths can never accidentally accept caller-controlled key material.
-* The `expected` block carries the resulting byte sequence — both directions (compose AND open) MUST round-trip cleanly.
+* The `expected` block carries the resulting byte sequence -- both directions (compose AND open) MUST round-trip cleanly.
 
 The Python generator under [`generators/`](generators/) is the source of byte values for every layer, including Layer 3+. It does NOT call into any specific SEMP implementation; it implements the SEMP construction independently from public-standard primitives so the vectors stay decoupled from any single language's reference code.
 
@@ -196,7 +196,7 @@ The Python generator under [`generators/`](generators/) is the source of byte va
 Open a PR against `semp-spec`. New vectors MUST:
 
 1. Cite the normative section they exercise (`spec_reference`).
-2. Be deterministic — fixed inputs, no implementation-dependent fields.
+2. Be deterministic -- fixed inputs, no implementation-dependent fields.
 3. Be produced by the Python generator under [`generators/`](generators/), not hand-authored. Run `python3 generators/generate.py --verify` in CI; the build fails on any drift between generator and JSON.
 4. Round-trip (where applicable) through at least one independent SEMP implementation before being merged, as a sanity check on the generator.
 5. Include a one-sentence `description` explaining what the vector confirms.

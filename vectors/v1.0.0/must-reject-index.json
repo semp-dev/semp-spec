@@ -61,7 +61,7 @@
           "id": "envelope-expired",
           "pointer": "negative-envelope-rejection.json#envelope-expired",
           "spec_reference": "VECTORS.md §17.7; ENVELOPE.md §7.2 step 2; ERRORS.md envelope_expired",
-          "description": "A well-formed envelope whose postmark.expires is in the past. §7.2 step 1 (seal.signature verification) still passes — the envelope was correctly signed over its own canonical bytes — but step 2 MUST reject with reason_code envelope_expired before any further processing."
+          "description": "A well-formed envelope whose postmark.expires is in the past. §7.2 step 1 (seal.signature verification) still passes -- the envelope was correctly signed over its own canonical bytes -- but step 2 MUST reject with reason_code envelope_expired before any further processing."
         }
       ]
     },
@@ -87,7 +87,7 @@
           "id": "session-mac-invalid",
           "pointer": "negative-envelope-rejection.json#session-mac-invalid",
           "spec_reference": "VECTORS.md §17.7; ENVELOPE.md §7.2 step 4; ERRORS.md session_mac_invalid",
-          "description": "Take the valid envelope and replace seal.session_mac with an HMAC computed under a different key. §4.3 canonicalization blanks both seal.signature and seal.session_mac before either is computed, so seal.signature still verifies (step 1 passes) — this is the receiving-server-only check at step 4. The recipient server MUST reject with reason_code session_mac_invalid; the rejection is distinct from seal_invalid because routing servers cannot perform this check (they do not hold K_env_mac)."
+          "description": "Take the valid envelope and replace seal.session_mac with an HMAC computed under a different key. §4.3 canonicalization blanks both seal.signature and seal.session_mac before either is computed, so seal.signature still verifies (step 1 passes) -- this is the receiving-server-only check at step 4. The recipient server MUST reject with reason_code session_mac_invalid; the rejection is distinct from seal_invalid because routing servers cannot perform this check (they do not hold K_env_mac)."
         }
       ]
     },
@@ -193,7 +193,7 @@
       "id": "envelope-expired",
       "pointer": "negative-envelope-rejection.json#envelope-expired",
       "spec_reference": "VECTORS.md §17.7; ENVELOPE.md §7.2 step 2; ERRORS.md envelope_expired",
-      "description": "A well-formed envelope whose postmark.expires is in the past. §7.2 step 1 (seal.signature verification) still passes — the envelope was correctly signed over its own canonical bytes — but step 2 MUST reject with reason_code envelope_expired before any further processing."
+      "description": "A well-formed envelope whose postmark.expires is in the past. §7.2 step 1 (seal.signature verification) still passes -- the envelope was correctly signed over its own canonical bytes -- but step 2 MUST reject with reason_code envelope_expired before any further processing."
     },
     {
       "rejection_class": "envelope.seal-signature-invalid",
@@ -209,7 +209,7 @@
       "id": "session-mac-invalid",
       "pointer": "negative-envelope-rejection.json#session-mac-invalid",
       "spec_reference": "VECTORS.md §17.7; ENVELOPE.md §7.2 step 4; ERRORS.md session_mac_invalid",
-      "description": "Take the valid envelope and replace seal.session_mac with an HMAC computed under a different key. §4.3 canonicalization blanks both seal.signature and seal.session_mac before either is computed, so seal.signature still verifies (step 1 passes) — this is the receiving-server-only check at step 4. The recipient server MUST reject with reason_code session_mac_invalid; the rejection is distinct from seal_invalid because routing servers cannot perform this check (they do not hold K_env_mac)."
+      "description": "Take the valid envelope and replace seal.session_mac with an HMAC computed under a different key. §4.3 canonicalization blanks both seal.signature and seal.session_mac before either is computed, so seal.signature still verifies (step 1 passes) -- this is the receiving-server-only check at step 4. The recipient server MUST reject with reason_code session_mac_invalid; the rejection is distinct from seal_invalid because routing servers cannot perform this check (they do not hold K_env_mac)."
     },
     {
       "rejection_class": "first-contact-token.replay-rejected",

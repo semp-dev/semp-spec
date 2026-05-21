@@ -429,7 +429,7 @@ def envelope_size_bucket(size: int) -> int:
     occupies at least 4 KB on the wire). Implementations clamp the
     final value to the operator-configured `max_envelope_size`
     (typically 25 MiB / 26214400 bytes). The clamp happens at the
-    deployment boundary, not in this function — the raw
+    deployment boundary, not in this function -- the raw
     next-power-of-2 value is the canonical mathematical answer.
     """
     bucket = 4096
@@ -620,7 +620,7 @@ def build_pow_json() -> dict:
                 "description": (
                     "Insufficient solution: same prefix and challenge_id as the "
                     "valid case, but with a nonce that produces only a few "
-                    "leading zero bits — the implementation MUST reject."
+                    "leading zero bits -- the implementation MUST reject."
                 ),
                 "spec_reference": "VECTORS.md §4.2",
                 "inputs": {
@@ -3959,7 +3959,7 @@ def build_delivery_receipt_json() -> dict:
     domain_fp = fingerprint_hex(domain_pub)
 
     # Pin a small reference envelope. We don't need to fully encrypt it for
-    # the receipt — we just need its canonical bytes for the SHA-256 digest.
+    # the receipt -- we just need its canonical bytes for the SHA-256 digest.
     # The envelope below has all the §4.3 canonicalization corner cases
     # (sorted keys, blanked signature/session_mac, padding/hop_count
     # omitted) covered by canonical_envelope.
@@ -4351,7 +4351,7 @@ def build_forwarding_json() -> dict:
         tampered_outer["forwarded_from"]["original_enclosure_plaintext"], pub_a
     )
     # Step 1 still verifies (we only mutated the inner body, not the outer
-    # canonical bytes? Actually no — the outer canonicalization includes the
+    # canonical bytes? Actually no -- the outer canonicalization includes the
     # forwarded_from contents, so step 1 also fails). Let's assert what we
     # observe rather than what we predict, since the canonical outer bytes
     # cover the inner block too.
@@ -4390,7 +4390,7 @@ def build_forwarding_json() -> dict:
     # We construct: B does the attestation correctly, but A signs the outer.
     outer_signed_by_a_pre = copy.deepcopy(outer_enclosure_pre_sign)
     # Swap the outer sender_signature key_id to claim B (matching attestation)
-    # while having A actually sign — this is the spoof we detect.
+    # while having A actually sign -- this is the spoof we detect.
     outer_signed_by_a_pre["sender_signature"]["key_id"] = fp_b
     outer_signed_by_a, _ = sender_signature_compute(outer_signed_by_a_pre, seed_a)
     # Now sender_signature was produced by A but key_id claims B.
@@ -7268,7 +7268,7 @@ def build_handshake_messages_json() -> dict:
     """Layer 4 vectors covering canonical bytes and Ed25519 signature for
     the four-step handshake (init, response, confirm, accepted) plus a
     rejection. Baseline suite only; PQ payloads differ only in the
-    advertised algorithm strings and ephemeral_key sizes — the canonical
+    advertised algorithm strings and ephemeral_key sizes -- the canonical
     bytes / signature construction is identical."""
     import base64
 
@@ -7307,7 +7307,7 @@ def build_handshake_messages_json() -> dict:
         "id": "handshake-init-canonical",
         "description": (
             "Pinned ClientInit (party=client, step=init). The init message "
-            "is anonymous and NOT signed per §2.2 — verification of its "
+            "is anonymous and NOT signed per §2.2 -- verification of its "
             "integrity occurs in message 3 via the confirmation_hash. The "
             "vector pins the canonical bytes used both for the "
             "confirmation_hash input and for any implementation that needs "
@@ -7401,7 +7401,7 @@ def build_handshake_messages_json() -> dict:
             "identity_proof block (a JSON object encrypted under K_enc_c2s, "
             "left here as an opaque pinned string). The "
             "confirmation_hash field MUST equal "
-            "SHA-256(canonical(init) || canonical(response)) per §17.1 — "
+            "SHA-256(canonical(init) || canonical(response)) per §17.1 -- "
             "the value here matches the §5.1 confirmation-hash vector."
         ),
         "spec_reference": "VECTORS.md §17.8; HANDSHAKE.md §2.5",
@@ -7660,8 +7660,8 @@ def build_negative_envelope_rejection_json() -> dict:
         "rejection_class": "envelope.postmark-expired",
         "description": (
             "A well-formed envelope whose postmark.expires is in the past. "
-            "§7.2 step 1 (seal.signature verification) still passes — the "
-            "envelope was correctly signed over its own canonical bytes — "
+            "§7.2 step 1 (seal.signature verification) still passes -- the "
+            "envelope was correctly signed over its own canonical bytes -- "
             "but step 2 MUST reject with reason_code envelope_expired "
             "before any further processing."
         ),
@@ -7747,7 +7747,7 @@ def build_negative_envelope_rejection_json() -> dict:
             "HMAC computed under a different key. §4.3 canonicalization "
             "blanks both seal.signature and seal.session_mac before either "
             "is computed, so seal.signature still verifies (step 1 passes) "
-            "— this is the receiving-server-only check at step 4. The "
+            "-- this is the receiving-server-only check at step 4. The "
             "recipient server MUST reject with reason_code "
             "session_mac_invalid; the rejection is distinct from "
             "seal_invalid because routing servers cannot perform this "

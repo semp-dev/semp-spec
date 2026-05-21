@@ -19,7 +19,7 @@
   "vectors": [
     {
       "id": "handshake-init-canonical",
-      "description": "Pinned ClientInit (party=client, step=init). The init message is anonymous and NOT signed per §2.2 — verification of its integrity occurs in message 3 via the confirmation_hash. The vector pins the canonical bytes used both for the confirmation_hash input and for any implementation that needs to reproduce the wire format.",
+      "description": "Pinned ClientInit (party=client, step=init). The init message is anonymous and NOT signed per §2.2 -- verification of its integrity occurs in message 3 via the confirmation_hash. The vector pins the canonical bytes used both for the confirmation_hash input and for any implementation that needs to reproduce the wire format.",
       "spec_reference": "VECTORS.md §17.8; HANDSHAKE.md §2.2",
       "inputs": {
         "message_json": {
@@ -132,7 +132,7 @@
     },
     {
       "id": "handshake-confirm-canonical",
-      "description": "Pinned ClientConfirm. The outer message has no signature; authentication of the client comes from the inner identity_proof block (a JSON object encrypted under K_enc_c2s, left here as an opaque pinned string). The confirmation_hash field MUST equal SHA-256(canonical(init) || canonical(response)) per §17.1 — the value here matches the §5.1 confirmation-hash vector.",
+      "description": "Pinned ClientConfirm. The outer message has no signature; authentication of the client comes from the inner identity_proof block (a JSON object encrypted under K_enc_c2s, left here as an opaque pinned string). The confirmation_hash field MUST equal SHA-256(canonical(init) || canonical(response)) per §17.1 -- the value here matches the §5.1 confirmation-hash vector.",
       "spec_reference": "VECTORS.md §17.8; HANDSHAKE.md §2.5",
       "inputs": {
         "message_json": {

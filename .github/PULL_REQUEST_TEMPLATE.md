@@ -18,7 +18,7 @@ discussion first.
 - [ ] Editorial / typo / cross-reference / formatting
 - [ ] Clarifying rewrite (no normative meaning change)
 - [ ] New normative requirement (MUST / SHOULD / MAY added or strengthened)
-- [ ] Relaxed normative requirement (MUST → SHOULD, etc.)
+- [ ] Relaxed normative requirement (MUST -> SHOULD, etc.)
 - [ ] New record schema or new optional module
 - [ ] Wire-incompatible change
 

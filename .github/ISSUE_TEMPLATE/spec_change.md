@@ -16,7 +16,7 @@ assignees: ''
 
 ## Proposed change
 
-<!-- The concrete change. New field, new section, modified normative-keyword, new optional module — be specific. JSON example if applicable. -->
+<!-- The concrete change. New field, new section, modified normative-keyword, new optional module -- be specific. JSON example if applicable. -->
 
 ## Rationale
 
