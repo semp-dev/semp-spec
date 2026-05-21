@@ -1743,6 +1743,23 @@ SHOULD use a domain that does not support transparency,
 accepting the corresponding loss of equivocation
 detection.
 
+<a id="test-vectors"></a>
+
+# Test Vectors
+The cross-language test vector corpus at `vectors/v1.0.0/` of
+the SEMP specification repository pins the byte-level behavior
+of the constructions in this document. The following files
+exercise recovery, migration, closure, and transparency:
+
+| File | What it pins |
+|---|---|
+| `account-recovery.json` | Server-assisted backup bundle: Argon2id KDF, XChaCha20-Poly1305 AEAD, `SEMP-RECOVERY-BUNDLE:` signature. |
+| `recovery-shamir.json` | Device-split Shamir backup over GF(256); manifest + share signatures; threshold reconstruction round-trip. |
+| `migration.json` | Cooperative migration record with the four-signature chain (old_identity, new_identity, new_domain, old_domain) under `SEMP-MIGRATION-RECORD:`. |
+| `migration-notice.json` | In-window `migration_notice` rejection body and the indistinguishable post-window rejection. |
+| `account-closure.json` | `SEMP_ACCOUNT_CLOSURE` signature path with the `SEMP-ACCOUNT-CLOSURE:` prefix. |
+| `transparency.json` | Domain-signed Signed Tree Heads plus RFC 6962 inclusion and consistency proofs. |
+
 # IANA Considerations
 
 This document does not request new IANA registrations.

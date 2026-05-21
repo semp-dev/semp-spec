@@ -2379,6 +2379,24 @@ view is non-conformant. Implementations SHOULD also
 distinguish key-transparency-verified SEMP messages from
 unverified SEMP messages in user-visible ways.
 
+<a id="test-vectors"></a>
+
+# Test Vectors
+Most of the client's wire behavior is exercised through the
+vectors in the topic drafts the client depends on (envelope,
+handshake, discovery, delivery, recovery, extensions). The
+following vector files are most directly relevant to the
+client-side schemas defined here:
+
+| File | What it pins |
+|---|---|
+| `delivery-status.json` | Submission status enum and per-recipient state transitions surfaced to the client. |
+| `status-config.json` | `SEMP_STATUS` record the client signs and submits. |
+| `user-policy.json` | `SEMP_USER_POLICY` synchronization the client performs. |
+| `discovery.json` | `SEMP_KEYS` result status enum (`found` / `not_found` / `legacy_required` / `recipient_not_found` / `error`), HTTP/2 path templates the client uses, `migration_to` field on the key-fetch redirect. |
+| `migration-notice.json` | `migration_notice` rejection body the client surfaces under §Migration Notice Handling. |
+| `device-certificates.json` | Scoped device certificates the client carries on delegated registration. |
+
 # IANA Considerations
 
 This document does not request new IANA registrations. The

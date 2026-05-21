@@ -27,6 +27,7 @@ Sealed Envelope Messaging Protocol: Architecture and Threat Model
 - [Document Series](architecture.md#document-series)
 - [Threat Model](architecture.md#threat-model)
 - [Security Considerations](architecture.md#security-considerations)
+- [Protocol Constants](architecture.md#protocol-constants)
 - [IANA Considerations](architecture.md#iana-considerations)
 - [Acknowledgments](architecture.md#acknowledgments)
 
@@ -47,6 +48,7 @@ Sealed Envelope Messaging Protocol: Envelope Format
 - [Media Types](envelope.md#media-types)
 - [Security Considerations](envelope.md#security-considerations)
 - [Privacy Considerations](envelope.md#privacy-considerations)
+- [Test Vectors](envelope.md#test-vectors)
 - [IANA Considerations](envelope.md#iana-considerations)
 - [Acknowledgments](envelope.md#acknowledgments)
 
@@ -70,6 +72,7 @@ Sealed Envelope Messaging Protocol: Handshake, Session, and Transport
 - [Transport Bindings](handshake.md#transport-bindings)
 - [Security Considerations](handshake.md#security-considerations)
 - [Privacy Considerations](handshake.md#privacy-considerations)
+- [Test Vectors](handshake.md#test-vectors)
 - [IANA Considerations](handshake.md#iana-considerations)
 - [Acknowledgments](handshake.md#acknowledgments)
 
@@ -97,6 +100,7 @@ Sealed Envelope Messaging Protocol: Discovery and Key Publication
 - [Legacy Integration](discovery.md#legacy-integration)
 - [Security Considerations](discovery.md#security-considerations)
 - [Privacy Considerations](discovery.md#privacy-considerations)
+- [Test Vectors](discovery.md#test-vectors)
 - [IANA Considerations](discovery.md#iana-considerations)
 - [Acknowledgments](discovery.md#acknowledgments)
 
@@ -120,6 +124,7 @@ Sealed Envelope Messaging Protocol: Delivery, Reputation, and Errors
 - [Reason Code Registry](delivery.md#reason-codes)
 - [Security Considerations](delivery.md#security-considerations)
 - [Privacy Considerations](delivery.md#privacy-considerations)
+- [Test Vectors](delivery.md#test-vectors)
 - [IANA Considerations](delivery.md#iana-considerations)
 - [Acknowledgments](delivery.md#acknowledgments)
 
@@ -135,6 +140,7 @@ Sealed Envelope Messaging Protocol: Recovery, Migration, Closure, and Transparen
 - [Key Transparency](recovery.md#transparency)
 - [Security Considerations](recovery.md#security-considerations)
 - [Privacy Considerations](recovery.md#privacy-considerations)
+- [Test Vectors](recovery.md#test-vectors)
 - [IANA Considerations](recovery.md#iana-considerations)
 - [Acknowledgments](recovery.md#acknowledgments)
 
@@ -151,6 +157,7 @@ Sealed Envelope Messaging Protocol: Extensions and Conformance
 - [Conformance](extensions.md#conformance)
 - [Security Considerations](extensions.md#security-considerations)
 - [Privacy Considerations](extensions.md#privacy-considerations)
+- [Test Vectors](extensions.md#test-vectors)
 - [IANA Considerations](extensions.md#iana-considerations)
 - [Acknowledgments](extensions.md#acknowledgments)
 
@@ -170,6 +177,7 @@ Sealed Envelope Messaging Protocol: Client Specification
 - [User Policy](client.md#user-policy)
 - [Notification Content Constraints](client.md#notification-content-constraints)
 - [Security Considerations](client.md#security-considerations)
+- [Test Vectors](client.md#test-vectors)
 - [IANA Considerations](client.md#iana-considerations)
 - [Acknowledgments](client.md#acknowledgments)
 

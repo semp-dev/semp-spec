@@ -1,0 +1,71 @@
+{
+  "version": "1.0.0",
+  "category": "publication-eligibility",
+  "description": "Publisher-side eligibility gate for SEMP_TRUST_OBSERVATION records. A server SHOULD NOT publish an observation about a subject domain unless the observer has directly observed at least 16 envelopes (or an equivalent number of handshake attempts) involving the subject during the observation window. A server MUST NOT publish observations whose metrics fields are uniformly zero. Conformance per draft-gokce-semp-delivery §11.7 and REPUTATION.md §4.6.2.",
+  "spec_reference": "draft-gokce-semp-delivery §11.7; REPUTATION.md §4.6.2",
+  "vectors": [
+    {
+      "id": "publication-eligibility-threshold",
+      "description": "Threshold demonstration. The eligibility predicate evaluates two gates: (a) the sum of envelopes_received + handshakes_completed + handshakes_rejected meets the 16-envelope minimum, and (b) at least one metric field is non-zero. A candidate that fails either gate MUST NOT be published. Each sample pins the metrics block, the expected per-gate verdicts, and the combined expected_eligible outcome.",
+      "spec_reference": "draft-gokce-semp-delivery §11.7; REPUTATION.md §4.6.2",
+      "rule": "expected_eligible == (expected_meets_publish_volume AND NOT expected_all_zero)",
+      "samples": [
+        {
+          "label": "below threshold",
+          "metrics": {
+            "envelopes_received": 8,
+            "envelopes_rejected": 0,
+            "abuse_reports": 0
+          },
+          "expected_meets_publish_volume": false,
+          "expected_eligible": false
+        },
+        {
+          "label": "at threshold",
+          "metrics": {
+            "envelopes_received": 16,
+            "envelopes_rejected": 0,
+            "abuse_reports": 0
+          },
+          "expected_meets_publish_volume": true,
+          "expected_eligible": true
+        },
+        {
+          "label": "above threshold via envelopes_received",
+          "metrics": {
+            "envelopes_received": 1024,
+            "envelopes_rejected": 8,
+            "abuse_reports": 2,
+            "handshakes_completed": 32,
+            "handshakes_rejected": 4
+          },
+          "expected_meets_publish_volume": true,
+          "expected_eligible": true
+        },
+        {
+          "label": "above threshold via handshake tally",
+          "metrics": {
+            "envelopes_received": 0,
+            "envelopes_rejected": 0,
+            "abuse_reports": 0,
+            "handshakes_completed": 16,
+            "handshakes_rejected": 0
+          },
+          "expected_meets_publish_volume": true,
+          "expected_eligible": true
+        },
+        {
+          "label": "all-zero metrics",
+          "metrics": {
+            "envelopes_received": 0,
+            "envelopes_rejected": 0,
+            "abuse_reports": 0
+          },
+          "expected_meets_publish_volume": false,
+          "expected_eligible": false,
+          "expected_all_zero": true
+        }
+      ]
+    }
+  ]
+}

@@ -1386,6 +1386,163 @@ implementations and operators across the entire series.
 Violation of any of the above by an implementation makes that
 implementation non-conformant.
 
+<a id="protocol-constants"></a>
+
+# Protocol Constants
+This section is a cross-cutting navigational index of the
+constant values pinned across the SEMP series. It is not a
+normative source; each value's normative definition lives in
+the draft cited in the "Defined in" column. Implementations
+MUST follow the cited section.
+
+## Size Caps
+
+| Constant | Value | Defined in |
+|---|---|---|
+| `postmark.extensions` maximum bytes | 4096 (4 KiB) | [Extensions](extensions.md) §Size Limits |
+| `brief.extensions` maximum bytes | 16384 (16 KiB) | [Extensions](extensions.md) §Size Limits |
+| `enclosure.extensions` maximum bytes | implementation-defined; bounded by `max_envelope_size` | [Extensions](extensions.md) §Size Limits |
+| Trust-gossip observation record maximum bytes | 16384 (16 KiB) in canonical UTF-8 JSON | [Delivery](delivery.md) §Schema Limits and Evidence Binding |
+| Trust-gossip evidence fetch RECOMMENDED maximum | 1048576 (1 MiB) | [Delivery](delivery.md) §Schema Limits and Evidence Binding |
+| Envelope size buckets | powers of two from 4096 to `max_envelope_size`, advertised per-recipient | [Envelope](envelope.md) §Envelope Size Buckets |
+| Local-part maximum octets | 64 | [Envelope](envelope.md) §Address Canonicalization |
+| Address maximum octets (composed `local-part@domain`) | 254 | [Envelope](envelope.md) §Address Canonicalization |
+| Matcher entry maximum count | 10000 | [Discovery](discovery.md) §Scope Matchers |
+
+## Time Bounds
+
+| Constant | Value | Defined in |
+|---|---|---|
+| Migration `notice_window_until` minimum | 30 days | [Recovery](recovery.md) §Migration Notice Window |
+| Migration `notice_window_until` RECOMMENDED | 180 days | [Recovery](recovery.md) §Migration Notice Window |
+| Migration `notice_window_until` maximum | 730 days | [Recovery](recovery.md) §Migration Notice Window |
+| Account closure grace period minimum | 604800 seconds (7 days) | [Recovery](recovery.md) §Account Closure |
+| Resumption ticket `expires_at` maximum | 7 days from issuance | [Handshake](handshake.md) §Resumption |
+| Federation session TTL default | 3600 seconds (1 hour) | [Handshake](handshake.md) §Federation Handshake |
+| Client session TTL default | 300 seconds (5 minutes) | [Handshake](handshake.md) §Session Lifecycle |
+| Persistent silent observation window minimum | 24 hours | [Delivery](delivery.md) §Persistent Silent Recipients |
+| Persistent silent shortened deadline RECOMMENDED | 4 hours | [Delivery](delivery.md) §Persistent Silent Recipients |
+| Persistent silent counter idle expiry RECOMMENDED | 30 days | [Delivery](delivery.md) §Persistent Silent Recipients |
+| Reputation evaluation window RECOMMENDED | 30 days | [Delivery](delivery.md) §Reciprocity as Policy |
+| Recovery bundle retention minimum | 30 days for superseded bundles | [Recovery](recovery.md) §Recovery Bundle |
+| STH freshness bound | 1 hour | [Recovery](recovery.md) §Key Transparency |
+| Delivery receipt retention maximum | 30 days | [Delivery](delivery.md) §Delivery Receipt |
+| Transparency record retention minimum | 2 years | [Recovery](recovery.md) §Key Transparency |
+| Connection timeout RECOMMENDED | 10 seconds | [Handshake](handshake.md) §Transport Bindings |
+| Clock skew tolerance default per hop | 5 minutes | [Handshake](handshake.md) §Clock Skew |
+| Discovery TXT TTL minimum | 60 seconds | [Discovery](discovery.md) §TXT Records |
+| Discovery TXT TTL maximum | 7 days | [Discovery](discovery.md) §TXT Records |
+
+## Numeric Thresholds
+
+| Constant | Value | Defined in |
+|---|---|---|
+| Trust-gossip publication eligibility minimum envelopes | 16 | [Delivery](delivery.md) §Publication Eligibility |
+| Persistent silent consecutive-silent threshold | 5 | [Delivery](delivery.md) §Persistent Silent Recipients |
+| Proof-of-work difficulty cap | 28 bits | [Delivery](delivery.md) §Proof of Work |
+| PoW expiry floor at difficulty ≤ 20 | 30 seconds | [Delivery](delivery.md) §Proof of Work |
+| PoW expiry floor at difficulty 21..24 | 60 seconds | [Delivery](delivery.md) §Proof of Work |
+| PoW expiry floor at difficulty 25..28 | 120 seconds | [Delivery](delivery.md) §Proof of Work |
+| Extension cap per protocol version | 20 | [Extensions](extensions.md) §Anti-Fragmentation |
+
+## Magic Strings
+
+### Well-known URL paths
+
+| Path | Purpose | Defined in |
+|---|---|---|
+| `/.well-known/semp/configuration` | Domain SEMP configuration document | [Discovery](discovery.md) §Discovery Configuration |
+| `/.well-known/semp/domain-keys` | Domain signing and encryption public keys | [Discovery](discovery.md) §Key Publication |
+| `/.well-known/semp/keys/{address}` | Per-address user key publication | [Discovery](discovery.md) §Key Publication |
+| `/.well-known/semp/reputation/{subject}` | Trust-gossip observation publication | [Delivery](delivery.md) §Trust Gossip |
+| `/.well-known/semp-extensions/{name}.json` | Extension definition document (canonical form per RFC 8615) | [Extensions](extensions.md) §Definition Documents |
+
+### HTTP/2 path templates
+
+| Path | Method | Defined in |
+|---|---|---|
+| `/v1/discovery/{address}` | `GET` (also accepts `POST` for callers requiring a signed body) | [Handshake](handshake.md) §HTTP/2 |
+| `/v1/keys/{address}` | `GET` (also accepts `POST`) | [Handshake](handshake.md) §HTTP/2 |
+| `/v1/handshake` | `POST` | [Handshake](handshake.md) §HTTP/2 |
+| `/v1/envelope` | `POST` | [Handshake](handshake.md) §HTTP/2 |
+| `/v1/session/{id}` | `GET` (Server-Sent Events for the long-lived session stream) | [Handshake](handshake.md) §HTTP/2 |
+
+### DNS records
+
+| Name | Purpose | Defined in |
+|---|---|---|
+| `_semp._tcp.{domain}` SRV | Server endpoint discovery (TCP-based transports) | [Discovery](discovery.md) §SRV Records |
+| `_semp._udp.{domain}` SRV | Optional QUIC endpoint override (UDP) | [Discovery](discovery.md) §SRV Records |
+| `_semp._tcp.{domain}` TXT | Protocol version and capability advertisement (`v=semp1;...`) | [Discovery](discovery.md) §TXT Records |
+
+### Extension identifiers (core, `semp.dev/` namespace)
+
+| Identifier | Purpose | Defined in |
+|---|---|---|
+| `semp.dev/device-sync` | Device-sync envelope marker | [Client](client.md) §Device Sync Marker |
+| `semp.dev/large-attachment` | Out-of-band attachment storage descriptor | [Extensions](extensions.md) §large-attachment |
+
+### Upgrade-signal SMTP headers (legacy interop)
+
+| Header | Defined in |
+|---|---|
+| `SEMP-Capability` | [Client](client.md) §Upgrade-Signaling Headers |
+| `SEMP-Identity` | [Client](client.md) §Upgrade-Signaling Headers |
+| `SEMP-Domain` | [Client](client.md) §Upgrade-Signaling Headers |
+| `SEMP-Address` | [Client](client.md) §Upgrade-Signaling Headers |
+
+### Signature domain-separation prefixes
+
+Every Ed25519 signature in the SEMP protocol is computed over
+canonical bytes prefixed with a domain-separation tag. The
+prefixes registered across the series are:
+
+| Prefix | Used by | Defined in |
+|---|---|---|
+| `SEMP-ENVELOPE:` | seal signature | [Envelope](envelope.md) §Signature Domain Separation |
+| `SEMP-HANDSHAKE:` | handshake server / federation message signatures | [Handshake](handshake.md) |
+| `SEMP-IDENTITY:` | inner identity-proof signature | [Handshake](handshake.md) §Identity Proof |
+| `SEMP-KEYS:` | SEMP_KEYS response signatures | [Discovery](discovery.md) |
+| `SEMP-CONFIGURATION-UPDATE:` | SEMP_CONFIGURATION_UPDATE | [Discovery](discovery.md) |
+| `SEMP-DELIVERY-RECEIPT:` | signed delivery receipt | [Delivery](delivery.md) |
+| `SEMP-USER-POLICY:` | signed user-policy message | [Delivery](delivery.md) |
+| `SEMP-STATUS:` | signed SEMP_STATUS record | [Delivery](delivery.md) |
+| `SEMP-TRUST-OBSERVATION:` | signed observation record | [Delivery](delivery.md) |
+| `SEMP-TRUST-TRANSFER:` | signed trust-transfer record | [Delivery](delivery.md) |
+| `SEMP-REPUTATION-REFERENCES:` | signed references document | [Delivery](delivery.md) |
+| `SEMP-ABUSE-REPORT:` | signed abuse-report record | [Delivery](delivery.md) |
+| `SEMP-FORWARDER-ATTESTATION:` | forwarder attestation | [Envelope](envelope.md) §Forwarding Provenance |
+| `SEMP-RECOVERY-BUNDLE:` | SEMP_RECOVERY_BUNDLE | [Recovery](recovery.md) |
+| `SEMP-RECOVERY-MANIFEST:` | SEMP_RECOVERY_SET_MANIFEST | [Recovery](recovery.md) |
+| `SEMP-RECOVERY-SHARE:` | SEMP_RECOVERY_SHARE | [Recovery](recovery.md) |
+| `SEMP-SUCCESSOR-RECORD:` | SEMP_SUCCESSOR | [Recovery](recovery.md) |
+| `SEMP-MIGRATION-RECORD:` | SEMP_MIGRATION | [Recovery](recovery.md) |
+| `SEMP-ACCOUNT-CLOSURE:` | SEMP_ACCOUNT_CLOSURE | [Recovery](recovery.md) |
+| `SEMP-TRANSPARENCY-STH:` | transparency Signed Tree Head | [Recovery](recovery.md) |
+| `SEMP-DEVICE-REGISTER:` | device registration | [Discovery](discovery.md) |
+| `SEMP-DEVICE-AUTHORIZE:` | device authorization | [Discovery](discovery.md) |
+| `SEMP-DEVICE-DIRECTORY:` | device directory record | [Discovery](discovery.md) |
+| `SEMP-DEVICE-REVOCATION:` | device revocation record | [Discovery](discovery.md) |
+| `SEMP-REVOCATION:` | domain / user key revocation | [Discovery](discovery.md) |
+| `SEMP-KEY-SELF-SIG:` | key self-signature | [Discovery](discovery.md) |
+
+## Vocabulary Enums
+
+| Enum | Values | Defined in |
+|---|---|---|
+| Algorithm suites | `x25519-chacha20-poly1305`, `pq-kyber768-x25519` | [Handshake](handshake.md) §Cryptographic Suites |
+| Reason codes | per-layer enumeration | [Delivery](delivery.md) §Reason Code Registry |
+| Submission status | `delivered`, `rejected`, `silent`, `legacy_required`, `recipient_not_found`, `error` | [Delivery](delivery.md) §Submission Status Values |
+| SEMP_KEYS result status | `found`, `not_found`, `legacy_required`, `recipient_not_found`, `error` | [Client](client.md) §Recipient Key Request Protocol |
+| Recipient status state | `available`, `away`, `do_not_disturb` | [Delivery](delivery.md) §Recipient Status |
+| Status visibility mode | `nobody`, `users`, `everyone` | [Delivery](delivery.md) §Recipient Status |
+| Abuse categories | `spam`, `harassment`, `phishing`, `malware`, `protocol_abuse`, `impersonation`, `observation_record_abuse`, `other` | [Delivery](delivery.md) §Abuse Reporting |
+| Extension validation failure | `data_schema_mismatch`, `placement_violation`, `criticality_unsupported`, `size_exceeded`, `version_unsupported`, `definition_signature_invalid`, `unknown_extension` | [Extensions](extensions.md) §Validation Failures |
+| Migration mode | `cooperative`, `unilateral` | [Recovery](recovery.md) §Migration Modes |
+| Reciprocity policy mode | `none`, `lenient`, `strict` | [Discovery](discovery.md) §Reciprocity Policy |
+| Domain key revocation reasons | `key_compromise`, `superseded`, `cessation_of_operation`, `temporary_hold` | [Discovery](discovery.md) §Revocation Reasons |
+| Device revocation reasons | `key_compromise`, `lost`, `retired`, `superseded` | [Discovery](discovery.md) §Device Revocation Reasons |
+
 # IANA Considerations
 
 This document has no IANA actions. Registries defined by SEMP are

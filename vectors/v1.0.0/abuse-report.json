@@ -1,0 +1,49 @@
+{
+  "version": "1.0.0",
+  "category": "abuse-report",
+  "description": "SEMP_ABUSE_REPORT carrying the observation_record_abuse category. Used when a consumer detects misbehavior in published trust-gossip observation records themselves (oversized records, evidence-hash mismatches, hostile evidence content, fabricated metrics, systematic publication of unverifiable assessments). The report flows from a user (or the user's home server on the user's behalf) to the home server over an already-authenticated session, so the wire shape does not carry its own signature; the session identifies the reporting user.",
+  "spec_reference": "draft-gokce-semp-delivery §10; REPUTATION.md §3.4",
+  "vectors": [
+    {
+      "id": "abuse-report-observation-record-abuse",
+      "description": "Abuse report whose category targets the trust-gossip observation record itself. The envelope_metadata evidence shape carries the postmark ids of the published observations the consumer rejected and the observation window the publisher purported to summarize.",
+      "spec_reference": "draft-gokce-semp-delivery §10; REPUTATION.md §3.4",
+      "inputs": {
+        "report_json": {
+          "type": "SEMP_ABUSE_REPORT",
+          "version": "1.0.0",
+          "id": "01JABUSE00000000000000000000",
+          "reporter": "alice@example.com",
+          "reported_domain": "publisher.example.com",
+          "category": "observation_record_abuse",
+          "timestamp": "2026-06-15T14:30:00Z",
+          "evidence": {
+            "type": "envelope_metadata",
+            "postmark_ids": [
+              "01JTRUSTOBS000000000000PUB1",
+              "01JTRUSTOBS000000000000PUB2"
+            ],
+            "count": 2,
+            "window": "2026-06-01T00:00:00Z/2026-06-15T00:00:00Z"
+          },
+          "description": "Publisher emitted two trust-observation records whose evidence_hash did not match the bytes returned by evidence_uri.",
+          "extensions": {}
+        }
+      },
+      "expected": {
+        "category": "observation_record_abuse",
+        "evidence_type": "envelope_metadata",
+        "categories_known_to_lib": [
+          "spam",
+          "harassment",
+          "phishing",
+          "malware",
+          "protocol_abuse",
+          "impersonation",
+          "observation_record_abuse",
+          "other"
+        ]
+      }
+    }
+  ]
+}

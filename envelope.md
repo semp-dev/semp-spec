@@ -1549,29 +1549,20 @@ as a deliberate recipient privacy policy under the rules in
 
 ## Envelope Rejection Reason Codes
 
-The following reason codes apply to envelope rejection. The
-full registry, including non-envelope-layer reason codes, is
-defined in [Delivery](delivery.md).
+The envelope-layer reason codes (returned in structured
+rejection responses to envelope delivery attempts) are defined
+in the Reason Code Registry of [Delivery](delivery.md).
+That registry is the authoritative cross-cutting list, with
+per-code recoverability classification and sender-behavior
+guidance. Envelope-layer codes include `seal_invalid`,
+`session_mac_invalid`, `envelope_expired`,
+`envelope_size_exceeded`, `policy_forbidden`, and others.
 
-| Reason code | Meaning |
-|---|---|
-| `blocked` | The sender or their domain is blocked. MAY be returned only when the recipient's policy permits revealing the block. Otherwise `policy_forbidden` MUST be returned in its place. |
-| `handshake_invalid` | The session referenced by `postmark.session_id` has been invalidated. |
-| `handshake_expired` | The session TTL has elapsed. The sending server should re-handshake and retry. |
-| `no_session` | `postmark.session_id` is absent or does not reference a known session. |
-| `seal_invalid` | `seal.signature` domain key verification failed. |
-| `session_mac_invalid` | `seal.session_mac` session key MAC verification failed. |
-| `envelope_expired` | `postmark.expires` is in the past. |
-| `envelope_size_exceeded` | The serialized envelope exceeds `max_envelope_size` as negotiated for the session or as published by the recipient domain. The sender MUST NOT retry the same envelope; the envelope must be recomposed. |
-| `policy_forbidden` | Delivery refused for policy reasons. The protocol does not distinguish among the underlying causes through this code. The rejection response MAY include a `challenge` body inviting the sender to retry with proof of work, per the first-contact challenge mechanism in [Delivery](delivery.md). |
-| `auth_failed` | The envelope failed an authentication check that is not covered by the more specific `seal_invalid` or `session_mac_invalid` codes (for example, a missing or malformed identity proof on a first-contact envelope). |
-
-The sending server MUST handle `handshake_invalid`,
-`handshake_expired`, and `no_session` as recoverable
-conditions by establishing a new session and resending the
-envelope. `blocked` and `auth_failed` are non-recoverable
-and MUST be surfaced to the sending user rather than
-retried automatically.
+A rejection MAY include a `challenge` body inviting the sender
+to retry with proof of work, per the first-contact challenge
+mechanism in [Delivery](delivery.md). When the recipient's
+policy does not permit revealing a block, `policy_forbidden`
+MUST be returned in place of the more specific `blocked` code.
 
 # Media Types
 
@@ -1967,6 +1958,25 @@ when the message was sent. Implementations MAY reduce
 precision (rounding to the nearest hour, for example) to
 limit timing correlation attacks, at the cost of replay
 window expansion.
+
+<a id="test-vectors"></a>
+
+# Test Vectors
+The cross-language test vector corpus at `vectors/v1.0.0/` of
+the SEMP specification repository pins the byte-level behavior
+of the constructions in this document. The following files
+exercise the envelope layer:
+
+| File | What it pins |
+|---|---|
+| `envelope-canonical.json` | Canonical envelope encoding (input to `seal.signature` and `seal.session_mac`). |
+| `envelope-buckets.json` | Size and recipient-count bucket selection. |
+| `envelope-roundtrip.json` | Full compose flow per §7.1 and verification per §7.2; both algorithm suites; every random input pinned. |
+| `seal-roundtrip.json` | Seal wrap construction per §4.4.1; both suites. |
+| `sender-signature.json` | Enclosure `sender_signature` per §6.5. |
+| `forwarding.json` | Forwarded-envelope three-signature chain per §6.6. |
+| `large-attachment.json` | Large-attachment AEAD per the `semp.dev/large-attachment` extension. |
+| `negative-envelope-rejection.json` | Must-reject cases for the §7.2 decryption flow. |
 
 <a id="iana-considerations"></a>
 

@@ -1985,6 +1985,19 @@ shared-operator deployments. Users who wish to avoid it
 SHOULD choose storage providers distinct from their SEMP
 operator.
 
+<a id="test-vectors"></a>
+
+# Test Vectors
+The cross-language test vector corpus at `vectors/v1.0.0/` of
+the SEMP specification repository pins the byte-level behavior
+of the constructions in this document. The following files
+exercise extension validation and registration:
+
+| File | What it pins |
+|---|---|
+| `extension-entries.json` | Extension entry parsing, criticality enforcement, per-layer size limits, the canonical `.well-known/semp-extensions/{name}.json` URL form. |
+| `validation-failures.json` | `extension_unsupported` rejection with the `errors[]` array form; single-entry and multi-entry shapes. |
+
 # IANA Considerations
 
 This document defines the SEMP extension namespace. The

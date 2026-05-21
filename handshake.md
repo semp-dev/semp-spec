@@ -1389,34 +1389,16 @@ processed.
 
 # Reason Codes
 All rejections MUST carry a machine-readable reason code. The
-following reason codes are defined for session and envelope
-rejection at the handshake and session layers:
-
-| Reason code | Meaning |
-|---|---|
-| `blocked` | The sender or their domain is blocked. No session will be accepted. |
-| `handshake_invalid` | The session referenced by the envelope has been invalidated. |
-| `handshake_expired` | The session TTL has elapsed. A new handshake is required. |
-| `no_session` | The envelope does not reference a valid session identifier. |
-| `auth_failed` | Identity or authentication verification failed during handshake. |
-| `policy_forbidden` | The request violates a server or federation policy. The protocol does not distinguish among underlying causes through this code. |
-| `rate_limited` | The sender has exceeded the server's rate limits. |
-| `challenge_failed` | The submitted challenge solution was invalid or the challenge expired. The sender MAY request a new challenge by restarting the handshake. |
-| `challenge_invalid` | The received challenge exceeds protocol bounds (cap or expiry floor in [Challenge Interstitial](#challenge)). The sender MUST NOT retry. |
-| `version_unsupported` | The peer's declared MAJOR protocol version is not supported by this server. |
-| `server_at_capacity` | The server has reached its concurrent session limit. The sender SHOULD retry after a delay. |
-| `resumption_failed` | A `resume` step failed: ticket unknown, expired, corrupt, or already consumed. The client MUST perform a full handshake and MUST NOT retry with the same ticket. |
-| `session_expired` | A rekey attempt failed because the session expired before the rekey completed. |
-| `rekey_unsupported` | A rekey attempt was made and the remote party does not support in-session rekeying. |
-| `revoked` | The peer's published key has been revoked since ticket issuance or the session was established. |
-| `certificate_expired` | A scoped device certificate or peer credential has expired. |
+authoritative cross-cutting registry of every reason code in
+the SEMP protocol, organized by layer and with per-code
+recoverability and sender-behavior columns, is the Reason Code
+Registry in [Delivery](delivery.md). The handshake-layer
+codes (rejection of `SEMP_HANDSHAKE` messages with
+`step: "rejected"`) and the rekeying-layer codes (rejection of
+in-session rekey attempts) are defined there.
 
 Additional reason codes MAY be defined in extensions using the
 standard namespacing convention.
-
-The full reason-code registry, including envelope-layer and
-delivery-layer codes, is specified in
-[Delivery](delivery.md).
 
 # Sender Server Retry Responsibility
 
@@ -2000,6 +1982,27 @@ Running SEMP over standard HTTPS on port 443 makes SEMP
 traffic resistant to protocol-specific blocking. An observer
 sees HTTPS connections to a web server, indistinguishable from
 any other HTTPS traffic without deep packet inspection.
+
+<a id="test-vectors"></a>
+
+# Test Vectors
+The cross-language test vector corpus at `vectors/v1.0.0/` of
+the SEMP specification repository pins the byte-level behavior
+of the constructions in this document. The following files
+exercise the handshake, session, and transport layers:
+
+| File | What it pins |
+|---|---|
+| `hkdf.json` | HKDF-SHA-512 derivation of the five session keys from the shared secret, salt, and per-key info labels. |
+| `session-mac.json` | HMAC-SHA-256 envelope session MAC over canonical envelope bytes. |
+| `confirmation-hash.json` | SHA-256 over canonical(init) ‖ canonical(response). |
+| `handshake-messages.json` | Canonical bytes and `SEMP-HANDSHAKE:` Ed25519 signature path for the four-step handshake plus a rejection. |
+| `handshake-messages-pq.json` | PQ-suite (`pq-kyber768-x25519`) handshake variants with hybrid ephemerals. |
+| `session-resumption.json` | Resumption exchange and key derivation mixing `K_resumption` with a fresh ephemeral. |
+| `session-lifecycle.json` | Session state transitions, concurrency limits, rekey limits. |
+| `clock-tolerance.json` | Future-dated and `expires_at` boundary cases at 0, 5, and 15 minutes. |
+| `pow.json` | Proof-of-work challenge solution verification. |
+| `first-contact-token.json` | First-contact tokens binding a solved PoW to a `postmark.id`. |
 
 # IANA Considerations
 

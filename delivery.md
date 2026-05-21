@@ -2081,6 +2081,7 @@ These codes appear in `SEMP_HANDSHAKE` messages with
 | `server_at_capacity` | Yes | Back off and retry later. |
 | `version_unsupported` | No | Surface to user or operator. Do not retry under the same MAJOR. |
 | `resumption_failed` | No | Perform a full handshake. MUST NOT retry with the same ticket. |
+| `revoked` | No | The peer's published key has been revoked since ticket issuance or the session was established. Re-fetch the peer's keys before any further attempt. |
 
 ## Envelope Reason Codes
 
@@ -2095,6 +2096,7 @@ envelope delivery attempts.
 | `envelope_expired` | No | Recompose with new expiry if content is still relevant. |
 | `envelope_size_exceeded` | No | Recompose with smaller envelope; do not retry the same payload. |
 | `policy_forbidden` | No | Delivery refused for policy reasons. Surface to user. |
+| `auth_failed` | No | An envelope-layer authentication check failed that is not covered by `seal_invalid` or `session_mac_invalid` (for example, a missing or malformed identity proof on a first-contact envelope). Surface to user. |
 | `handshake_invalid` | Yes | Establish new session and resend. |
 | `handshake_expired` | Yes | Establish new session and resend. |
 | `no_session` | Yes | Establish new session and resend. |
@@ -2417,6 +2419,27 @@ per the retention rule above), and the user's block list. It
 cannot provide envelope enclosure plaintexts, encryption
 private keys, or recovery secrets, because it does not hold
 them.
+
+<a id="test-vectors"></a>
+
+# Test Vectors
+The cross-language test vector corpus at `vectors/v1.0.0/` of
+the SEMP specification repository pins the byte-level behavior
+of the constructions in this document. The following files
+exercise delivery, receipts, reputation, and policy:
+
+| File | What it pins |
+|---|---|
+| `delivery-status.json` | Submission-status-to-UI-state mapping, queued-to-final transitions, discovery-outcome dispatch, multi-recipient mixed outcomes, persistent silent counter behavior. |
+| `delivery-receipt.json` | Signed delivery receipt path with the `SEMP-DELIVERY-RECEIPT:` prefix. |
+| `rejection-codes.json` | Recoverability classification and sender behavior per reason code. |
+| `recipient-status.json` | Status visibility rules; status MUST NOT influence the delivery decision. |
+| `status-config.json` | `SEMP_STATUS` configuration record signed with the `SEMP-STATUS:` prefix. |
+| `trust-observation.json` | `SEMP_TRUST_OBSERVATION` signature path, `evidence_hash` verification (positive + tampered cases), 16 KiB size cap rejection. |
+| `reputation-references.json` | Subject-domain `SEMP_REPUTATION_REFERENCES` document signature path. |
+| `publication-eligibility.json` | 16-envelope minimum + all-zero-metrics gate per §Publication Eligibility. |
+| `abuse-report.json` | `SEMP_ABUSE_REPORT` carrying the `observation_record_abuse` category. |
+| `user-policy.json` | `SEMP_USER_POLICY` signature path, `policy_version` monotonicity. |
 
 # IANA Considerations
 

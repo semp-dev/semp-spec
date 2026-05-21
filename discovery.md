@@ -1904,6 +1904,22 @@ capability records on a schedule independent of pending
 messages, the timing correlation between a lookup and a
 subsequent message is broken.
 
+<a id="test-vectors"></a>
+
+# Test Vectors
+The cross-language test vector corpus at `vectors/v1.0.0/` of
+the SEMP specification repository pins the byte-level behavior
+of the constructions in this document. The following files
+exercise discovery, key publication, and device records:
+
+| File | What it pins |
+|---|---|
+| `discovery.json` | Discovery response parsing, DNS TXT capability records, SRV record selection (including `_semp._udp` for QUIC), HTTP/2 path templates, key-fetch status enum, reciprocity policy shape, migration-key-fetch redirect. |
+| `discovery-signed.json` | `SEMP_DISCOVERY` response signature path. |
+| `configuration-update.json` | `SEMP_CONFIGURATION_UPDATE` signature path with the `SEMP-CONFIGURATION-UPDATE:` prefix. |
+| `key-revocation.json` | Sender-side handling of revoked keys with optional replacement. |
+| `device-certificates.json` | Scoped device certificate validation, scope enforcement, rate limits, resource enforcement, lifecycle, staged delivery. |
+
 # IANA Considerations
 
 This document requests no new IANA registrations. SRV service

@@ -6645,6 +6645,194 @@ def build_trust_observation_json() -> dict:
     }
 
 
+def build_abuse_report_json() -> dict:
+    """draft-gokce-semp-delivery §10: SEMP_ABUSE_REPORT wire shape
+    with the observation_record_abuse category."""
+    report = {
+        "type": "SEMP_ABUSE_REPORT",
+        "version": "1.0.0",
+        "id": "01JABUSE00000000000000000000",
+        "reporter": "alice@example.com",
+        "reported_domain": "publisher.example.com",
+        "category": "observation_record_abuse",
+        "timestamp": "2026-06-15T14:30:00Z",
+        "evidence": {
+            "type": "envelope_metadata",
+            "postmark_ids": [
+                "01JTRUSTOBS000000000000PUB1",
+                "01JTRUSTOBS000000000000PUB2",
+            ],
+            "count": 2,
+            "window": "2026-06-01T00:00:00Z/2026-06-15T00:00:00Z",
+        },
+        "description": (
+            "Publisher emitted two trust-observation records whose "
+            "evidence_hash did not match the bytes returned by "
+            "evidence_uri."
+        ),
+        "extensions": {},
+    }
+    return {
+        "version": "1.0.0",
+        "category": "abuse-report",
+        "description": (
+            "SEMP_ABUSE_REPORT carrying the observation_record_abuse "
+            "category. Used when a consumer detects misbehavior in "
+            "published trust-gossip observation records themselves "
+            "(oversized records, evidence-hash mismatches, hostile "
+            "evidence content, fabricated metrics, systematic "
+            "publication of unverifiable assessments). The report "
+            "flows from a user (or the user's home server on the "
+            "user's behalf) to the home server over an "
+            "already-authenticated session, so the wire shape does "
+            "not carry its own signature; the session identifies "
+            "the reporting user."
+        ),
+        "spec_reference": (
+            "draft-gokce-semp-delivery §10; "
+            "REPUTATION.md §3.4"
+        ),
+        "vectors": [
+            {
+                "id": "abuse-report-observation-record-abuse",
+                "description": (
+                    "Abuse report whose category targets the "
+                    "trust-gossip observation record itself. The "
+                    "envelope_metadata evidence shape carries the "
+                    "postmark ids of the published observations the "
+                    "consumer rejected and the observation window the "
+                    "publisher purported to summarize."
+                ),
+                "spec_reference": (
+                    "draft-gokce-semp-delivery §10; "
+                    "REPUTATION.md §3.4"
+                ),
+                "inputs": {"report_json": report},
+                "expected": {
+                    "category": "observation_record_abuse",
+                    "evidence_type": "envelope_metadata",
+                    "categories_known_to_lib": [
+                        "spam",
+                        "harassment",
+                        "phishing",
+                        "malware",
+                        "protocol_abuse",
+                        "impersonation",
+                        "observation_record_abuse",
+                        "other",
+                    ],
+                },
+            },
+        ],
+    }
+
+
+def build_publication_eligibility_json() -> dict:
+    """draft-gokce-semp-delivery §11.7: publisher-side gate on
+    trust-gossip observation records."""
+    samples = [
+        {
+            "label": "below threshold",
+            "metrics": {
+                "envelopes_received": 8,
+                "envelopes_rejected": 0,
+                "abuse_reports": 0,
+            },
+            "expected_meets_publish_volume": False,
+            "expected_eligible": False,
+        },
+        {
+            "label": "at threshold",
+            "metrics": {
+                "envelopes_received": 16,
+                "envelopes_rejected": 0,
+                "abuse_reports": 0,
+            },
+            "expected_meets_publish_volume": True,
+            "expected_eligible": True,
+        },
+        {
+            "label": "above threshold via envelopes_received",
+            "metrics": {
+                "envelopes_received": 1024,
+                "envelopes_rejected": 8,
+                "abuse_reports": 2,
+                "handshakes_completed": 32,
+                "handshakes_rejected": 4,
+            },
+            "expected_meets_publish_volume": True,
+            "expected_eligible": True,
+        },
+        {
+            "label": "above threshold via handshake tally",
+            "metrics": {
+                "envelopes_received": 0,
+                "envelopes_rejected": 0,
+                "abuse_reports": 0,
+                "handshakes_completed": 16,
+                "handshakes_rejected": 0,
+            },
+            "expected_meets_publish_volume": True,
+            "expected_eligible": True,
+        },
+        {
+            "label": "all-zero metrics",
+            "metrics": {
+                "envelopes_received": 0,
+                "envelopes_rejected": 0,
+                "abuse_reports": 0,
+            },
+            "expected_meets_publish_volume": False,
+            "expected_eligible": False,
+            "expected_all_zero": True,
+        },
+    ]
+    return {
+        "version": "1.0.0",
+        "category": "publication-eligibility",
+        "description": (
+            "Publisher-side eligibility gate for SEMP_TRUST_OBSERVATION "
+            "records. A server SHOULD NOT publish an observation about "
+            "a subject domain unless the observer has directly "
+            "observed at least 16 envelopes (or an equivalent number "
+            "of handshake attempts) involving the subject during the "
+            "observation window. A server MUST NOT publish "
+            "observations whose metrics fields are uniformly zero. "
+            "Conformance per draft-gokce-semp-delivery §11.7 and "
+            "REPUTATION.md §4.6.2."
+        ),
+        "spec_reference": (
+            "draft-gokce-semp-delivery §11.7; REPUTATION.md §4.6.2"
+        ),
+        "vectors": [
+            {
+                "id": "publication-eligibility-threshold",
+                "description": (
+                    "Threshold demonstration. The eligibility predicate "
+                    "evaluates two gates: (a) the sum of "
+                    "envelopes_received + handshakes_completed + "
+                    "handshakes_rejected meets the 16-envelope minimum, "
+                    "and (b) at least one metric field is non-zero. A "
+                    "candidate that fails either gate MUST NOT be "
+                    "published. Each sample pins the metrics block, "
+                    "the expected per-gate verdicts, and the combined "
+                    "expected_eligible outcome."
+                ),
+                "spec_reference": (
+                    "draft-gokce-semp-delivery §11.7; "
+                    "REPUTATION.md §4.6.2"
+                ),
+                "rule": (
+                    "expected_eligible == "
+                    "(expected_meets_publish_volume AND NOT "
+                    "expected_all_zero)"
+                ),
+                "samples": samples,
+            },
+        ],
+    }
+
+
 def build_validation_failures_json() -> dict:
     """draft-gokce-semp-extensions §3.9.3: extension_unsupported
     rejection with the multi-error `errors` array form."""
@@ -7830,6 +8018,8 @@ def main() -> int:
         (OUTDIR / "reputation-references.json", build_reputation_references_json()),
         (OUTDIR / "trust-observation.json", build_trust_observation_json()),
         (OUTDIR / "validation-failures.json", build_validation_failures_json()),
+        (OUTDIR / "abuse-report.json", build_abuse_report_json()),
+        (OUTDIR / "publication-eligibility.json", build_publication_eligibility_json()),
         (OUTDIR / "migration-notice.json", build_migration_notice_json()),
         (OUTDIR / "migration.json", build_migration_json()),
         (OUTDIR / "discovery-signed.json", build_discovery_signed_json()),
