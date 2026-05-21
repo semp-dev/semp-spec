@@ -398,29 +398,67 @@ the artifacts they hold. An evidence claim is a statement a party
 can back with cryptographic verification against published keys,
 independent of any server's continued cooperation.
 
-The following table enumerates what the protocol establishes.
+What the protocol establishes, grouped by the party for whom the
+claim is verifiable:
 
-| Party | What the artifacts prove |
-|---|---|
-| Sender | Authorship of the plaintext brief and enclosure by the sender's identity key. |
-| Sender | That the envelope was constructed and signed by the sender domain at the time indicated in the postmark. |
-| Sender, post-delivery | That a specific recipient domain accepted the envelope identified by canonical hash at a specific time. |
-| Sender, during the delivery session | That the envelope was delivered within a valid federation session between specific sender and recipient domains. |
-| Recipient | That the envelope was signed by the claimed sender domain and, if the inner signature is present, by the claimed sender identity. |
-| Third party holding a forwarded enclosure | Authorship of the forwarded plaintext by the original sender identity, independent of the forwarding path. |
-| Third party holding an envelope file | That the envelope was produced by the claimed sender domain and has not been altered since. |
-| Any party holding a migration record | That the old identity key, the new identity key, and (in cooperative mode) both provider domains co-authorized the address change. |
+Sender:
+: Authorship of the plaintext brief and enclosure by the
+  sender's identity key, and that the envelope was constructed
+  and signed by the sender domain at the time indicated in the
+  postmark.
 
-The following claims the protocol deliberately does not establish.
+Sender, post-delivery:
+: That a specific recipient domain accepted the envelope
+  identified by canonical hash at a specific time.
 
-| Claim | Why not |
-|---|---|
-| That the recipient user read the envelope. | Read status is an application concern and is not observable on the wire. |
-| That the envelope was delivered to a specific device within the recipient's account. | Per-device delivery events are private sync state and do not produce federation-visible artifacts. |
-| That the envelope was not subsequently deleted by the recipient. | SEMP does not model retention at the recipient. A receipt attests to acceptance with no statement about subsequent retention. |
-| That a recipient address does or does not exist on a domain. | Address-existence disclosure through protocol responses is restricted by design (see [Address Enumeration Resistance](#address-enumeration-resistance)). |
-| That a given sender or recipient was not also corresponding with other parties. | Correspondent-graph privacy is a goal. Envelopes do not reveal other correspondents. |
-| That two envelopes are part of the same conversation to an outside observer. | Thread identifiers live in the encrypted brief and are not visible to routing infrastructure. |
+Sender, during the delivery session:
+: That the envelope was delivered within a valid federation
+  session between specific sender and recipient domains.
+
+Recipient:
+: That the envelope was signed by the claimed sender domain and,
+  when the inner signature is present, by the claimed sender
+  identity.
+
+Third party holding a forwarded enclosure:
+: Authorship of the forwarded plaintext by the original sender
+  identity, independent of the forwarding path.
+
+Third party holding an envelope file:
+: That the envelope was produced by the claimed sender domain
+  and has not been altered since.
+
+Any party holding a migration record:
+: That the old identity key, the new identity key, and (in
+  cooperative mode) both provider domains co-authorized the
+  address change.
+
+The following claims are not established by the protocol:
+
+That the recipient user read the envelope:
+: Read status is an application concern and is not observable
+  on the wire.
+
+That the envelope was delivered to a specific device within the recipient's account:
+: Per-device delivery events are private sync state and do not
+  produce federation-visible artifacts.
+
+That the envelope was not subsequently deleted by the recipient:
+: SEMP does not model retention at the recipient. A receipt
+  attests to acceptance with no statement about subsequent
+  retention.
+
+That a recipient address does or does not exist on a domain:
+: Protocol responses do not disclose address existence (see
+  [Address Enumeration Resistance](#address-enumeration-resistance)).
+
+That a given sender or recipient was not also corresponding with other parties:
+: Correspondent-graph privacy is a goal. Envelopes do not
+  reveal other correspondents.
+
+That two envelopes are part of the same conversation to an outside observer:
+: Thread identifiers live in the encrypted brief and are not
+  visible to routing infrastructure.
 
 Implementations and higher-level protocols built on SEMP MUST NOT
 claim evidence properties beyond those enumerated above. In
@@ -736,15 +774,74 @@ SEMP is specified by a series of Internet-Drafts. This document is
 the architectural cover and incorporates the consolidated threat
 model in [Threat Model](#threat-model). The companion documents are listed below.
 
-| Draft | Topic |
-|---|---|
-| [Envelope](envelope.md) | Envelope wire format (postmark, seal, brief, enclosure), sender identity signature, forwarding primitive, address canonicalization, envelope padding, encryption flow, algorithm suites, per-extension key scoping, media type registrations, and the `.semp` file format. |
-| [Handshake](handshake.md) | Client handshake, federation handshake, session lifecycle, forward secrecy, ephemeral key erasure, session rekeying, resumption tickets, post-quantum hybrid key agreement, transport bindings (WebSocket, HTTP/2, QUIC, gRPC), transport negotiation and fallback, and session invalidation. |
-| [Discovery](discovery.md) | DNS-based discovery (SRV, TXT capability records), well-known URI configuration document, configuration versioning and update notifications, domain key publication (DANE primary), user key publication, key rotation, key revocation, device directory, scoped device certificates, key fetching mechanisms, and reciprocity policy disclosure. |
-| [Delivery](delivery.md) | Acknowledgment semantics, signed delivery receipts, silent-mode disposition, queueing and retry, persistent silent recipient handling, staged delivery, delivery pipeline, block list, first-contact, user policy synchronization, recipient status, reputation signals, trust gossip publication and consumption, abuse reporting, trust transfer, and the authoritative reason-code registry. |
-| [Recovery](recovery.md) | Account recovery (server-assisted encrypted backup and Shamir device-split backup), restore flow, provider migration with cryptographic continuity, migration notice window, account closure with grace period, local-part reassignment rules, key transparency (Merkle-tree log per RFC 6962), inclusion and consistency proofs, augmented key fetch, and equivocation detection via observation gossip. |
-| [Extensions](extensions.md) | Wire-level extension framework, namespacing, criticality signaling, size constraints, extension registry, definition documents under `.well-known/semp-extensions/`, conflict detection, validation, lifecycle, anti-fragmentation rules, library extension enforcement, the `semp.dev/large-attachment` extension, and the full conformance requirement set covering server, client, federation peer, trust-gossip, algorithm suite, retention policy, version negotiation, clock skew tolerance, legacy interoperability, and delegation. |
-| [Client](client.md) | Client obligations: handshake, key registration (first-device and subsequent-device enrollment), delegated client registration and scope enforcement, envelope composition, sent-message availability, recipient key validation, BCC handling, forward composition, send-time obfuscation, envelope receipt and decryption, legacy-origin messages with upgrade-signal detection, message history sync, device sync (including the `delivery-disposition` kind), key management, `SEMP_KEYS` recipient key request protocol, envelope submission protocol, migration notice handling, legacy required fallback (MIME composition, upgrade-signaling headers, threading continuity), mixed-recipient consent gating, delivery state reporting, first-contact inbox, user policy synchronization, recipient status configuration, abuse reporting, notification content constraints, and security considerations. |
+[Envelope](envelope.md):
+: Envelope wire format (postmark, seal, brief, enclosure),
+  sender identity signature, forwarding primitive, address
+  canonicalization, envelope padding, encryption flow, algorithm
+  suites, per-extension key scoping, media type registrations,
+  and the `.semp` file format.
+
+[Handshake](handshake.md):
+: Client handshake, federation handshake, session lifecycle,
+  forward secrecy, ephemeral key erasure, session rekeying,
+  resumption tickets, post-quantum hybrid key agreement,
+  transport bindings (WebSocket, HTTP/2, QUIC, gRPC), transport
+  negotiation and fallback, and session invalidation.
+
+[Discovery](discovery.md):
+: DNS-based discovery (SRV, TXT capability records), well-known
+  URI configuration document, configuration versioning and
+  update notifications, domain key publication (DANE primary),
+  user key publication, key rotation, key revocation, device
+  directory, scoped device certificates, key fetching
+  mechanisms, and reciprocity policy disclosure.
+
+[Delivery](delivery.md):
+: Acknowledgment semantics, signed delivery receipts,
+  silent-mode disposition, queueing and retry, persistent silent
+  recipient handling, staged delivery, delivery pipeline, block
+  list, first-contact, user policy synchronization, recipient
+  status, reputation signals, trust gossip publication and
+  consumption, abuse reporting, trust transfer, and the
+  authoritative reason-code registry.
+
+[Recovery](recovery.md):
+: Account recovery (server-assisted encrypted backup and Shamir
+  device-split backup), restore flow, provider migration with
+  cryptographic continuity, migration notice window, account
+  closure with grace period, local-part reassignment rules, key
+  transparency (Merkle-tree log per RFC 6962), inclusion and
+  consistency proofs, augmented key fetch, and equivocation
+  detection via observation gossip.
+
+[Extensions](extensions.md):
+: Wire-level extension framework, namespacing, criticality
+  signaling, size constraints, extension registry, definition
+  documents under `.well-known/semp-extensions/`, conflict
+  detection, validation, lifecycle, anti-fragmentation rules,
+  library extension enforcement, the `semp.dev/large-attachment`
+  extension, and the full conformance requirement set covering
+  server, client, federation peer, trust-gossip, algorithm
+  suite, retention policy, version negotiation, clock skew
+  tolerance, legacy interoperability, and delegation.
+
+[Client](client.md):
+: Client obligations: handshake, key registration (first-device
+  and subsequent-device enrollment), delegated client
+  registration and scope enforcement, envelope composition,
+  sent-message availability, recipient key validation, BCC
+  handling, forward composition, send-time obfuscation, envelope
+  receipt and decryption, legacy-origin messages with
+  upgrade-signal detection, message history sync, device sync
+  (including the `delivery-disposition` kind), key management,
+  `SEMP_KEYS` recipient key request protocol, envelope
+  submission protocol, migration notice handling, legacy
+  required fallback (MIME composition, upgrade-signaling
+  headers, threading continuity), mixed-recipient consent
+  gating, delivery state reporting, first-contact inbox, user
+  policy synchronization, recipient status configuration, abuse
+  reporting, notification content constraints, and security
+  considerations.
 
 Test vectors that exercise the wire formats defined in the drafts
 above are distributed across the corresponding drafts as
@@ -1116,17 +1213,56 @@ quickly the user detects and revokes. Detailed mechanisms are in
 Loss of control of a long-term key has different consequences
 depending on which key is lost.
 
-| Key | If compromised, the attacker can | Detection |
-|---|---|---|
-| Domain signing key | Sign envelopes as from any user in that domain; impersonate the domain to peers. | Transparency log monitors observe unexpected signing activity. Peers observe revocation records. Domain is rotated. |
-| User identity key | Issue envelopes as the user; rotate the user's encryption keys; sign a fraudulent successor record. | Transparency log entries for unexpected key rotations. Correspondents observe sudden address or behavior change. |
-| User encryption key | Decrypt envelopes previously sealed to that key until revocation propagates. | No inline detection. Revocation records published; correspondents invalidate caches. |
-| Device identity key | Act as that specific device until revoked. For primary devices, this is close to identity-key compromise. | Primary device revokes via the device-revocation mechanism. |
-| Session long-term material | SEMP uses ephemeral session keys for every session. There is no session long-term key beyond those already listed. | N/A. |
-| Resumption ticket | If also able to observe the subsequent ephemeral key exchange, derive the resumed session's keys. | Tickets are short-lived (7-day maximum). |
-| Recovery secret | Decrypt the user's backup bundle and recover the user's prior identity and encryption private keys. | No inline detection. Bundle rotation and transparency-monitored successor-record behavior bound exposure. |
-| Shamir share (below threshold) | Nothing useful. Shamir's Secret Sharing is information-theoretic below threshold. | N/A. |
-| Shamir shares (threshold or more) | Reconstruct the bundle key and, with bundle ciphertext, recover the user's backup payload. | No inline detection. |
+Domain signing key:
+: An attacker holding it signs envelopes as any user in the
+  domain and impersonates the domain to peers. Detection:
+  transparency-log monitors observe unexpected signing
+  activity; peers observe revocation records; the domain is
+  rotated.
+
+User identity key:
+: An attacker issues envelopes as the user, rotates the user's
+  encryption keys, or signs a fraudulent successor record.
+  Detection: transparency-log entries for unexpected key
+  rotations; correspondents observe sudden address or
+  behavior change.
+
+User encryption key:
+: An attacker decrypts envelopes previously sealed to that key
+  until revocation propagates. Detection: none inline.
+  Revocation records published; correspondents invalidate
+  caches.
+
+Device identity key:
+: An attacker acts as that specific device until revoked. For
+  primary devices, this approaches identity-key compromise.
+  Detection: primary device revokes via the device-revocation
+  mechanism.
+
+Session long-term material:
+: SEMP uses ephemeral session keys for every session. No
+  session long-term key exists beyond those already listed.
+
+Resumption ticket:
+: An attacker who also observes the subsequent ephemeral key
+  exchange derives the resumed session's keys. Detection:
+  tickets are short-lived (7-day maximum).
+
+Recovery secret:
+: An attacker decrypts the user's backup bundle and recovers
+  the user's prior identity and encryption private keys.
+  Detection: none inline. Bundle rotation and
+  transparency-monitored successor-record behavior bound
+  exposure.
+
+Shamir share (below threshold):
+: Nothing useful. Shamir's Secret Sharing is
+  information-theoretic below threshold.
+
+Shamir shares (threshold or more):
+: An attacker reconstructs the bundle key and, with bundle
+  ciphertext, recovers the user's backup payload. Detection:
+  none inline.
 
 Forward secrecy of past session keys holds against every
 key-compromise row above except for the resumption-ticket plus
@@ -1397,41 +1533,41 @@ MUST follow the cited section.
 
 ## Size Caps
 
-| Constant | Value | Defined in |
+| Constant | Value | Source |
 |---|---|---|
-| `postmark.extensions` maximum bytes | 4096 (4 KiB) | [Extensions](extensions.md) §Size Limits |
-| `brief.extensions` maximum bytes | 16384 (16 KiB) | [Extensions](extensions.md) §Size Limits |
-| `enclosure.extensions` maximum bytes | implementation-defined; bounded by `max_envelope_size` | [Extensions](extensions.md) §Size Limits |
-| Trust-gossip observation record maximum bytes | 16384 (16 KiB) in canonical UTF-8 JSON | [Delivery](delivery.md) §Schema Limits and Evidence Binding |
-| Trust-gossip evidence fetch RECOMMENDED maximum | 1048576 (1 MiB) | [Delivery](delivery.md) §Schema Limits and Evidence Binding |
-| Envelope size buckets | powers of two from 4096 to `max_envelope_size`, advertised per-recipient | [Envelope](envelope.md) §Envelope Size Buckets |
-| Local-part maximum octets | 64 | [Envelope](envelope.md) §Address Canonicalization |
-| Address maximum octets (composed `local-part@domain`) | 254 | [Envelope](envelope.md) §Address Canonicalization |
-| Matcher entry maximum count | 10000 | [Discovery](discovery.md) §Scope Matchers |
+| `postmark.extensions` max bytes | 4096 (4 KiB) | [Extensions](extensions.md) |
+| `brief.extensions` max bytes | 16384 (16 KiB) | [Extensions](extensions.md) |
+| `enclosure.extensions` max bytes | implementation-defined; bounded by `max_envelope_size` | [Extensions](extensions.md) |
+| Trust-gossip observation record max bytes | 16384 (16 KiB) in canonical UTF-8 JSON | [Delivery](delivery.md) |
+| Trust-gossip evidence fetch RECOMMENDED max | 1048576 (1 MiB) | [Delivery](delivery.md) |
+| Envelope size buckets | powers of two from 4096 to `max_envelope_size` | [Envelope](envelope.md) |
+| Local-part max octets | 64 | [Envelope](envelope.md) |
+| Address max octets (composed) | 254 | [Envelope](envelope.md) |
+| Matcher entry max count | 10000 | [Discovery](discovery.md) |
 
 ## Time Bounds
 
-| Constant | Value | Defined in |
+| Constant | Value | Source |
 |---|---|---|
-| Migration `notice_window_until` minimum | 30 days | [Recovery](recovery.md) §Migration Notice Window |
-| Migration `notice_window_until` RECOMMENDED | 180 days | [Recovery](recovery.md) §Migration Notice Window |
-| Migration `notice_window_until` maximum | 730 days | [Recovery](recovery.md) §Migration Notice Window |
-| Account closure grace period minimum | 604800 seconds (7 days) | [Recovery](recovery.md) §Account Closure |
-| Resumption ticket `expires_at` maximum | 7 days from issuance | [Handshake](handshake.md) §Resumption |
-| Federation session TTL default | 3600 seconds (1 hour) | [Handshake](handshake.md) §Federation Handshake |
-| Client session TTL default | 300 seconds (5 minutes) | [Handshake](handshake.md) §Session Lifecycle |
-| Persistent silent observation window minimum | 24 hours | [Delivery](delivery.md) §Persistent Silent Recipients |
-| Persistent silent shortened deadline RECOMMENDED | 4 hours | [Delivery](delivery.md) §Persistent Silent Recipients |
-| Persistent silent counter idle expiry RECOMMENDED | 30 days | [Delivery](delivery.md) §Persistent Silent Recipients |
-| Reputation evaluation window RECOMMENDED | 30 days | [Delivery](delivery.md) §Reciprocity as Policy |
-| Recovery bundle retention minimum | 30 days for superseded bundles | [Recovery](recovery.md) §Recovery Bundle |
-| STH freshness bound | 1 hour | [Recovery](recovery.md) §Key Transparency |
-| Delivery receipt retention maximum | 30 days | [Delivery](delivery.md) §Delivery Receipt |
-| Transparency record retention minimum | 2 years | [Recovery](recovery.md) §Key Transparency |
-| Connection timeout RECOMMENDED | 10 seconds | [Handshake](handshake.md) §Transport Bindings |
-| Clock skew tolerance default per hop | 5 minutes | [Handshake](handshake.md) §Clock Skew |
-| Discovery TXT TTL minimum | 60 seconds | [Discovery](discovery.md) §TXT Records |
-| Discovery TXT TTL maximum | 7 days | [Discovery](discovery.md) §TXT Records |
+| Migration `notice_window_until` minimum | 30 days | [Recovery](recovery.md) |
+| Migration `notice_window_until` RECOMMENDED | 180 days | [Recovery](recovery.md) |
+| Migration `notice_window_until` maximum | 730 days | [Recovery](recovery.md) |
+| Account closure grace period minimum | 604800 s (7 days) | [Recovery](recovery.md) |
+| Resumption ticket `expires_at` maximum | 7 days from issuance | [Handshake](handshake.md) |
+| Federation session TTL default | 3600 s (1 hour) | [Handshake](handshake.md) |
+| Client session TTL default | 300 s (5 minutes) | [Handshake](handshake.md) |
+| Persistent silent observation window minimum | 24 hours | [Delivery](delivery.md) |
+| Persistent silent shortened deadline RECOMMENDED | 4 hours | [Delivery](delivery.md) |
+| Persistent silent counter idle expiry RECOMMENDED | 30 days | [Delivery](delivery.md) |
+| Reputation evaluation window RECOMMENDED | 30 days | [Delivery](delivery.md) |
+| Recovery bundle retention minimum | 30 days (superseded bundles) | [Recovery](recovery.md) |
+| STH freshness bound | 1 hour | [Recovery](recovery.md) |
+| Delivery receipt retention maximum | 30 days | [Delivery](delivery.md) |
+| Transparency record retention minimum | 2 years | [Recovery](recovery.md) |
+| Connection timeout RECOMMENDED | 10 seconds | [Handshake](handshake.md) |
+| Clock skew tolerance default per hop | 5 minutes | [Handshake](handshake.md) |
+| Discovery TXT TTL minimum | 60 seconds | [Discovery](discovery.md) |
+| Discovery TXT TTL maximum | 7 days | [Discovery](discovery.md) |
 
 ## Numeric Thresholds
 

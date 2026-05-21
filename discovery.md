@@ -332,9 +332,22 @@ determine eligibility before fetching.
 
 | Field | Type | Required | Description |
 |---|---|---|---|
-| `mode` | string | Yes | One of `"strict"`, `"lenient"`, or `"none"`. In `"strict"` mode, peers MUST publish observations to receive gossip from this server. In `"lenient"` mode, non-publishing peers receive de-weighted observations or partial access. In `"none"` mode, this server applies no reciprocity policy. |
-| `minimum_publish_volume` | integer | No | Minimum number of observations a peer MUST have published in the evaluation window to satisfy `strict` mode. Absence means any non-empty publication satisfies the policy. |
-| `evaluation_window_days` | integer | No | Sliding window in days over which `minimum_publish_volume` is evaluated. Absence means the operator-defined default (RECOMMENDED 30 days). |
+| `mode` | string | Yes | `"strict"`, `"lenient"`, or `"none"`. See mode semantics below. |
+| `minimum_publish_volume` | integer | No | Publication count a peer MUST reach in the evaluation window to satisfy `strict`. Absence means any non-empty publication satisfies. |
+| `evaluation_window_days` | integer | No | Sliding window in days for `minimum_publish_volume`. Absence means the operator default (RECOMMENDED 30 days). |
+
+Mode semantics:
+
+`strict`:
+: Peers MUST publish observations to receive gossip from this
+  server.
+
+`lenient`:
+: Non-publishing peers receive de-weighted observations or
+  partial access at this server's discretion.
+
+`none`:
+: This server applies no reciprocity policy.
 
 A consuming server SHOULD read the disclosed policy before
 issuing trust gossip fetches against a peer that has set `mode`

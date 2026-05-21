@@ -525,10 +525,10 @@ encapsulation. For the baseline suite
 (`x25519-chacha20-poly1305`), wrapping uses X25519 [RFC 7748](https://www.rfc-editor.org/rfc/rfc7748)
 ephemeral key agreement. For the post-quantum suite
 (`pq-kyber768-x25519`), wrapping uses the Kyber768 + X25519
-hybrid KEM. This ensures that post-quantum protection extends to
-envelope confidentiality at rest, in addition to session key
-exchange. Recipient encryption keys MUST be generated using the
-same suite's KEM as the wrapping operation.
+hybrid KEM. Post-quantum protection therefore covers envelope
+confidentiality at rest as well as session key exchange.
+Recipient encryption keys MUST be generated using the same
+suite's KEM as the wrapping operation.
 
 ### Wrap Construction
 
@@ -1790,11 +1790,11 @@ distribute the file out of band to correspondents who wish to
 verify continuity without performing a live fetch from the new
 provider's migration endpoint.
 
-A migration record is a public artifact by design. Its
-contents expose the old and new addresses, the old and new
-identity key identifiers, and the timestamps of the migration.
-Users requiring migration without public announcement MUST NOT
-use this mechanism.
+A migration record is a public artifact. Its contents expose
+the old and new addresses, the old and new identity key
+identifiers, and the timestamps of the migration. Users
+requiring migration without public announcement MUST NOT use
+this mechanism.
 
 # Security Considerations
 

@@ -121,8 +121,7 @@ specific time.
 
 Receipts are unconditional. The recipient server MUST issue a
 receipt for every `delivered` acknowledgment, regardless of any
-sender signal. The rationale is given in
-[Receipt Non-Repudiation and Operator Liability](#receipt-liability).
+sender signal. See [Receipt Non-Repudiation and Operator Liability](#receipt-liability).
 
 ### Receipt Schema
 
@@ -298,9 +297,9 @@ attempt. Retry scheduling and overall deadlines are defined in
 
 When the acknowledgment type is `delivered`, the recipient
 server MAY include a `recipient_status` object in the
-acknowledgment response. This provides the sender with
-information about the recipient's current availability without
-requiring a separate message exchange.
+acknowledgment response. The object carries the recipient's
+current availability so the sender does not need a separate
+message exchange to learn it.
 
 ~~~ json
 {
