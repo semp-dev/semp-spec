@@ -1692,6 +1692,59 @@ specified in the relevant companion documents:
 [Delivery](delivery.md) (error and reason codes), and
 [Extensions](extensions.md) (extension namespace).
 
+# Open Questions
+
+The following questions are unresolved at the time of this
+revision. Each is tracked as an issue on the SEMP specification
+repository so feedback and discussion can accumulate alongside
+the draft text. The list is non-exhaustive; reviewers are
+invited to add to it.
+
+Routing-server terminology:
+: Several drafts use the term "routing server" when describing
+  layer visibility, but the architecture explicitly disclaims
+  multi-hop relays. There is no intermediate server class
+  between the two home servers. The term may need to be
+  renamed (to "sending server" / "recipient server" /
+  "home server") for accuracy, or explicitly defined as a
+  layer-visibility class distinct from a deployment role.
+
+Reason-code / transport-status mapping:
+: The Reason Code Registry in [Delivery](delivery.md) is
+  independent of the transport. An operator running SEMP over
+  HTTP/2 sees the SEMP reason code in the response body and a
+  separate HTTP status at the transport. Two layers, two
+  ontologies, no documented correspondence. Whether the spec
+  should publish a canonical mapping (or stay deliberately
+  silent on the relationship) is open.
+
+Padding in the signature scope:
+: `envelope.padding` is currently elided from canonical bytes
+  and therefore not covered by `seal.signature` or
+  `seal.session_mac`. The rationale is that padding has no
+  semantic content. The cost is that wire-level padding
+  mutation is undetectable cryptographically, even though the
+  spec prohibits it normatively. Whether to include padding
+  (or its length) in the signature scope is open.
+
+Trust at user level vs. domain level:
+: The architecture frames trust as domain-anchored, but every
+  wire-level identity proof (sender_signature, identity proof,
+  recovery, migration) is user-key signed. The "domain trust"
+  framing and the user-keyed wire reality could be reconciled
+  more explicitly, either by stating that domains gatekeep and
+  users author (the apparent intent), or by clarifying which
+  reputation signals are per-domain vs per-user.
+
+Cryptographic challenge binding for first-contact:
+: The first-contact PoW challenge currently gates submission
+  via the recipient server's policy. The envelope's
+  cryptographic readability does not depend on the challenge
+  solution; a path that bypasses the policy gate still decrypts
+  normally. Whether to bind the challenge solution into the
+  envelope's key derivation (so the envelope is
+  cryptographically unreadable without the solution) is open.
+
 # Acknowledgments
 
 The author thanks the contributors to the SEMP specification for
