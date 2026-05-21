@@ -44,29 +44,23 @@ Closes #
 ## Implementation impact
 
 - [ ] No reference library change required.
-- [ ] Reference library (`semp-go`) follow-up linked: <!-- semp-dev/semp-go#NNN -->
-- [ ] Conformance test vectors updated in VECTORS.md.
+- [ ] Reference library follow-up linked: <!-- semp-dev/semp-go#NNN or semp-dev/semp-ts#NNN -->
+- [ ] Conformance test vectors updated under `vectors/v1.0.0/`.
 - [ ] Existing implementations need to update (described below).
 
 ## Cross-references
 
 <!-- If you added a section or constant: -->
 
-- [ ] Document table of contents updated.
-- [ ] All sibling sections that should reference the new content link to it.
+- [ ] Sibling sections that should reference the new content link to it.
 - [ ] No dangling cross-references introduced.
 
 ## Style
 
 - [ ] Normative keywords (MUST / SHOULD / MAY / RECOMMENDED) used per RFC 2119 / RFC 8174.
 - [ ] No em-dashes, en-dashes, or inline `--`.
-- [ ] Citations are precise (e.g., "DELIVERY.md §3.2.5", not "the delivery doc").
+- [ ] Citations are precise (e.g., "delivery.md §3.2.5", not "the delivery doc").
 - [ ] New record schemas include a JSON example.
-
-## Internet-Draft sync
-
-- [ ] Corresponding `drafts/draft-semp-*.md` updated.
-- [ ] N/A: editorial-only change with no normative impact on the I-D series.
 
 ## Checklist
 
