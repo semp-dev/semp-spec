@@ -1531,7 +1531,12 @@ prefixes registered across the series are:
 | Enum | Values | Defined in |
 |---|---|---|
 | Algorithm suites | `x25519-chacha20-poly1305`, `pq-kyber768-x25519` | [Handshake](handshake.md) §Cryptographic Suites |
-| Reason codes | per-layer enumeration | [Delivery](delivery.md) §Reason Code Registry |
+| Handshake reason codes | `blocked`, `auth_failed`, `policy_forbidden`, `handshake_expired`, `handshake_invalid`, `no_session`, `rate_limited`, `challenge`, `challenge_failed`, `challenge_invalid`, `server_at_capacity`, `version_unsupported`, `resumption_failed`, `revoked` | [Delivery](delivery.md) §Handshake Reason Codes |
+| Envelope reason codes | `blocked`, `seal_invalid`, `session_mac_invalid`, `envelope_expired`, `envelope_size_exceeded`, `policy_forbidden`, `auth_failed`, `handshake_invalid`, `handshake_expired`, `no_session`, `server_unavailable`, `extension_unsupported`, `extension_size_exceeded`, `scope_exceeded`, `scope_invalid`, `certificate_expired`, `quota_exceeded` | [Delivery](delivery.md) §Envelope Reason Codes |
+| Rekeying reason codes | `session_expired`, `rekey_unsupported`, `rate_limited` | [Delivery](delivery.md) §Rekeying Reason Codes |
+| User-policy reason codes | `policy_kind_unsupported`, `policy_op_invalid`, `policy_version_stale`, `policy_collision` | [Delivery](delivery.md) §User Policy Reason Codes |
+| Cancellation refused reason codes | `not_found`, `scope_exceeded`, `unauthorized` | [Client](client.md) §Refused Cancellation |
+| Trust-transfer reasons | `key_rotation`, `sold`, `merged`, `corporate_reorganization`, `inherited`, `other` | [Delivery](delivery.md) §Transfer Reasons |
 | Submission status | `delivered`, `rejected`, `silent`, `legacy_required`, `recipient_not_found`, `error` | [Delivery](delivery.md) §Submission Status Values |
 | SEMP_KEYS result status | `found`, `not_found`, `legacy_required`, `recipient_not_found`, `error` | [Client](client.md) §Recipient Key Request Protocol |
 | Recipient status state | `available`, `away`, `do_not_disturb` | [Delivery](delivery.md) §Recipient Status |
