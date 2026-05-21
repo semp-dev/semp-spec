@@ -2,9 +2,7 @@
 
 Status: Internet-Draft. Subject to change.
 
-SEMP is a federated messaging protocol designed to replace SMTP. The specification is split across eight Internet-Drafts. The kramdown-rfc source files live under `../input/`; this folder holds the GitHub-rendered markdown produced by `script/publish.py`. The companion IETF I-D form lives under `../ietf-output/`.
-
-Run `make all` at the project root to regenerate.
+SEMP is a federated messaging protocol designed to replace SMTP. The specification is split across eight Internet-Drafts. This repository holds the GitHub-rendered form of each draft together with the cross-language test vector corpus that pins the wire-level behavior. Project page: <https://semp.dev>.
 
 ## Drafts
 
