@@ -226,17 +226,6 @@ envelope receives fresh randomness. Zero bytes are PERMITTED but
 NOT RECOMMENDED because they can leak the padding boundary under
 compression.
 
-### Interaction with the Seal
-
-`padding` is outside the signature scope and is not covered by
-`seal.signature` or `seal.session_mac` per
-[Signature Scope and Canonicalization](#signature-scope-and-canonicalization). A routing
-intermediary that alters `padding` does not tamper with the
-authenticated envelope, and a recipient server validates the
-seal against the unpadded canonical bytes without dependency on
-padding content. Padding is a size-obfuscation mechanism rather
-than an integrity mechanism.
-
 ### Minimum Floor
 
 The 4096-byte floor means every envelope, including the smallest
@@ -288,7 +277,6 @@ A routing server reads the postmark and no other component.
         "from_domain": "example.com",
         "to_domain": "otherdomain.com",
         "expires": "2026-06-08T13:05:00Z",
-        "hop_count": 0,
         "extensions": {}
     }
 }
@@ -303,7 +291,6 @@ A routing server reads the postmark and no other component.
 | `from_domain` | string | Yes | Sender's fully-qualified domain. MUST NOT include a local part or display name. |
 | `to_domain` | string | Yes | Recipient's fully-qualified domain. MUST NOT include a local part or display name. |
 | `expires` | string | Yes | ISO 8601 UTC expiry timestamp. Servers MUST reject expired envelopes. |
-| `hop_count` | integer | No | Number of relay hops. Starts at `0` when present. See [Hop Count](#hop-count). |
 | `extensions` | object | No | Postmark-layer extensions. MUST NOT contain private metadata. |
 
 ## Notes on the Message ID
@@ -316,24 +303,6 @@ brief.
 
 Implementations SHOULD use ULIDs for `id` due to their
 time-ordered and URL-safe properties. UUIDs are also acceptable.
-
-<a id="hop-count"></a>
-
-## Hop Count
-`hop_count` is an optional transit field. Relay servers that
-support hop tracking SHOULD increment it before forwarding.
-Relay servers that do not support hop tracking MUST forward the
-field unchanged if present, and MAY forward the envelope without
-adding the field if absent.
-
-When present, servers MAY reject envelopes whose `hop_count`
-exceeds a configured maximum (RECOMMENDED ceiling: 25) as a loop
-prevention measure. Servers MUST NOT reject envelopes solely
-because `hop_count` is absent.
-
-Because `hop_count` is mutable in transit, it is excluded from
-the seal signature scope. See
-[Signature Scope and Canonicalization](#signature-scope-and-canonicalization).
 
 <a id="seal"></a>
 
@@ -412,22 +381,16 @@ UTF-8 JSON encoding of the envelope with:
 * `seal.signature` set to the empty string `""` during both
   computations;
 * `seal.session_mac` set to the empty string `""` during both
-  computations;
-* `postmark.hop_count` omitted entirely, whether or not present
-  in transit;
-* `padding` omitted entirely, whether or not present in transit.
+  computations.
 
 Setting both signature fields to empty string during computation
 means neither proof depends on the value of the other. Both
 cover identical input bytes. The canonical form is computed once
 and passed to both verification routines.
 
-`hop_count` is excluded because it is a mutable transit field.
-`padding` is excluded because its bytes serve only to obscure
-wire size: they are ignored during verification and MAY be
-altered in transit without affecting envelope authenticity.
-All other postmark fields are immutable and covered by both
-proofs.
+Every envelope field is covered by both proofs. There are no
+canonicalization exclusions. Any modification of any byte (including
+`padding`) invalidates the seal at the next verification point.
 
 This canonical form MUST be reproduced identically by any
 implementation.
@@ -1176,8 +1139,7 @@ not hold the domain private key or the session key material
 required for seal computation.
 
 11. Compute the canonical envelope bytes (both
-    `seal.signature` and `seal.session_mac` set to `""`,
-    `postmark.hop_count` omitted).
+    `seal.signature` and `seal.session_mac` set to `""`).
 12. Sign the canonical bytes with the sender's domain private
     key. Store in `seal.signature`.
 13. Compute a MAC over the canonical bytes using `K_env_mac`
@@ -1575,13 +1537,6 @@ A server MUST NOT:
 * forward an envelope with an invalid seal;
 * modify any signed field of the envelope.
 
-A server MAY:
-
-* increment `postmark.hop_count` if present, or add it
-  starting at `1` if absent;
-* reject envelopes where `postmark.hop_count` exceeds a
-  locally configured maximum.
-
 ## Rejection
 
 All rejections MUST be explicit. The rejecting server MUST
@@ -1893,8 +1848,8 @@ the domain key proves about origin. A stolen or forged domain
 key cannot produce a valid session MAC without also
 completing a real handshake.
 
-The sole exclusion from both proofs is `postmark.hop_count`,
-which relay servers may legitimately increment.
+Both proofs cover every byte of the canonical envelope. There
+are no exclusions from coverage.
 
 ## Forward Secrecy
 

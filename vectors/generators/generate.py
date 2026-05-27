@@ -81,9 +81,10 @@ def canonical_envelope(env: dict) -> bytes:
 
     1. seal.signature   -> ""
     2. seal.session_mac -> ""
-    3. postmark.hop_count omitted entirely
-    4. padding omitted entirely
-    5. Sort keys at every nesting level (canonical_json)
+    3. Sort keys at every nesting level (canonical_json)
+
+    Every other field, including padding, is covered by the canonical
+    bytes and therefore by both seal.signature and seal.session_mac.
     """
     e = copy.deepcopy(env)
     if "seal" in e:
@@ -91,9 +92,6 @@ def canonical_envelope(env: dict) -> bytes:
             e["seal"]["signature"] = ""
         if "session_mac" in e["seal"]:
             e["seal"]["session_mac"] = ""
-    if "postmark" in e:
-        e["postmark"].pop("hop_count", None)
-    e.pop("padding", None)
     return canonical_json(e)
 
 
@@ -203,7 +201,6 @@ def build_envelope_canonical_json() -> dict:
             "from_domain": "sender.example",
             "to_domain": "recipient.example",
             "expires": "2025-06-10T21:00:00Z",
-            "hop_count": 2,
             "extensions": {},
         },
         "seal": {
@@ -273,8 +270,6 @@ def build_envelope_canonical_json() -> dict:
         "rules_summary": [
             "seal.signature -> set to \"\"",
             "seal.session_mac -> set to \"\"",
-            "postmark.hop_count -> omitted",
-            "padding -> omitted",
             "All keys sorted lexicographically at every nesting level",
             "No insignificant whitespace",
             "UTF-8 encoding",
@@ -284,8 +279,8 @@ def build_envelope_canonical_json() -> dict:
                 "id": "envelope-canonical-minimal",
                 "description": (
                     "Minimal envelope with empty recipient maps and empty extensions. "
-                    "Confirms hop_count and padding are stripped, signature/session_mac "
-                    "are blanked, and top-level keys sort correctly."
+                    "Confirms signature/session_mac are blanked and top-level keys "
+                    "sort correctly. Padding, when present, is part of the canonical bytes."
                 ),
                 "spec_reference": "VECTORS.md §3.1",
                 "inputs": {"envelope_json": minimal},
@@ -3201,8 +3196,8 @@ def decrypt_brief_or_enclosure(
 
 def envelope_canonical_for_signature(envelope: dict) -> bytes:
     """ENVELOPE.md §4.3 canonical form for seal.signature / seal.session_mac:
-    blank seal.signature and seal.session_mac, omit postmark.hop_count and
-    top-level padding, sort keys, no whitespace.
+    blank seal.signature and seal.session_mac, sort keys, no whitespace.
+    Every other field, including padding, is covered.
     """
     return canonical_envelope(envelope)
 
@@ -3960,9 +3955,8 @@ def build_delivery_receipt_json() -> dict:
 
     # Pin a small reference envelope. We don't need to fully encrypt it for
     # the receipt -- we just need its canonical bytes for the SHA-256 digest.
-    # The envelope below has all the §4.3 canonicalization corner cases
-    # (sorted keys, blanked signature/session_mac, padding/hop_count
-    # omitted) covered by canonical_envelope.
+    # The envelope below exercises the §4.3 canonicalization rules (sorted
+    # keys, blanked signature/session_mac) covered by canonical_envelope.
     reference_envelope = {
         "type": "SEMP_ENVELOPE",
         "version": "1.0.0",

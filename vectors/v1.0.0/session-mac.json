@@ -11,11 +11,11 @@
       "spec_reference": "VECTORS.md §6.1",
       "inputs": {
         "key_hex": "32925224f762c4f921db929271bfdc5e911b0d877bc30cd4695f9d6530337c02",
-        "message_canonical_utf8": "{\"brief\":\"ZW5jcnlwdGVkLWJyaWVm\",\"enclosure\":\"ZW5jcnlwdGVkLWVuY2xvc3VyZQ==\",\"postmark\":{\"expires\":\"2025-06-10T21:00:00Z\",\"extensions\":{},\"from_domain\":\"sender.example\",\"id\":\"01J4K7P2XVEM3Q8YNZHBRC5T06\",\"session_id\":\"01J4K7Q0ABCDEFGHJKLMNPQRST\",\"to_domain\":\"recipient.example\"},\"seal\":{\"algorithm\":\"pq-kyber768-x25519\",\"brief_recipients\":{},\"enclosure_recipients\":{},\"extensions\":{},\"key_id\":\"abc123def456\",\"session_mac\":\"\",\"signature\":\"\"},\"type\":\"SEMP_ENVELOPE\",\"version\":\"1.0.0\"}"
+        "message_canonical_utf8": "{\"brief\":\"ZW5jcnlwdGVkLWJyaWVm\",\"enclosure\":\"ZW5jcnlwdGVkLWVuY2xvc3VyZQ==\",\"padding\":\"cGFkZGluZy1ieXRlcy1mb3ItMTAyNC1idWNrZXQ=\",\"postmark\":{\"expires\":\"2025-06-10T21:00:00Z\",\"extensions\":{},\"from_domain\":\"sender.example\",\"id\":\"01J4K7P2XVEM3Q8YNZHBRC5T06\",\"session_id\":\"01J4K7Q0ABCDEFGHJKLMNPQRST\",\"to_domain\":\"recipient.example\"},\"seal\":{\"algorithm\":\"pq-kyber768-x25519\",\"brief_recipients\":{},\"enclosure_recipients\":{},\"extensions\":{},\"key_id\":\"abc123def456\",\"session_mac\":\"\",\"signature\":\"\"},\"type\":\"SEMP_ENVELOPE\",\"version\":\"1.0.0\"}"
       },
       "expected": {
-        "mac_hex": "b59371cec75f07a5b40444ffc46049b1fa9c6673e1072903ff821ab4506c9bfe",
-        "mac_b64": "tZNxzsdfB6W0BET/xGBJsfqcZnPhBykD/4IatFBsm/4="
+        "mac_hex": "a7577299ede4c73265149309a32d896c7136508b22f5a4965f9a6d6f443db437",
+        "mac_b64": "p1dyme3kxzJlFJMJoy2JbHE2UIsi9aSWX5ptb0Q9tDc="
       }
     }
   ]

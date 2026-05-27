@@ -6,8 +6,6 @@
   "rules_summary": [
     "seal.signature -> set to \"\"",
     "seal.session_mac -> set to \"\"",
-    "postmark.hop_count -> omitted",
-    "padding -> omitted",
     "All keys sorted lexicographically at every nesting level",
     "No insignificant whitespace",
     "UTF-8 encoding"
@@ -15,7 +13,7 @@
   "vectors": [
     {
       "id": "envelope-canonical-minimal",
-      "description": "Minimal envelope with empty recipient maps and empty extensions. Confirms hop_count and padding are stripped, signature/session_mac are blanked, and top-level keys sort correctly.",
+      "description": "Minimal envelope with empty recipient maps and empty extensions. Confirms signature/session_mac are blanked and top-level keys sort correctly. Padding, when present, is part of the canonical bytes.",
       "spec_reference": "VECTORS.md §3.1",
       "inputs": {
         "envelope_json": {
@@ -27,7 +25,6 @@
             "from_domain": "sender.example",
             "to_domain": "recipient.example",
             "expires": "2025-06-10T21:00:00Z",
-            "hop_count": 2,
             "extensions": {}
           },
           "seal": {
@@ -45,7 +42,7 @@
         }
       },
       "expected": {
-        "canonical_utf8": "{\"brief\":\"ZW5jcnlwdGVkLWJyaWVm\",\"enclosure\":\"ZW5jcnlwdGVkLWVuY2xvc3VyZQ==\",\"postmark\":{\"expires\":\"2025-06-10T21:00:00Z\",\"extensions\":{},\"from_domain\":\"sender.example\",\"id\":\"01J4K7P2XVEM3Q8YNZHBRC5T06\",\"session_id\":\"01J4K7Q0ABCDEFGHJKLMNPQRST\",\"to_domain\":\"recipient.example\"},\"seal\":{\"algorithm\":\"pq-kyber768-x25519\",\"brief_recipients\":{},\"enclosure_recipients\":{},\"extensions\":{},\"key_id\":\"abc123def456\",\"session_mac\":\"\",\"signature\":\"\"},\"type\":\"SEMP_ENVELOPE\",\"version\":\"1.0.0\"}"
+        "canonical_utf8": "{\"brief\":\"ZW5jcnlwdGVkLWJyaWVm\",\"enclosure\":\"ZW5jcnlwdGVkLWVuY2xvc3VyZQ==\",\"padding\":\"cGFkZGluZy1ieXRlcy1mb3ItMTAyNC1idWNrZXQ=\",\"postmark\":{\"expires\":\"2025-06-10T21:00:00Z\",\"extensions\":{},\"from_domain\":\"sender.example\",\"id\":\"01J4K7P2XVEM3Q8YNZHBRC5T06\",\"session_id\":\"01J4K7Q0ABCDEFGHJKLMNPQRST\",\"to_domain\":\"recipient.example\"},\"seal\":{\"algorithm\":\"pq-kyber768-x25519\",\"brief_recipients\":{},\"enclosure_recipients\":{},\"extensions\":{},\"key_id\":\"abc123def456\",\"session_mac\":\"\",\"signature\":\"\"},\"type\":\"SEMP_ENVELOPE\",\"version\":\"1.0.0\"}"
       }
     },
     {
