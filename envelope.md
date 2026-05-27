@@ -488,6 +488,55 @@ Routing servers MUST verify `seal.signature`. They cannot verify
 `seal.session_mac` as they do not hold the session key.
 Receiving servers MUST verify both.
 
+<a id="anchoring-layer"></a>
+
+### Anchoring Layer per Signature Context
+Each context in the [Signature Domain Separation
+table](#signature-domain-separation) anchors to one of two keys,
+capturing the two-layer trust model described in
+[Architecture](architecture.md), "Domain and Author Anchored
+Trust".
+
+| Context | Anchored to | What it proves |
+|---|---|---|
+| `SEMP-ENVELOPE:` | Domain | Envelope was emitted by the claimed sending domain |
+| `SEMP-HANDSHAKE:` | Domain | Federation peer is the claimed domain |
+| `SEMP-KEYS:` | Domain | Authenticated set of published user keys for the domain |
+| `SEMP-DISCOVERY:` | Domain | Discovery response came from the claimed domain |
+| `SEMP-CONFIGURATION-UPDATE:` | Domain | Authentic update to the domain's configuration |
+| `SEMP-DELIVERY-RECEIPT:` | Domain | Recipient domain acknowledged delivery |
+| `SEMP-TRANSPARENCY-STH:` | Domain | Transparency log signed tree head |
+| `SEMP-TRUST-OBSERVATION:` | Domain | Domain observed peer behavior |
+| `SEMP-TRUST-TRANSFER:` | Domain | Domain ownership / key change with reputation handoff |
+| `SEMP-REPUTATION-REFERENCES:` | Domain | Domain published its reputation references |
+| `SEMP-ABUSE-REPORT:` | Domain | Domain reported peer abuse |
+| `SEMP-REVOCATION:` | Issuing key (domain or user) | Key holder revoked their own key |
+| `SEMP-IDENTITY:` | User | User asserts identity inside the enclosure |
+| `SEMP-ENCLOSURE-SENDER:` | User | Inner sender attestation; survives forwarding |
+| `SEMP-KEY-SELF-SIG:` | User | User binds their encryption and device subkeys |
+| `SEMP-FORWARDER-ATTESTATION:` | User | Forwarder identifies themselves |
+| `SEMP-USER-POLICY:` | User | User updates their policy |
+| `SEMP-STATUS:` | User | User publishes status (available, away, do-not-disturb) |
+| `SEMP-SUCCESSOR-RECORD:` | User | User declares successor key |
+| `SEMP-MIGRATION-RECORD:` | User | User-initiated account migration |
+| `SEMP-ACCOUNT-CLOSURE:` | User | User requests account closure |
+| `SEMP-RECOVERY-BUNDLE:` | User | User-controlled recovery payload |
+| `SEMP-RECOVERY-MANIFEST:` | User | Recovery-set manifest |
+| `SEMP-RECOVERY-SHARE:` | User | Recovery share authorization (signed by an authorized device under the user) |
+| `SEMP-DEVICE-REGISTER:` | User | User registers a new device |
+| `SEMP-DEVICE-AUTHORIZE:` | User | User authorizes a device enrollment |
+| `SEMP-DEVICE-REVOCATION:` | User | User revokes a device |
+| `SEMP-DEVICE-DIRECTORY:` | User | User publishes their device list |
+
+Domain-keyed signatures verify under a domain's published domain
+key (per [Discovery](discovery.md)). User-keyed signatures
+verify under a user's identity key. The domain publishes that
+identity key inside its user-key record and signs the record
+itself under `SEMP-KEYS:`. A user-keyed signature is therefore
+indirectly anchored to a domain via the key publication, but the
+content attestation is the user's alone and survives any
+re-signing of the user's key record by the domain.
+
 <a id="recipient-key-wrapping"></a>
 
 ## Recipient Key Wrapping

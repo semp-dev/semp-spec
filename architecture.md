@@ -146,12 +146,52 @@ for routing. All other fields (sender identity, recipient identity,
 subject, body, attachments) are encrypted before transmission and
 visible only to the parties that hold the appropriate keys.
 
-## Domain-Anchored Trust
+## Domain and Author Anchored Trust
 
-SEMP builds its reputation and trust model on domain identity
-rather than IP address history. A new domain starts with zero
-reputation. Trust is earned through observed behavior over
-time. Trust observations are:
+SEMP separates trust into two layers anchored to two distinct
+cryptographic keys.
+
+The **domain key** anchors the server-to-server layer. Every
+server operating a SEMP domain holds a domain key. The domain
+key signs the routing-layer integrity of every envelope the
+domain emits (`seal.signature`), authenticates peers during the
+federation handshake, signs discovery responses and the
+published user-key record, and signs every observation a domain
+publishes about its peers (reputation gossip, abuse reports,
+trust transfers). Other servers admit, route, and rate-limit a
+domain based on signals anchored to its domain key. The
+reputation and abuse-handling story operates entirely at this
+layer.
+
+The **user key** anchors the user-to-user layer. Every SEMP user
+holds an identity key. The user key signs the authorship
+attestation inside the enclosure (the `sender_signature` in
+[Envelope](envelope.md)), self-signs the user's encryption
+and device subkeys, signs successor and migration records that
+govern the user's account lifecycle, and signs recovery bundles
+and shares. The recipient client and any out-of-session reader
+(forwarder targets, archival readers, future verifiers) verifies
+the user key directly. The accountability story,
+forwarding-survives-rewrite story, and account-recovery story all
+operate at this layer.
+
+The two layers compose. A receiving server admits an envelope
+based on the sending domain's reputation (domain layer), and a
+recipient verifies the envelope's authorship based on the sender
+user's identity key (user layer). A trust failure at the domain
+layer rejects the envelope before delivery. An authenticity
+failure at the user layer flags the envelope to the recipient
+even after admission. The two checks are independent and
+cumulative.
+
+The full enumeration of which key signs which context is the
+[Anchoring Layer per Signature Context table](#anchoring-layer)
+in [Envelope](envelope.md).
+
+SEMP builds its reputation model on domain identity rather than
+IP address history. A new domain starts with zero reputation.
+Trust is earned through observed behavior over time. Trust
+observations are:
 
 * observable, in that other servers MAY publish what they
   have seen about a domain through the trust gossip mechanism
