@@ -41,7 +41,7 @@ Among the structural limitations SEMP addresses at the protocol level:
    bound to the sending domain's outbound server rather than to the
    sender's identity. SEMP envelopes carry two independent integrity
    proofs over the same canonical bytes: a domain key signature
-   verifiable by any routing server, and a session MAC verifiable
+   verifiable by any home server, and a session MAC verifiable
    only by the receiving server. Delivery without a valid established
    session is cryptographically impossible.
 
@@ -73,7 +73,7 @@ Envelope:
   brief, and an enclosure.
 
 Postmark:
-: The outer public header of an envelope, visible to routing servers.
+: The outer public header of an envelope, visible on the wire.
   Carries only the information necessary to route the envelope.
 
 Seal:
@@ -380,7 +380,7 @@ Be opinionated about cryptographic algorithms beyond minimum requirements:
 SEMP's core message unit is the envelope. Its structure is modeled on
 physical correspondence. An envelope comprises four components:
 
-* The postmark: outer public header, visible to routing servers.
+* The postmark: outer public header, visible on the wire.
 
 * The seal: cryptographic integrity proof, tamper-evident.
 
@@ -395,14 +395,14 @@ wire format is specified in [Envelope](envelope.md).
 
 ## Postmark
 
-The postmark carries the fields a routing server needs to forward the
+The postmark carries the fields a home server needs to forward the
 envelope: the source and destination domains, an envelope identifier,
 an expiry, and a size-bucket indicator. Full sender and recipient
 addresses, the subject, and precise timestamps are excluded from the
 postmark and appear, if at all, only in the encrypted brief or
 enclosure.
 
-A routing server can read the postmark and no other component.
+A home server can read the postmark and no other component.
 
 ## Seal
 
@@ -1739,15 +1739,6 @@ revision. Each is tracked as an issue on the SEMP specification
 repository so feedback and discussion can accumulate alongside
 the draft text. The list is non-exhaustive; reviewers are
 invited to add to it.
-
-Routing-server terminology:
-: Several drafts use the term "routing server" when describing
-  layer visibility, but the architecture explicitly disclaims
-  multi-hop relays. There is no intermediate server class
-  between the two home servers. The term may need to be
-  renamed (to "sending server" / "recipient server" /
-  "home server") for accuracy, or explicitly defined as a
-  layer-visibility class distinct from a deployment role.
 
 Reason-code / transport-status mapping:
 : The Reason Code Registry in [Delivery](delivery.md) is

@@ -18,7 +18,7 @@ artifacts: `application/semp-envelope`, `application/semp-receipt`,
 The SEMP envelope is the unit of transmission in the protocol. It is
 modeled on physical correspondence and consists of four components:
 
-* a postmark (outer public header, visible to routing servers);
+* a postmark (outer public header, visible on the wire);
 * a seal (cryptographic integrity proof, tamper-evident);
 * a brief (inner private header, encrypted, decryptable by the
   recipient server and the recipient client);
@@ -36,7 +36,7 @@ architecture.
 The brief is decryptable by the recipient server because the server
 performs delivery and user-level policy enforcement (block-list
 checks, first-contact gating, recipient status). The enclosure is
-decryptable only by the recipient client. No routing server can read
+decryptable only by the recipient client. No home server can read
 the enclosure under any circumstances.
 
 # Conventions and Definitions
@@ -171,8 +171,8 @@ The `padding` field carries opaque bytes whose sole purpose is to
 obscure the wire size of an envelope from any observer of routing
 infrastructure. Sending clients MUST populate `padding` so that
 the total wire size of the canonical envelope falls on one of the
-size buckets defined below. Routing servers and recipient servers
-MUST ignore the contents of `padding` during delivery and MUST
+size buckets defined below. Home servers MUST ignore the
+contents of `padding` during delivery and MUST
 count its bytes toward the negotiated `max_envelope_size`
 enforcement.
 
@@ -265,7 +265,7 @@ addresses in full. It MUST NOT contain a subject, a precise
 timestamp, or any field that could be used to infer the nature
 or content of the correspondence.
 
-A routing server reads the postmark and no other component.
+A home server reads the postmark and no other component.
 
 ## Postmark Schema
 
@@ -323,7 +323,7 @@ Together, these two proofs make the envelope and the handshake
 session cryptographically inseparable at delivery. A forged
 envelope that passes domain key verification but was not produced
 within a valid session will fail the session MAC check. A
-routing server that did not participate in the handshake can
+home server that did not participate in the handshake can
 still verify the domain signature for routing integrity.
 
 A server that receives an envelope with an invalid or missing
@@ -444,10 +444,10 @@ or field exclusion handling will produce verification failures.
 
 | Layer | Verifies | Uses | Performed by |
 |---|---|---|---|
-| Routing | `seal.signature` | Sender domain key | Any routing server |
+| Routing | `seal.signature` | Sender domain key | Any home server |
 | Delivery | `seal.session_mac` | Session key `K_env_mac` | Receiving server only |
 
-Routing servers MUST verify `seal.signature`. They cannot verify
+Home servers MUST verify `seal.signature`. They cannot verify
 `seal.session_mac` as they do not hold the session key.
 Receiving servers MUST verify both.
 
@@ -974,7 +974,7 @@ plaintext and accompanying advisory metadata.
 A forward composes a fresh envelope addressed to the new
 recipient, sealed by the forwarder's domain and signed by the
 forwarder's identity key. The new envelope is structurally
-indistinguishable from any other envelope to routing servers;
+indistinguishable from any other envelope on the wire;
 the forward is visible only to the new recipient client after
 enclosure decryption.
 
@@ -1233,7 +1233,7 @@ Receiving an envelope follows this sequence:
 Steps 1 through 4 MUST all pass before any further
 processing. Each failure MUST produce an immediate, explicit
 rejection with the appropriate reason code. Step 1 may be
-performed by any routing server. Steps 2 through 7 are
+performed by any home server. Steps 2 through 7 are
 performed by the receiving server only. Steps 8 through 12
 are performed by the client.
 
@@ -1506,8 +1506,7 @@ example, `vendor.example.com/feature-name`). Core
 implementations MUST ignore unknown extension keys rather
 than rejecting the envelope. Extensions MUST NOT redefine or
 shadow reserved field names at their layer. Extensions placed
-in `postmark.extensions` or `seal.extensions` are visible to
-all routing servers and MUST be treated as public metadata.
+in `postmark.extensions` or `seal.extensions` are visible on the wire and MUST be treated as public metadata.
 
 The wire-level extension framework, including registration
 and size limits, is specified in
@@ -1838,7 +1837,7 @@ mechanisms covering the same canonical bytes.
 `seal.signature` is verifiable by any server using the
 sender's published domain key. Any modification to any
 immutable field, including routing metadata in the postmark,
-invalidates it. Routing servers verify this before
+invalidates it. Home servers verify this before
 forwarding.
 
 `seal.session_mac` is verifiable only by the receiving server

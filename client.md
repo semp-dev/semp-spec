@@ -920,7 +920,7 @@ envelope and MUST carry `required: true`.
 The marker lives in the brief rather than the enclosure so
 that the home server can apply correct policy
 ([Home Server Obligations](#device-sync-server-obligations)) without decrypting the
-enclosure. The marker is encrypted against routing servers
+enclosure. The marker is not exposed on the wire
 because the brief is encrypted, and it is visible only to
 the recipient server and the recipient client.
 
@@ -954,7 +954,7 @@ declare the placement for every field it carries.
   kind's specification explicitly requires it.
 * **Public metadata** MUST NOT appear in
   `postmark.extensions` or `seal.extensions` unless the
-  kind's specification explicitly requires routing-server
+  kind's specification explicitly requires on-the-wire
   visibility, which is unusual for sync.
 
 This placement rule makes the home server's role in each
