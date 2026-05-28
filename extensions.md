@@ -84,7 +84,7 @@ each with different visibility and trust properties:
 | Delivery | `block_entry.extensions` | Local server only (never transmitted). |
 
 Extensions at public layers (`postmark.extensions`,
-`seal.extensions`) are visible to all routing servers and MUST
+`seal.extensions`) are visible on the wire and MUST
 be treated as public metadata. Extensions at private layers
 (`brief.extensions`, `enclosure.extensions`) are protected by
 the same encryption as their parent structure.
@@ -182,8 +182,8 @@ including all keys and values):
 
 | Layer | Maximum size | Rationale |
 |---|---|---|
-| `postmark.extensions` | 4 KB | Parsed by every routing server. Must be minimal. |
-| `seal.extensions` | 4 KB | Parsed by every routing server. Must be minimal. |
+| `postmark.extensions` | 4 KB | Parsed by every home server. Must be minimal. |
+| `seal.extensions` | 4 KB | Parsed by every home server. Must be minimal. |
 | `brief.extensions` | 16 KB | Parsed by recipient server and client only. |
 | `enclosure.extensions` | 64 KB | Parsed by recipient client only. Largest scope. |
 
@@ -368,7 +368,7 @@ SEMP library enforces these declarations at runtime.
 |---|---|
 | `on_compose` | Before envelope encryption, on the sender client. |
 | `on_seal` | After envelope encryption, before signature, on the sender server. |
-| `on_route` | At each routing server, on the public envelope layers only. |
+| `on_route` | At each home server, on the public envelope layers only. |
 | `on_deliver` | At the recipient server, after seal verification. |
 | `on_decrypt` | At the recipient client, after enclosure decryption. |
 | `on_display` | At the recipient client, before user-visible rendering. |
@@ -1107,11 +1107,12 @@ product may implement one or more roles.
 |---|---|
 | SEMP Server | Operates on behalf of a domain. Handles handshakes, envelope routing, delivery policy, key publication, and discovery responses. |
 | SEMP Client | Operates on behalf of a user. Handles envelope composition, encryption, decryption, key management, and home server communication. |
-| Routing Server | Intermediate server that forwards envelopes between domains. Verifies routing-layer integrity but does not decrypt content. |
 
-A routing server is a subset of the server role. Any server
-that relays envelopes in transit acts as a routing server
-for those envelopes.
+SEMP federation is direct between the two home servers. There is
+no intermediate relay tier. While an envelope is in transit, only
+its public layers (postmark and seal) are exposed on the wire.
+The brief is readable only by the recipient server. The enclosure
+is readable only by the recipient client.
 
 ## Conformance Levels
 
@@ -1942,8 +1943,7 @@ does not prescribe.
 The choice of layer for an extension determines its
 visibility:
 
-* `postmark.extensions` and `seal.extensions` are visible to
-  every routing server and MUST be treated as public.
+* `postmark.extensions` and `seal.extensions` are visible on the wire and MUST be treated as public.
 * `brief.extensions` is visible to the recipient server and
   client.
 * `enclosure.extensions` is visible only to the recipient
@@ -1970,7 +1970,7 @@ downloads against untrusted storage providers.
 
 `filename`, `mime_type`, and `plaintext_size` are carried in
 the enclosure plaintext and are therefore visible to the
-recipient client. They are not visible to routing servers or
+recipient client. They are not visible to home servers or
 to the storage provider. Senders concerned about filename
 leakage to the recipient SHOULD rename files before
 attaching.
