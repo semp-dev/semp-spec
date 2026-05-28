@@ -2028,7 +2028,7 @@ Additional information:
   `org.semp.envelope`.
 
 Person and email address to contact for further information:
-: Seyit Gokce \<contact@seyitgokce.me\>.
+: Seyit Gokce \<seyit@semp.dev\>.
 
 Intended usage:
 : COMMON
@@ -2081,7 +2081,7 @@ Additional information:
 : File extension(s): `.semp-receipt`. UTI: `org.semp.receipt`.
 
 Person and email address to contact for further information:
-: Seyit Gokce \<contact@seyitgokce.me\>.
+: Seyit Gokce \<seyit@semp.dev\>.
 
 Intended usage:
 : COMMON
@@ -2132,7 +2132,7 @@ Additional information:
 : File extension(s): `.semp-recovery`. UTI: `org.semp.recovery`.
 
 Person and email address to contact for further information:
-: Seyit Gokce \<contact@seyitgokce.me\>.
+: Seyit Gokce \<seyit@semp.dev\>.
 
 Intended usage:
 : COMMON
@@ -2183,7 +2183,7 @@ Additional information:
 : File extension(s): `.semp-migration`. UTI: `org.semp.migration`.
 
 Person and email address to contact for further information:
-: Seyit Gokce \<contact@seyitgokce.me\>.
+: Seyit Gokce \<seyit@semp.dev\>.
 
 Intended usage:
 : COMMON

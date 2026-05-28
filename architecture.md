@@ -184,9 +184,9 @@ failure at the user layer flags the envelope to the recipient
 even after admission. The two checks are independent and
 cumulative.
 
-The full enumeration of which key signs which context is the
-[Anchoring Layer per Signature Context table](#anchoring-layer)
-in [Envelope](envelope.md).
+The full enumeration of which key signs which context appears in
+the "Anchoring Layer per Signature Context" table in
+[Envelope](envelope.md).
 
 SEMP builds its reputation model on domain identity rather than
 IP address history. A new domain starts with zero reputation.

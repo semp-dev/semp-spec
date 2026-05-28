@@ -2,7 +2,7 @@
 
 Status: Internet-Draft. Subject to change.
 
-SEMP is a federated messaging protocol designed to replace SMTP. Two independent implementations exist and interoperate end to end under both algorithm suites: [semp-go](https://github.com/semp-dev/semp-go) and [semp-ts](https://github.com/semp-dev/semp-ts) (npm: `@sempdev/semp`), each passing the same 42 cross-language test vectors byte-for-byte.
+SEMP is a federated messaging protocol designed to replace SMTP. Two independent implementations exist and interoperate end to end under both algorithm suites: [semp-go](https://github.com/semp-dev/semp-go) and [semp-ts](https://github.com/semp-dev/semp-ts), each passing the same 42 cross-language test vectors byte-for-byte.
 
 The specification is split across eight Internet-Drafts. This repository holds the GitHub-rendered form of each draft together with the cross-language test vector corpus under [`vectors/`](vectors/). Project page: <https://semp.dev>.
 
