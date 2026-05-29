@@ -1740,33 +1740,6 @@ repository so feedback and discussion can accumulate alongside
 the draft text. The list is non-exhaustive; reviewers are
 invited to add to it.
 
-Reason-code / transport-status mapping:
-: The Reason Code Registry in [Delivery](delivery.md) is
-  independent of the transport. An operator running SEMP over
-  HTTP/2 sees the SEMP reason code in the response body and a
-  separate HTTP status at the transport. Two layers, two
-  ontologies, no documented correspondence. Whether the spec
-  should publish a canonical mapping (or stay deliberately
-  silent on the relationship) is open.
-
-Padding in the signature scope:
-: `envelope.padding` is currently elided from canonical bytes
-  and therefore not covered by `seal.signature` or
-  `seal.session_mac`. The rationale is that padding has no
-  semantic content. The cost is that wire-level padding
-  mutation is undetectable cryptographically, even though the
-  spec prohibits it normatively. Whether to include padding
-  (or its length) in the signature scope is open.
-
-Trust at user level vs. domain level:
-: The architecture frames trust as domain-anchored, but every
-  wire-level identity proof (sender_signature, identity proof,
-  recovery, migration) is user-key signed. The "domain trust"
-  framing and the user-keyed wire reality could be reconciled
-  more explicitly, either by stating that domains gatekeep and
-  users author (the apparent intent), or by clarifying which
-  reputation signals are per-domain vs per-user.
-
 Cryptographic challenge binding for first-contact:
 : The first-contact PoW challenge currently gates submission
   via the recipient server's policy. The envelope's
