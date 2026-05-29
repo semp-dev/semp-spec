@@ -2172,6 +2172,57 @@ application rejected the message.
 | 429 | Transport-level rate limit. | Yes | Back off and retry. Distinct from SEMP `rate_limited`. |
 | 503 | Server temporarily unavailable. | Yes | Back off and retry. |
 
+<a id="middlebox-status-correspondence"></a>
+
+### Middlebox Status Correspondence
+A SEMP server returns application outcomes in the response body,
+typically under a 200 transport status. Infrastructure between
+the client and the SEMP server (reverse proxies, load balancers,
+API gateways, CDN edges) may instead return a bare transport
+status with no SEMP body when it handles a condition itself: an
+overloaded balancer returning 503, a backend-down proxy
+returning 502, an edge rate-limiter returning 429, an auth
+gateway returning 401.
+
+When a client receives a bare transport status with no parseable
+SEMP body, it MAY treat the status as the corresponding SEMP
+reason code below for retry and backoff decisions. This
+correspondence is non-normative. It exists so a client behaves
+consistently whether a condition is reported by the SEMP server
+as a structured reason code or by intermediary infrastructure as
+a bare transport status.
+
+| HTTP status | Equivalent SEMP reason code | Sender behavior |
+|---|---|---|
+| 401 | `auth_failed` | Non-recoverable. Surface to user. |
+| 403 | `policy_forbidden` | Non-recoverable. Surface to user. |
+| 408 | `connection_timeout` | Recoverable. Retry, or fall back to the next transport. |
+| 413 | `envelope_size_exceeded` | Non-recoverable. Reduce payload; do not retry the same envelope. |
+| 429 | `rate_limited` | Recoverable. Back off and retry. |
+| 502 | `server_unavailable` | Recoverable. Back off and retry. |
+| 503 | `server_unavailable` | Recoverable. Back off and retry. |
+| 504 | `server_unavailable` | Recoverable. Back off and retry. |
+
+A bare 400 has no reason-code equivalent. It signals a malformed
+request that the client must fix, with no application outcome to
+mirror. Treat it as the transport-level 400 defined above.
+
+When a SEMP response body is present, it is authoritative. The
+client MUST act on the SEMP reason code and MUST NOT override it
+from the transport status. The correspondence applies only when
+no SEMP body is available.
+
+The correspondence covers bare HTTP statuses returned by
+intermediary infrastructure at connection, request, or
+WebSocket-upgrade time. It is common to all three transport
+bindings. HTTP/2, QUIC over HTTP/3, and the WebSocket upgrade
+exchange all establish over HTTP, so a middlebox reports through
+an HTTP status regardless of which SEMP transport rides on top.
+Once a WebSocket session is established, a close frame with no
+preceding SEMP rejection is a network-level failure, per the
+WebSocket binding in [Handshake](handshake.md), not a status
+mapped here.
+
 ### Transport Connection Failures
 
 The following conditions are not wire codes but

@@ -1580,16 +1580,11 @@ Request and response bodies for `POST` operations are
 and envelope submission use standard HTTP/2 request-response
 semantics.
 
-HTTP status codes indicate transport-level outcomes only; a 200
-response with a SEMP rejection in the body is normal operation:
-
-| HTTP status | Meaning |
-|---|---|
-| 200 | SEMP message processed. SEMP-level outcome is in the body. |
-| 400 | Malformed SEMP message. Could not parse. |
-| 413 | Payload exceeds `max_envelope_size`. |
-| 429 | Transport-level rate limit, distinct from SEMP `rate_limited`. |
-| 503 | Server temporarily unavailable. |
+HTTP status codes indicate transport-level outcomes only. A 200
+response with a SEMP rejection in the body is normal operation.
+The transport-status codes, and their non-normative correspondence
+to SEMP reason codes, are defined in the Transport-Layer Status
+Codes section of [Delivery](delivery.md).
 
 The four-message handshake maps to sequential HTTP/2 POST
 requests. The server includes a `Semp-Session-Id` header in
