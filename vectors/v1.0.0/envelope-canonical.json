@@ -85,11 +85,12 @@
             "extensions": {}
           },
           "brief": "YnJpZWYtZGF0YQ==",
-          "enclosure": "ZW5jbG9zdXJlLWRhdGE="
+          "enclosure": "ZW5jbG9zdXJlLWRhdGE=",
+          "padding": ""
         }
       },
       "expected": {
-        "canonical_utf8": "{\"brief\":\"YnJpZWYtZGF0YQ==\",\"enclosure\":\"ZW5jbG9zdXJlLWRhdGE=\",\"postmark\":{\"expires\":\"2025-07-01T12:00:00Z\",\"extensions\":{\"another.example.com/class\":{\"data\":\"transactional\",\"required\":false},\"vendor.example.com/priority\":{\"data\":\"high\",\"required\":false}},\"from_domain\":\"alpha.example\",\"id\":\"01JTEST00000000000000000000\",\"session_id\":\"01JTEST11111111111111111111\",\"to_domain\":\"beta.example\"},\"seal\":{\"algorithm\":\"x25519-chacha20-poly1305\",\"brief_recipients\":{\"client-key-fp\":\"wrapped-K_brief-for-client\",\"server-key-fp\":\"wrapped-K_brief-for-server\"},\"enclosure_recipients\":{\"client-key-fp\":\"wrapped-K_enclosure-for-client\"},\"extensions\":{},\"key_id\":\"key-fingerprint-xyz\",\"session_mac\":\"\",\"signature\":\"\"},\"type\":\"SEMP_ENVELOPE\",\"version\":\"1.0.0\"}"
+        "canonical_utf8": "{\"brief\":\"YnJpZWYtZGF0YQ==\",\"enclosure\":\"ZW5jbG9zdXJlLWRhdGE=\",\"padding\":\"\",\"postmark\":{\"expires\":\"2025-07-01T12:00:00Z\",\"extensions\":{\"another.example.com/class\":{\"data\":\"transactional\",\"required\":false},\"vendor.example.com/priority\":{\"data\":\"high\",\"required\":false}},\"from_domain\":\"alpha.example\",\"id\":\"01JTEST00000000000000000000\",\"session_id\":\"01JTEST11111111111111111111\",\"to_domain\":\"beta.example\"},\"seal\":{\"algorithm\":\"x25519-chacha20-poly1305\",\"brief_recipients\":{\"client-key-fp\":\"wrapped-K_brief-for-client\",\"server-key-fp\":\"wrapped-K_brief-for-server\"},\"enclosure_recipients\":{\"client-key-fp\":\"wrapped-K_enclosure-for-client\"},\"extensions\":{},\"key_id\":\"key-fingerprint-xyz\",\"session_mac\":\"\",\"signature\":\"\"},\"type\":\"SEMP_ENVELOPE\",\"version\":\"1.0.0\"}"
       }
     }
   ]

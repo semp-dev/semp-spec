@@ -24,7 +24,8 @@
             "new_address": "alice@new.example",
             "migration_record_id": "01JMIGRATION0000000000000000",
             "migration_record_url": "https://new.example/.well-known/semp/migration/01JMIGRATION0000000000000000"
-          }
+          },
+          "padding": ""
         },
         "sender_action": "Verify the migration record (fetch from migration_record_url, run the four-signature chain verification). Update the addressbook. Compose a fresh envelope sealed to alice@new.example using that domain's current keys. Do NOT re-submit the original envelope unchanged."
       }
@@ -44,7 +45,8 @@
           "step": "rejected",
           "version": "1.0.0",
           "reason_code": "policy_forbidden",
-          "reason": "Address not found."
+          "reason": "Address not found.",
+          "padding": ""
         },
         "migration_notice_absent": true,
         "sender_action": "Treat as non-existent address. Senders that still wish to discover the new address can fetch the migration_to field from the old provider's key endpoint while the migration record is still published (minimum 2 years from migrated_at)."

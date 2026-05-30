@@ -27,7 +27,8 @@
               "extension": "vendor.example.com/feature2",
               "validation_failure": "placement_violation"
             }
-          ]
+          ],
+          "padding": ""
         },
         "errors_count": 2,
         "errors_per_extension": {
@@ -56,7 +57,8 @@
               "extension": "vendor.example.com/forged",
               "validation_failure": "definition_signature_invalid"
             }
-          ]
+          ],
+          "padding": ""
         },
         "errors_count": 1,
         "must_reject": true
