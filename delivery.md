@@ -1157,7 +1157,7 @@ limiting is not rejection.
 
 ## Proof of Work
 SEMP defines `proof_of_work` as a challenge type usable by
-receiving servers to impose a per-envelope computational
+recipient servers to impose a per-envelope computational
 cost on the sender. The cost is negligible for low-volume
 senders and prohibitive for bulk senders. The challenge
 type, parameter schema, solution submission format, and
@@ -1167,7 +1167,7 @@ reputation-facing considerations that apply when a server
 chooses to require `proof_of_work`.
 
 PoW is not scoped to zero-reputation or new domains. A
-receiving server MAY require PoW from any sender as a matter
+recipient server MAY require PoW from any sender as a matter
 of operator policy, including established domains exhibiting
 suspicious patterns, domains that have recently crossed an
 abuse threshold, or any domain the operator chooses to
@@ -1667,9 +1667,9 @@ not self-publish references.
     "domain": "example.com",
     "references": [
         {
-            "observer": "trusted-server-1.com",
+            "observer": "ts1.example",
             "uri":
-                "https://trusted-server-1.com/v1/reputation/example.com",
+                "https://ts1.example/v1/reputation/example.com",
             "fetched_at": "2026-06-10T12:00:00Z",
             "assessment": "trusted"
         },
@@ -2056,8 +2056,8 @@ unless the implementation has explicit knowledge of the
 code's semantics through an extension.
 
 Recoverability governs automated retry only. A non-recoverable
-code means the sender server MUST NOT retry automatically. A
-recoverable code means the sender server SHOULD retry after
+code means the sending server MUST NOT retry automatically. A
+recoverable code means the sending server SHOULD retry after
 taking the corrective action described.
 
 ## Handshake Reason Codes
@@ -2493,12 +2493,30 @@ exercise delivery, receipts, reputation, and policy:
 
 # IANA Considerations
 
-This document does not request new IANA registrations.
-Reason codes, abuse categories, observation kinds, and
-delivery acknowledgment values are governed by the registry
-in [Reason Code Registry](#reason-codes). Extensions to those registries are
-namespaced under DNS labels controlled by the extension
-author and require no IANA action.
+## SEMP Reason Codes
+
+IANA is requested to establish the "SEMP Reason Codes" registry,
+which records the unprefixed core reason codes used across the
+SEMP protocol. The initial contents are the codes enumerated in
+[Reason Code Registry](#reason-codes); each entry carries the layer at which it
+applies, its recoverability, and the sender behavior on receipt.
+
+The registration policy is Specification Required ([RFC 8126](https://www.rfc-editor.org/rfc/rfc8126)).
+The designated expert verifies that a registration cites a clear
+specification, that the code name does not collide with an
+existing unprefixed code, and that the recoverability and
+sender-behavior fields are present.
+
+Vendor-specific reason codes do not enter this registry. They
+carry a DNS-label namespace controlled by the extension author,
+as described in [Reason Code Registry](#reason-codes), and require no IANA action.
+
+## Other Values
+
+The abuse categories, observation kinds, and delivery
+acknowledgment values in [Reason Code Registry](#reason-codes) are closed sets
+defined by this document. New values are added by a document
+that updates this specification.
 
 The media type `application/semp-receipt` referenced by the
 signed delivery receipt is registered in
