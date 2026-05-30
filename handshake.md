@@ -1400,13 +1400,13 @@ in-session rekey attempts) are defined there.
 Additional reason codes MAY be defined in extensions using the
 standard namespacing convention.
 
-# Sender Server Retry Responsibility
+# Sending Server Retry Responsibility
 
-The sender server is responsible for retry logic. Envelope
+The sending server is responsible for retry logic. Envelope
 rejections that indicate a recoverable session state MUST
 trigger automatic retry:
 
-| Received reason code | Sender server action |
+| Received reason code | Sending server action |
 |---|---|
 | `handshake_expired` | Establish a new session, resend the envelope. |
 | `handshake_invalid` | Establish a new session, resend the envelope. |
@@ -1417,7 +1417,7 @@ trigger automatic retry:
 | `server_at_capacity` | Retry after exponential backoff. Do not surface to the sending user unless retries are exhausted. |
 | `auth_failed` | Do not retry automatically. Surface to the sending user. |
 
-The sender server MUST NOT retry indefinitely. A maximum retry
+The sending server MUST NOT retry indefinitely. A maximum retry
 count and backoff ceiling SHOULD be configured per operator
 policy.
 
@@ -1990,7 +1990,7 @@ exercise the handshake, session, and transport layers:
 |---|---|
 | `hkdf.json` | HKDF-SHA-512 derivation of the five session keys from the shared secret, salt, and per-key info labels. |
 | `session-mac.json` | HMAC-SHA-256 envelope session MAC over canonical envelope bytes. |
-| `confirmation-hash.json` | SHA-256 over canonical(init) ‖ canonical(response). |
+| `confirmation-hash.json` | SHA-256 over canonical(init) || canonical(response). |
 | `handshake-messages.json` | Canonical bytes and `SEMP-HANDSHAKE:` Ed25519 signature path for the four-step handshake plus a rejection. |
 | `handshake-messages-pq.json` | PQ-suite (`pq-kyber768-x25519`) handshake variants with hybrid ephemerals. |
 | `session-resumption.json` | Resumption exchange and key derivation mixing `K_resumption` with a fresh ephemeral. |
@@ -2001,11 +2001,34 @@ exercise the handshake, session, and transport layers:
 
 # IANA Considerations
 
-This document has no IANA actions. Reason codes are registered
-in [Delivery](delivery.md). Algorithm suite identifiers
-are namespaced under SEMP and do not require external
-registration. Transport identifiers (`ws`, `h2`, `quic`) are
-internal to this specification.
+## SEMP Algorithm Suite Identifiers
+
+IANA is requested to establish the "SEMP Algorithm Suite
+Identifiers" registry, which records the suite identifiers
+negotiated during the SEMP handshake.
+
+The registration policy is Specification Required ([RFC 8126](https://www.rfc-editor.org/rfc/rfc8126)).
+Each entry carries an `Identifier` (the string carried on the
+wire), a `Description`, and a `Reference`. The designated expert
+verifies that each registration cites a clear specification and
+that the identifier does not collide with an existing entry.
+
+The initial contents are:
+
+`x25519-chacha20-poly1305`:
+: X25519 key agreement with ChaCha20-Poly1305 AEAD. Reference:
+  this document.
+
+`pq-kyber768-x25519`:
+: Hybrid ML-KEM-768 and X25519 key agreement. Reference: this
+  document.
+
+## Other Identifiers
+
+Reason codes are registered in [Delivery](delivery.md).
+The transport identifiers `ws`, `h2`, and `quic` are fixed by
+the transport bindings in this document and are not an
+extensible registry.
 
 # Acknowledgments
 
