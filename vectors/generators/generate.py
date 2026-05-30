@@ -76,6 +76,21 @@ def canonical_json(obj: Any) -> bytes:
     ).encode("utf-8")
 
 
+def _ensure_envelope_padding(obj):
+    """ENVELOPE.md makes `padding` a required envelope field (it MAY be the
+    empty string). Ensure every SEMP_ENVELOPE object carries it, so the
+    canonical bytes and the serialized vector both agree with the schema."""
+    if isinstance(obj, dict):
+        if obj.get("type") == "SEMP_ENVELOPE" and "padding" not in obj:
+            obj["padding"] = ""
+        for v in obj.values():
+            _ensure_envelope_padding(v)
+    elif isinstance(obj, list):
+        for v in obj:
+            _ensure_envelope_padding(v)
+    return obj
+
+
 def canonical_envelope(env: dict) -> bytes:
     """Envelope-specific canonicalization per ENVELOPE.md §4.3:
 
@@ -86,6 +101,7 @@ def canonical_envelope(env: dict) -> bytes:
     Every other field, including padding, is covered by the canonical
     bytes and therefore by both seal.signature and seal.session_mac.
     """
+    _ensure_envelope_padding(env)
     e = copy.deepcopy(env)
     if "seal" in e:
         if "signature" in e["seal"]:
@@ -257,6 +273,7 @@ def build_envelope_canonical_json() -> dict:
         },
         "brief": "YnJpZWYtZGF0YQ==",
         "enclosure": "ZW5jbG9zdXJlLWRhdGE=",
+        "padding": "",
     }
 
     return {
@@ -7619,6 +7636,7 @@ def build_negative_envelope_rejection_json() -> dict:
             },
             "brief": brief_blob,
             "enclosure": enclosure_blob,
+            "padding": "",
         }
         canonical = envelope_canonical_for_signature(env)
         sig = ed25519_sign(sender_domain_seed, SEAL_SIGNATURE_PREFIX + canonical)
@@ -7934,6 +7952,7 @@ def serialize(obj: dict) -> str:
 
 def write_or_check(path: Path, obj: dict, mode: str) -> bool:
     """Returns True on match (verify) / write success; False on diff (verify)."""
+    _ensure_envelope_padding(obj)
     new = serialize(obj)
     if mode == "write":
         path.write_text(new, encoding="utf-8")
