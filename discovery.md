@@ -111,12 +111,17 @@ _semp._tcp.example.com.  3600  IN  TXT
     "mes=26214400"
 ~~~
 
-| Parameter | Description |
-|---|---|
-| `v` | SEMP protocol version. MUST be present. Current value: `semp1`. |
-| `s` | Supported cryptographic suites, comma-separated, in preference order. `x25519-chacha20-poly1305` (baseline) MUST be present. `pq-kyber768-x25519` (post-quantum hybrid) is RECOMMENDED. |
-| `c` | Supported transports, comma-separated. Values: `h2`, `ws`, `quic`. `h2` MUST be present. |
-| `mes` | Maximum accepted envelope size in bytes. Senders MUST NOT transmit envelopes exceeding this value. |
+`v`:
+: SEMP protocol version. MUST be present. Current value: `semp1`.
+
+`s`:
+: Supported cryptographic suites, comma-separated, in preference order. `x25519-chacha20-poly1305` (baseline) MUST be present. `pq-kyber768-x25519` (post-quantum hybrid) is RECOMMENDED.
+
+`c`:
+: Supported transports, comma-separated. Values: `h2`, `ws`, `quic`. `h2` MUST be present.
+
+`mes`:
+: Maximum accepted envelope size in bytes. Senders MUST NOT transmit envelopes exceeding this value.
 
 Implementations MUST treat unknown parameters as ignored rather
 than as errors.
@@ -142,11 +147,14 @@ _semp-partition.example.com.  3600  IN  TXT
     "algorithm=sha256"
 ~~~
 
-| Strategy | Description | Leaks Existence |
-|---|---|---|
-| `hash` | `hash(username) mod N` determines the server index. | No |
-| `alpha` | Alphabetical ranges mapped to specific servers. | No |
-| `lookup` | A partition server must be queried for the mapping. | Yes, unless authenticated. |
+`hash`:
+: `hash(username) mod N` determines the server index. Leaks Existence: No.
+
+`alpha`:
+: Alphabetical ranges mapped to specific servers. Leaks Existence: No.
+
+`lookup`:
+: A partition server must be queried for the mapping. Leaks Existence: Yes, unless authenticated..
 
 The `hash` strategy is RECOMMENDED. It is deterministically
 computable by any party from the address alone and leaks no
@@ -272,18 +280,35 @@ The response is a JSON configuration document:
 }
 ~~~
 
-| Field | Type | Required | Description |
-|---|---|---|---|
-| `type` | string | Yes | MUST be `"SEMP_CONFIGURATION"`. |
-| `version` | string | Yes | SEMP protocol version (semver). |
-| `domain` | string | Yes | The email domain this server operates for. |
-| `revision` | integer | Yes | Monotonically non-decreasing revision number. |
-| `ttl_seconds` | integer | Yes | Operator-advised cache lifetime in seconds. |
-| `endpoints` | object | Yes | All discoverable endpoints. |
-| `suites` | array | Yes | Cryptographic suite identifiers in preference order. |
-| `limits` | object | Yes | Operational limits. |
-| `extensions` | array | No | Supported extensions per [Extensions](extensions.md). |
-| `reciprocity` | object | No | Trust-gossip reciprocity policy disclosure. Required when the server enforces reciprocity. See [Reciprocity Policy](#reciprocity-policy). |
+`type` (string, required):
+: MUST be `"SEMP_CONFIGURATION"`.
+
+`version` (string, required):
+: SEMP protocol version (semver).
+
+`domain` (string, required):
+: The email domain this server operates for.
+
+`revision` (integer, required):
+: Monotonically non-decreasing revision number.
+
+`ttl_seconds` (integer, required):
+: Operator-advised cache lifetime in seconds.
+
+`endpoints` (object, required):
+: All discoverable endpoints.
+
+`suites` (array, required):
+: Cryptographic suite identifiers in preference order.
+
+`limits` (object, required):
+: Operational limits.
+
+`extensions` (array, optional):
+: Supported extensions per [Extensions](extensions.md).
+
+`reciprocity` (object, optional):
+: Trust-gossip reciprocity policy disclosure. Required when the server enforces reciprocity. See [Reciprocity Policy](#reciprocity-policy).
 
 Implementations MUST ignore unknown fields rather than failing.
 
@@ -293,20 +318,41 @@ The `endpoints` object contains all URLs a client or federation
 peer needs. Transport endpoints (which carry SEMP sessions) are
 grouped by role; API endpoints (which are plain HTTPS) are flat.
 
-| Field | Required | Description |
-|---|---|---|
-| `client` | Yes | Transport endpoints for client sessions. Map of transport identifier (`h2`, `ws`, `quic`) to URL. `h2` MUST be present. |
-| `federation` | Yes | Transport endpoints for federation sessions. Same structure as `client`. `h2` MUST be present. |
-| `register` | Yes | URL for client key registration. |
-| `device_register` | No | URL for delegated device registration. |
-| `blocklist` | No | URL for block list management. |
-| `keys` | Yes | Base URL for user key publication. |
-| `domain_keys` | Yes | URL for domain signing and encryption key publication. |
-| `reputation` | No | Base URL for trust gossip observations. |
-| `verify` | No | Base URL for federation domain-ownership verification tokens. |
-| `backup` | No | Base URL for server-assisted account recovery backups. |
-| `migration` | No | Base URL for provider migration records. |
-| `transparency_log` | No | Base URL for the domain's key transparency log. |
+`client` (required):
+: Transport endpoints for client sessions. Map of transport identifier (`h2`, `ws`, `quic`) to URL. `h2` MUST be present.
+
+`federation` (required):
+: Transport endpoints for federation sessions. Same structure as `client`. `h2` MUST be present.
+
+`register` (required):
+: URL for client key registration.
+
+`device_register` (optional):
+: URL for delegated device registration.
+
+`blocklist` (optional):
+: URL for block list management.
+
+`keys` (required):
+: Base URL for user key publication.
+
+`domain_keys` (required):
+: URL for domain signing and encryption key publication.
+
+`reputation` (optional):
+: Base URL for trust gossip observations.
+
+`verify` (optional):
+: Base URL for federation domain-ownership verification tokens.
+
+`backup` (optional):
+: Base URL for server-assisted account recovery backups.
+
+`migration` (optional):
+: Base URL for provider migration records.
+
+`transparency_log` (optional):
+: Base URL for the domain's key transparency log.
 
 All URL values are implementation-chosen. The protocol does not
 mandate URL path structure.
@@ -330,11 +376,14 @@ determine eligibility before fetching.
 }
 ~~~
 
-| Field | Type | Required | Description |
-|---|---|---|---|
-| `mode` | string | Yes | `"strict"`, `"lenient"`, or `"none"`. See mode semantics below. |
-| `minimum_publish_volume` | integer | No | Publication count a peer MUST reach in the evaluation window to satisfy `strict`. Absence means any non-empty publication satisfies. |
-| `evaluation_window_days` | integer | No | Sliding window in days for `minimum_publish_volume`. Absence means the operator default (RECOMMENDED 30 days). |
+`mode` (string, required):
+: `"strict"`, `"lenient"`, or `"none"`. See mode semantics below.
+
+`minimum_publish_volume` (integer, optional):
+: Publication count a peer MUST reach in the evaluation window to satisfy `strict`. Absence means any non-empty publication satisfies.
+
+`evaluation_window_days` (integer, optional):
+: Sliding window in days for `minimum_publish_volume`. Absence means the operator default (RECOMMENDED 30 days).
 
 Mode semantics:
 
@@ -570,16 +619,29 @@ in the domain's public key log. See [Recovery](recovery.md).
 
 ## Key Record Fields
 
-| Field | Type | Required | Description |
-|---|---|---|---|
-| `address` | string | Yes | The address this key belongs to. |
-| `key_type` | string | Yes | One of: `identity`, `encryption`, `device`, `domain`. |
-| `algorithm` | string | Yes | Cryptographic algorithm identifier. |
-| `public_key` | string | Yes | Base64-encoded public key material. |
-| `key_id` | string | Yes | Key fingerprint. SHA-256 of the public key bytes, hex-encoded. |
-| `created` | string | Yes | ISO 8601 UTC creation timestamp. |
-| `expires` | string | Yes | ISO 8601 UTC expiry timestamp. |
-| `signatures` | array | No | Web-of-trust signatures. |
+`address` (string, required):
+: The address this key belongs to.
+
+`key_type` (string, required):
+: One of: `identity`, `encryption`, `device`, `domain`.
+
+`algorithm` (string, required):
+: Cryptographic algorithm identifier.
+
+`public_key` (string, required):
+: Base64-encoded public key material.
+
+`key_id` (string, required):
+: Key fingerprint. SHA-256 of the public key bytes, hex-encoded.
+
+`created` (string, required):
+: ISO 8601 UTC creation timestamp.
+
+`expires` (string, required):
+: ISO 8601 UTC expiry timestamp.
+
+`signatures` (array, optional):
+: Web-of-trust signatures.
 
 <a id="first-contact-policy"></a>
 
@@ -662,16 +724,29 @@ connection at the domain level.
 }
 ~~~
 
-| Field | Type | Required | Description |
-|---|---|---|---|
-| `type` | string | Yes | MUST be `"SEMP_KEYS"`. |
-| `step` | string | Yes | MUST be `"request"`. |
-| `version` | string | Yes | SEMP protocol version (semver). |
-| `id` | string | Yes | Unique request identifier. ULID RECOMMENDED. |
-| `timestamp` | string | Yes | ISO 8601 UTC timestamp. |
-| `addresses` | array | Yes | Addresses whose keys are requested. MAY include noise addresses. |
-| `key_types` | array | No | Key types requested. If absent, all current keys are returned. |
-| `extensions` | object | No | Optional authenticated request envelope. |
+`type` (string, required):
+: MUST be `"SEMP_KEYS"`.
+
+`step` (string, required):
+: MUST be `"request"`.
+
+`version` (string, required):
+: SEMP protocol version (semver).
+
+`id` (string, required):
+: Unique request identifier. ULID RECOMMENDED.
+
+`timestamp` (string, required):
+: ISO 8601 UTC timestamp.
+
+`addresses` (array, required):
+: Addresses whose keys are requested. MAY include noise addresses.
+
+`key_types` (array, optional):
+: Key types requested. If absent, all current keys are returned.
+
+`extensions` (object, optional):
+: Optional authenticated request envelope.
 
 For batch requests, the request is a `POST` to the
 `endpoints.keys` base URL with no address suffix. A server that
@@ -1105,11 +1180,14 @@ treated as implicitly positioned at
 
 The resource shape:
 
-| Field | Type | Description |
-|---|---|---|
-| `read` | boolean | Whether the device may list or inspect this resource. |
-| `write` | boolean | Whether the device may modify this resource. |
-| `rate_limits` | array | Rate-limit tiers applied to any operation on this resource. MAY be empty. |
+`read` (boolean):
+: Whether the device may list or inspect this resource.
+
+`write` (boolean):
+: Whether the device may modify this resource.
+
+`rate_limits` (array):
+: Rate-limit tiers applied to any operation on this resource. MAY be empty.
 
 Operations gated by each field:
 
@@ -1127,10 +1205,11 @@ Each rate-limit tier:
 { "period_seconds": 3600, "amount_allowed": 100 }
 ~~~
 
-| Field | Type | Required | Description |
-|---|---|---|---|
-| `period_seconds` | integer | Yes | Length of the rolling window in seconds. MUST be >= 1. |
-| `amount_allowed` | integer | Yes | Maximum operations permitted within any rolling window of `period_seconds`. MUST be >= 0. |
+`period_seconds` (integer, required):
+: Length of the rolling window in seconds. MUST be >= 1.
+
+`amount_allowed` (integer, required):
+: Maximum operations permitted within any rolling window of `period_seconds`. MUST be >= 0.
 
 Multiple tiers in the same array are evaluated independently;
 an operation is permitted only if it would not exceed any
@@ -1288,17 +1367,32 @@ key revocation, [Key Revocation](#key-revocation)).
 }
 ~~~
 
-| Field | Type | Required | Description |
-|---|---|---|---|
-| `type` | string | Yes | MUST be `"SEMP_DEVICE_REVOCATION"`. |
-| `version` | string | Yes | Record format version (semver). |
-| `user_id` | string | Yes | The account's SEMP address, canonicalized per [Envelope](envelope.md). |
-| `device_id` | string | Yes | Identifier of the device being revoked. MUST correspond to a device currently in the directory ([Device Directory](#device-directory)). |
-| `reason` | string | Yes | Revocation reason. See [Revocation Reasons](#device-revocation-reasons). |
-| `revoked_at` | string | Yes | ISO 8601 UTC revocation timestamp. |
-| `revoked_by_device_id` | string | Yes | `device_id` of the device that signed the revocation. Authority rules in [Revocation Authority](#revocation-authority). |
-| `replacement_device_id` | `string \| null` | Yes | For `reason: "superseded"`: the `device_id` that replaces this one. For other reasons: `null`. |
-| `signature` | object | Yes | Signature by the user's identity private key, over canonical bytes with `signature.value` set to `""`, prefixed with `SEMP-DEVICE-REVOCATION:`. |
+`type` (string, required):
+: MUST be `"SEMP_DEVICE_REVOCATION"`.
+
+`version` (string, required):
+: Record format version (semver).
+
+`user_id` (string, required):
+: The account's SEMP address, canonicalized per [Envelope](envelope.md).
+
+`device_id` (string, required):
+: Identifier of the device being revoked. MUST correspond to a device currently in the directory ([Device Directory](#device-directory)).
+
+`reason` (string, required):
+: Revocation reason. See [Revocation Reasons](#device-revocation-reasons).
+
+`revoked_at` (string, required):
+: ISO 8601 UTC revocation timestamp.
+
+`revoked_by_device_id` (string, required):
+: `device_id` of the device that signed the revocation. Authority rules in [Revocation Authority](#revocation-authority).
+
+`replacement_device_id` (`string \, null`):
+: Yes
+
+`signature` (object, required):
+: Signature by the user's identity private key, over canonical bytes with `signature.value` set to `""`, prefixed with `SEMP-DEVICE-REVOCATION:`.
 
 <a id="device-revocation-reasons"></a>
 
@@ -1465,23 +1559,50 @@ validating device-scoped signatures.
 }
 ~~~
 
-| Field | Type | Required | Description |
-|---|---|---|---|
-| `type` | string | Yes | MUST be `"SEMP_DEVICE_DIRECTORY"`. |
-| `version` | string | Yes | Record format version (semver). |
-| `user_id` | string | Yes | The account's SEMP address, canonicalized. |
-| `revision` | integer | Yes | Monotonically increasing revision number. Consumers MUST reject a fetched directory whose `revision` is less than a previously cached one for the same `user_id`. |
-| `issued_at` | string | Yes | ISO 8601 UTC issuance timestamp. |
-| `devices` | array | Yes | One entry per active device. Order within the array is not semantic, and consumers MUST sort by `device_id` before comparison. |
-| `devices[i].device_id` | string | Yes | Stable device identifier. |
-| `devices[i].device_public_key` | string | Yes | Base64-encoded device identity public key. |
-| `devices[i].device_identity_pubkey_algorithm` | string | Yes | Signature algorithm identifier. |
-| `devices[i].role` | string | Yes | One of `full_access`, `delegated`. |
-| `devices[i].certificate_id` | `string \| null` | Yes | For `delegated`: the scoped certificate's identifier. For `full_access`: `null`. |
-| `devices[i].enrolled_at` | string | Yes | ISO 8601 UTC enrollment timestamp. |
-| `devices[i].device_name` | string | Yes | User-facing name. |
-| `devices[i].device_type` | string | Yes | Device category label. |
-| `signature` | object | Yes | Signature by the user's identity private key over the canonical record bytes with `signature.value` set to `""`, prefixed with `SEMP-DEVICE-DIRECTORY:`. |
+`type` (string, required):
+: MUST be `"SEMP_DEVICE_DIRECTORY"`.
+
+`version` (string, required):
+: Record format version (semver).
+
+`user_id` (string, required):
+: The account's SEMP address, canonicalized.
+
+`revision` (integer, required):
+: Monotonically increasing revision number. Consumers MUST reject a fetched directory whose `revision` is less than a previously cached one for the same `user_id`.
+
+`issued_at` (string, required):
+: ISO 8601 UTC issuance timestamp.
+
+`devices` (array, required):
+: One entry per active device. Order within the array is not semantic, and consumers MUST sort by `device_id` before comparison.
+
+`devices[i].device_id` (string, required):
+: Stable device identifier.
+
+`devices[i].device_public_key` (string, required):
+: Base64-encoded device identity public key.
+
+`devices[i].device_identity_pubkey_algorithm`:
+: (string, required) Signature algorithm identifier.
+
+`devices[i].role` (string, required):
+: One of `full_access`, `delegated`.
+
+`devices[i].certificate_id` (`string \, null`):
+: Yes
+
+`devices[i].enrolled_at` (string, required):
+: ISO 8601 UTC enrollment timestamp.
+
+`devices[i].device_name` (string, required):
+: User-facing name.
+
+`devices[i].device_type` (string, required):
+: Device category label.
+
+`signature` (object, required):
+: Signature by the user's identity private key over the canonical record bytes with `signature.value` set to `""`, prefixed with `SEMP-DEVICE-DIRECTORY:`.
 
 ### Publication
 
@@ -1935,11 +2056,79 @@ exercise discovery, key publication, and device records:
 
 # IANA Considerations
 
-This document requests no new IANA registrations. SRV service
-name `_semp._tcp` is registered per [RFC 2782](https://www.rfc-editor.org/rfc/rfc2782) conventions
-and the `/.well-known/semp/configuration` URI suffix is
-registered per [RFC 8615](https://www.rfc-editor.org/rfc/rfc8615) as a separate action by the
-specification editor before publication.
+This document makes the registrations below.
+
+## Well-Known URI Registrations
+
+IANA is requested to register two entries in the "Well-Known
+URIs" registry established by [RFC 8615](https://www.rfc-editor.org/rfc/rfc8615).
+
+The first entry:
+
+URI suffix:
+: semp
+
+Change controller:
+: IETF
+
+Specification document:
+: This document
+
+Status:
+: permanent
+
+Related information:
+: This document defines the sub-paths `configuration`,
+  `domain-keys`, `keys/{address}`, and `reputation/{subject}`
+  under the `semp` suffix.
+
+The second entry:
+
+URI suffix:
+: semp-extensions
+
+Change controller:
+: IETF
+
+Specification document:
+: [Extensions](extensions.md)
+
+Status:
+: permanent
+
+Related information:
+: Extension definition documents are published under this
+  suffix, as described in [Extensions](extensions.md).
+
+## Service Name Registration
+
+IANA is requested to register the following entry in the
+"Service Name and Transport Protocol Port Number Registry"
+established by [RFC 6335](https://www.rfc-editor.org/rfc/rfc6335). No port number is requested. SEMP
+endpoints are located through SRV records, and the port is
+carried in the SRV target.
+
+Service Name:
+: semp
+
+Transport Protocols:
+: TCP, UDP
+
+Assignee:
+: IESG
+
+Contact:
+: IETF Chair
+
+Description:
+: Sealed Envelope Messaging Protocol
+
+Reference:
+: This document
+
+The `_semp._tcp` SRV record locates servers reachable over the
+TCP-based transports (WebSocket and HTTP/2). The optional
+`_semp._udp` SRV record locates a QUIC endpoint.
 
 # Acknowledgments
 
