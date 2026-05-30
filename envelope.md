@@ -6,7 +6,7 @@ brief, and an enclosure. The postmark and seal are visible to routing
 servers; the brief and enclosure are encrypted under the recipient's
 keys. SEMP envelopes carry two independent integrity proofs over the
 same canonical bytes: a domain signature verifiable by any routing
-server, and a session MAC verifiable only by the receiving server. The
+server, and a session MAC verifiable only by the recipient server. The
 enclosure additionally carries a sender identity signature that
 provides forwarding provenance independent of any domain signature.
 This document also registers the media types associated with SEMP
@@ -327,7 +327,7 @@ home server that did not participate in the handshake can
 still verify the domain signature for routing integrity.
 
 A server that receives an envelope with an invalid or missing
-`seal.signature` MUST reject it immediately. A receiving server
+`seal.signature` MUST reject it immediately. A recipient server
 that additionally finds an invalid `seal.session_mac` MUST reject
 the envelope with `reason_code: "session_mac_invalid"`.
 
@@ -445,11 +445,11 @@ or field exclusion handling will produce verification failures.
 | Layer | Verifies | Uses | Performed by |
 |---|---|---|---|
 | Routing | `seal.signature` | Sender domain key | Any home server |
-| Delivery | `seal.session_mac` | Session key `K_env_mac` | Receiving server only |
+| Delivery | `seal.session_mac` | Session key `K_env_mac` | Recipient server only |
 
 Home servers MUST verify `seal.signature`. They cannot verify
 `seal.session_mac` as they do not hold the session key.
-Receiving servers MUST verify both.
+Recipient servers MUST verify both.
 
 <a id="anchoring-layer"></a>
 
@@ -1234,7 +1234,7 @@ Steps 1 through 4 MUST all pass before any further
 processing. Each failure MUST produce an immediate, explicit
 rejection with the appropriate reason code. Step 1 may be
 performed by any home server. Steps 2 through 7 are
-performed by the receiving server only. Steps 8 through 12
+performed by the recipient server only. Steps 8 through 12
 are performed by the client.
 
 If Step 5 fails, the server cannot decrypt the brief and MUST
@@ -1840,7 +1840,7 @@ immutable field, including routing metadata in the postmark,
 invalidates it. Home servers verify this before
 forwarding.
 
-`seal.session_mac` is verifiable only by the receiving server
+`seal.session_mac` is verifiable only by the recipient server
 using the session key. It proves the envelope was produced
 within a valid established session, in addition to whatever
 the domain key proves about origin. A stolen or forged domain
