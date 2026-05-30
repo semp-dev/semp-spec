@@ -68,7 +68,7 @@ Sealed Envelope Messaging Protocol: Handshake, Session, and Transport
 - [Post-Quantum Forward Secrecy](handshake.md#post-quantum-forward-secrecy)
 - [Session Invalidation and Blocking](handshake.md#session-invalidation-and-blocking)
 - [Reason Codes](handshake.md#reason-codes)
-- [Sender Server Retry Responsibility](handshake.md#sender-server-retry-responsibility)
+- [Sending Server Retry Responsibility](handshake.md#sending-server-retry-responsibility)
 - [Transport Bindings](handshake.md#transport-bindings)
 - [Security Considerations](handshake.md#security-considerations)
 - [Privacy Considerations](handshake.md#privacy-considerations)

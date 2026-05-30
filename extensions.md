@@ -367,7 +367,7 @@ SEMP library enforces these declarations at runtime.
 | Hook | When invoked |
 |---|---|
 | `on_compose` | Before envelope encryption, on the sender client. |
-| `on_seal` | After envelope encryption, before signature, on the sender server. |
+| `on_seal` | After envelope encryption, before signature, on the sending server. |
 | `on_route` | At each home server, on the public envelope layers only. |
 | `on_deliver` | At the recipient server, after seal verification. |
 | `on_decrypt` | At the recipient client, after enclosure decryption. |
