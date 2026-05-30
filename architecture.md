@@ -1163,6 +1163,33 @@ Can do:
 Cannot do:
 : Read enclosure content. Forge senders outside its own domain.
 
+First-contact enforcement depends on the recipient server. The
+proof-of-work or challenge gate (defined in
+[Delivery](delivery.md)) is an admission control applied
+after brief decryption and before delivery to the client. The
+envelope's enclosure encryption does not depend on the challenge
+solution. A recipient server that fails to enforce the policy,
+through a bug, an alternate ingestion path, or operator action,
+delivers the envelope to the client as though the gate had
+passed.
+
+This failure stays within the recipient server's trust boundary.
+The gate protects the server's own users from unsolicited first
+contact, so a server that declines to run it harms only those
+users, who already depend on it for brief handling, block-list
+enforcement, and delivery acknowledgment. It is not a
+confidentiality boundary. Enclosure secrecy comes from the
+per-recipient encryption and holds regardless of first-contact
+enforcement.
+
+A future extension MAY bind the challenge solution into the
+enclosure key derivation, making a first-contact envelope
+cryptographically unreadable without the solution. This document
+does not define that binding. It would put the challenge solution
+on the wire and complicate the server's brief-only handling path,
+and the property it adds is largely subsumed by the
+recipient-server trust model above.
+
 ### Colluding Servers
 
 Two or more home servers cooperate to combine the information each
@@ -1731,23 +1758,6 @@ specified in the relevant companion documents:
 [Envelope](envelope.md) (media types),
 [Delivery](delivery.md) (error and reason codes), and
 [Extensions](extensions.md) (extension namespace).
-
-# Open Questions
-
-The following questions are unresolved at the time of this
-revision. Each is tracked as an issue on the SEMP specification
-repository so feedback and discussion can accumulate alongside
-the draft text. The list is non-exhaustive; reviewers are
-invited to add to it.
-
-Cryptographic challenge binding for first-contact:
-: The first-contact PoW challenge currently gates submission
-  via the recipient server's policy. The envelope's
-  cryptographic readability does not depend on the challenge
-  solution; a path that bypasses the policy gate still decrypts
-  normally. Whether to bind the challenge solution into the
-  envelope's key derivation (so the envelope is
-  cryptographically unreadable without the solution) is open.
 
 # Acknowledgments
 

@@ -29,7 +29,6 @@ Sealed Envelope Messaging Protocol: Architecture and Threat Model
 - [Security Considerations](architecture.md#security-considerations)
 - [Protocol Constants](architecture.md#protocol-constants)
 - [IANA Considerations](architecture.md#iana-considerations)
-- [Open Questions](architecture.md#open-questions)
 - [Acknowledgments](architecture.md#acknowledgments)
 
 ### [Envelope](envelope.md)
